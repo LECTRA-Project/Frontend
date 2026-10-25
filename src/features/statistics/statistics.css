@@ -1,0 +1,46 @@
+/* Statistics page and its chart */
+
+.stats__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.stats__note {
+  margin-top: var(--space-3);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.chart {
+  margin: var(--space-4) 0 0;
+}
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.chart__grid {
+  stroke: var(--border-default);
+  stroke-width: 1;
+}
+.chart__tick {
+  fill: var(--text-tertiary);
+  font-size: 10px;
+}
+.chart__axis-title {
+  fill: var(--text-secondary);
+  font-size: 11px;
+}
+.chart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.chart__point {
+  fill: var(--bg-surface);
+  stroke: var(--accent);
+  stroke-width: 2;
+}

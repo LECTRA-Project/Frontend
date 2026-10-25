@@ -1,0 +1,65 @@
+/*
+  LECTRA design tokens
+  These values come from the "LECTRA tokens" colour collection in the Figma file.
+  Change a value here and every screen updates.
+*/
+:root {
+  /* Backgrounds */
+  --bg-canvas: #f6f4ef;
+  --bg-surface: #ffffff;
+  --bg-subtle: #faf9f6;
+  --bg-scrim: rgba(42, 43, 42, 0.32);
+
+  /* Text */
+  --text-primary: #2a2b2a;
+  --text-secondary: #5f625e;
+  --text-tertiary: #959891;
+  --text-on-accent: #ffffff;
+
+  /* Borders */
+  --border-default: #e3e0d8;
+  --border-strong: #cfcbc1;
+
+  /* Accent (green) */
+  --accent: #4e7a5f;
+  --accent-strong: #3e6450;
+  --accent-soft: #eef4ef;
+  --accent-hover: #e3ede5;
+
+  /* Placeholder shapes (PDF preview lines, chart fill) */
+  --placeholder: #e3e0d8;
+
+  /* Feedback */
+  --danger: #b04a3c;
+
+  /* Typography */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --shadow-card: 0 4px 16px rgba(42, 43, 42, 0.06);
+  --shadow-pop: 0 12px 32px rgba(42, 43, 42, 0.14);
+
+  /* Layout */
+  --header-height: 64px;
+  --focus-ring: 0 0 0 3px rgba(78, 122, 95, 0.35);
+}

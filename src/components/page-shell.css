@@ -1,0 +1,61 @@
+/* Shared frame for the profile, settings and statistics pages */
+.page-shell {
+  min-height: 100%;
+}
+.page-shell__main {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4) 64px;
+}
+.page-shell__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+.page-shell__back:hover {
+  color: var(--text-primary);
+}
+.page-shell__title {
+  margin-top: var(--space-5);
+  font-size: 28px;
+  font-weight: 600;
+}
+.page-shell__subtitle {
+  margin: var(--space-1) 0 var(--space-6);
+  color: var(--text-secondary);
+}
+
+/* White card used on all three pages */
+.card {
+  padding: var(--space-6);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.card__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.card__subtitle {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.page-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+.page-actions .notice {
+  margin-right: auto;
+}

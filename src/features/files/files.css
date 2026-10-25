@@ -1,0 +1,289 @@
+/* Upload dialog and inline PDF viewer */
+
+/* ---------- Upload dialog ---------- */
+.upload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-5);
+}
+.upload__drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  border: 1.5px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  text-align: center;
+}
+.upload__drop--active {
+  background: var(--accent-hover);
+}
+.upload__drop-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  color: var(--accent);
+}
+.upload__drop-title {
+  font-weight: 500;
+}
+.upload__or {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.upload__help {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.upload__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.upload__list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.upload__list li svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.upload__file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.upload__remove {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+.upload__local-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.upload__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ---------- PDF viewer (inline, in the workspace centre panel) ---------- */
+.pdf {
+  min-height: 0;
+  /* keeps the toolbar below the sticky header when scrolled into view on phones */
+  scroll-margin-top: calc(var(--header-height) + var(--space-4));
+}
+.pdf__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  min-height: 56px;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+}
+.pdf__file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.pdf__file .icon-btn {
+  margin-right: var(--space-1);
+  flex-shrink: 0;
+}
+.pdf__title-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.pdf__title {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pdf__title-meta {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.pdf__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.pdf__pager,
+.pdf__zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.pdf__page-input {
+  width: 32px;
+  height: 28px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  text-align: center;
+}
+.pdf__page-count {
+  color: var(--text-secondary);
+}
+.pdf__zoom-value {
+  min-width: 40px;
+  text-align: center;
+}
+
+.pdf__content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: #f2f0ea;
+}
+.pdf__thumbs {
+  width: 96px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: var(--space-4) var(--space-4);
+  overflow-y: auto;
+  border-right: 1px solid var(--border-default);
+  background: var(--bg-subtle);
+  list-style: none;
+}
+.pdf__thumbs li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: var(--space-3);
+}
+.pdf__thumb {
+  width: 62px;
+  aspect-ratio: 62 / 80;
+  padding: 8px 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+  background: var(--bg-surface);
+}
+.pdf__thumb--active {
+  border: 2px solid var(--accent);
+}
+.pdf__thumb-number {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.pdf__stage {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: var(--space-5);
+}
+.pdf__page {
+  position: relative;
+  flex-shrink: 0;
+  aspect-ratio: 382 / 500;
+  padding: 8% 10%;
+  background: var(--bg-surface);
+  box-shadow: 0 1px 4px rgba(42, 43, 42, 0.08);
+}
+.pdf__page-number {
+  position: absolute;
+  bottom: 4%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.pdf__frame-wrap {
+  flex: 1;
+  min-height: 0;
+  background: #f2f0ea;
+}
+.pdf__frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Grey bars used on the blank demo page and its thumbnails */
+.placeholder-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.placeholder-lines span {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--placeholder);
+}
+.placeholder-lines__heading {
+  width: 60%;
+  height: 10px !important;
+}
+.placeholder-lines__sub {
+  width: 38%;
+  margin-bottom: 14px;
+}
+.placeholder-lines__para {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.placeholder-lines--compact,
+.placeholder-lines--compact .placeholder-lines__para {
+  gap: 3px;
+}
+.placeholder-lines--compact span {
+  height: 2px;
+}
+.placeholder-lines--compact .placeholder-lines__heading {
+  height: 3px !important;
+}
+.placeholder-lines--compact .placeholder-lines__sub,
+.placeholder-lines--compact .placeholder-lines__para {
+  margin-bottom: 5px;
+}
+.placeholder-lines--compact .placeholder-lines__para:nth-child(n + 5) {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .pdf__thumbs {
+    display: none;
+  }
+  .pdf__controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .pdf__stage {
+    padding: var(--space-3);
+  }
+}
