@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import PageShell from "../../components/PageShell.jsx";
 import Button from "../../components/ui/Button.jsx";
 import TextField from "../../components/ui/TextField.jsx";
-import { DEMO_USER } from "../../app/demoUser.js";
+import { getInitials, useAuth } from "../auth/authContext.js";
 import "./profile.css";
 
 /*
@@ -13,6 +13,7 @@ import "./profile.css";
 */
 export default function MyProfilePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [form, setForm] = useState({
     username: "",
     email: "",
@@ -56,16 +57,16 @@ export default function MyProfilePage() {
             <p className="card__subtitle">How you appear in LECTRA.</p>
 
             <div className="profile-identity">
-              <span className="avatar avatar--lg">{DEMO_USER.initials}</span>
+              <span className="avatar avatar--lg">{getInitials(user)}</span>
               <div>
-                <p>{DEMO_USER.name}</p>
-                <p className="profile-identity__email">{DEMO_USER.email}</p>
+                <p>{user?.full_name}</p>
+                <p className="profile-identity__email">{user?.email}</p>
               </div>
             </div>
 
             <div className="card__fields">
-              <TextField label="Username" name="username" placeholder={DEMO_USER.username} value={form.username} onChange={handleChange} />
-              <TextField label="Email" name="email" type="email" placeholder={DEMO_USER.email} value={form.email} onChange={handleChange} />
+              <TextField label="Username" name="username" placeholder={user?.full_name} value={form.username} onChange={handleChange} />
+              <TextField label="Email" name="email" type="email" placeholder={user?.email} value={form.email} onChange={handleChange} />
             </div>
           </section>
 

@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import Brand from "../../../components/Brand.jsx";
 import Button from "../../../components/ui/Button.jsx";
 import ProfileMenu from "./ProfileMenu.jsx";
-import { DEMO_USER } from "../../../app/demoUser.js";
+import { getInitials, useAuth } from "../../auth/authContext.js";
 
 /*
   The top bar shown on the workspace and on the profile pages:
@@ -13,6 +13,7 @@ import { DEMO_USER } from "../../../app/demoUser.js";
 export default function WorkspaceHeader() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
@@ -43,7 +44,7 @@ export default function WorkspaceHeader() {
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
           >
-            {DEMO_USER.initials}
+            {getInitials(user)}
           </button>
           {menuOpen && <ProfileMenu onClose={closeMenu} />}
         </div>

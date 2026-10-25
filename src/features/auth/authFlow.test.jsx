@@ -1,0 +1,287 @@
+import { act, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { apiClient } from "../../api/client.js";
+import { makeToken, mockApi, ok, renderApp, savedToken, saveToken, TEST_USER } from "../../test/helpers.jsx";
+
+/*
+  End-to-end UI flows over the real routes, guards and AuthProvider,
+  with the HTTP layer mocked to answer like the FastAPI backend.
+*/
+
+let api;
+let token;
+
+beforeEach(() => {
+  api = mockApi();
+  token = makeToken(1800);
+});
+afterEach(() => api.restore());
+
+/* Backend behaviour shared by most tests. */
+function backendWithUser({ password = "secret123" } = {}) {
+  api.onPost("/auth/login").reply((config) => {
+    const body = JSON.parse(config.data);
+    return body.email === TEST_USER.email && body.password === password
+      ? [200, ok({ token }, "Login successful")]
+      : [401, { detail: "Invalid email or password" }];
+  });
+  api.onGet("/auth/user").reply((config) =>
+    config.headers.Authorization === `Bearer ${token}` ? [200, ok(TEST_USER)] : [401, { detail: "Invalid or expired token" }]
+  );
+}
+
+async function fillSignIn(user, email, password) {
+  await user.type(screen.getByLabelText("Email"), email);
+  await user.type(screen.getByLabelText("Password"), password);
+  await user.click(screen.getByRole("button", { name: "Sign in" }));
+}
+
+const openProfileMenu = (user) => user.click(screen.getByRole("button", { name: "Open profile menu" }));
+
+describe("sign in", () => {
+  it("signs in and opens the workspace with the real user", async () => {
+    backendWithUser();
+    const user = userEvent.setup();
+    const { router } = renderApp("/");
+
+    await fillSignIn(user, TEST_USER.email, "secret123");
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    expect(savedToken()).toBe(token);
+    expect(await screen.findByRole("button", { name: "Open profile menu" })).toHaveTextContent("AL");
+
+    await openProfileMenu(user);
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText(TEST_USER.email)).toBeInTheDocument();
+  });
+
+  it("shows the backend error for a wrong password and stays on sign-in", async () => {
+    backendWithUser();
+    const user = userEvent.setup();
+    const { router } = renderApp("/");
+
+    await fillSignIn(user, TEST_USER.email, "wrong-password");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password");
+    expect(router.state.location.pathname).toBe("/");
+    expect(savedToken()).toBeNull();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  });
+
+  it("checks empty fields without calling the backend", async () => {
+    const user = userEvent.setup();
+    renderApp("/");
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(screen.getByText("Please enter your email.")).toBeInTheDocument();
+    expect(screen.getByText("Please enter your password.")).toBeInTheDocument();
+    expect(api.history.post).toHaveLength(0);
+  });
+
+  it("shows a connection error when the backend is down", async () => {
+    api.onPost("/auth/login").networkError();
+    const user = userEvent.setup();
+    renderApp("/");
+
+    await fillSignIn(user, TEST_USER.email, "secret123");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Can't reach the server");
+  });
+
+  it("returns to the page the guest originally asked for", async () => {
+    backendWithUser();
+    const user = userEvent.setup();
+    const { router } = renderApp("/statistics");
+
+    // Guest is sent to sign-in first…
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    await fillSignIn(user, TEST_USER.email, "secret123");
+
+    // …and lands on /statistics afterwards.
+    await waitFor(() => expect(router.state.location.pathname).toBe("/statistics"));
+  });
+});
+
+describe("create account", () => {
+  async function fillRegister(user, { fullName = "Ada Lovelace", email = TEST_USER.email, password = "secret123", confirm = password } = {}) {
+    await user.type(screen.getByLabelText("Full name"), fullName);
+    await user.type(screen.getByLabelText("Email"), email);
+    await user.type(screen.getByLabelText("Password"), password);
+    await user.type(screen.getByLabelText("Confirm password"), confirm);
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+  }
+
+  it("registers, signs in automatically and opens the workspace", async () => {
+    backendWithUser();
+    api.onPost("/auth/register").reply(201, ok(TEST_USER, "User registered successfully"));
+    const user = userEvent.setup();
+    const { router } = renderApp("/create-account");
+
+    await fillRegister(user);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    expect(JSON.parse(api.history.post[0].data)).toEqual({
+      email: TEST_USER.email,
+      password: "secret123",
+      full_name: "Ada Lovelace",
+    });
+    expect(api.history.post[1].url).toBe("/auth/login");
+    expect(savedToken()).toBe(token);
+  });
+
+  it("shows the backend error when the email is already taken", async () => {
+    api.onPost("/auth/register").reply(409, { detail: "A user with this email already exists" });
+    const user = userEvent.setup();
+    const { router } = renderApp("/create-account");
+
+    await fillRegister(user);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("A user with this email already exists");
+    expect(router.state.location.pathname).toBe("/create-account");
+    expect(api.history.post).toHaveLength(1); // no login attempt
+  });
+
+  it("puts backend validation errors under the right field", async () => {
+    api.onPost("/auth/register").reply(422, {
+      detail: [{ type: "missing", loc: ["body", "full_name"], msg: "Field required" }],
+    });
+    const user = userEvent.setup();
+    renderApp("/create-account");
+
+    await fillRegister(user);
+
+    await waitFor(() => expect(screen.getByLabelText("Full name")).toHaveAttribute("aria-invalid", "true"));
+    expect(screen.getAllByText("Field required").length).toBeGreaterThan(0);
+  });
+
+  it("validates the form before calling the backend", async () => {
+    const user = userEvent.setup();
+    renderApp("/create-account");
+
+    await fillRegister(user, { email: "not-an-email", confirm: "different" });
+
+    expect(screen.getByText("Please enter a valid email.")).toBeInTheDocument();
+    expect(screen.getByText("The passwords don’t match.")).toBeInTheDocument();
+    expect(api.history.post).toHaveLength(0);
+  });
+
+  it("sends the user to sign-in if the automatic sign-in fails", async () => {
+    api.onPost("/auth/register").reply(201, ok(TEST_USER));
+    api.onPost("/auth/login").networkError();
+    const user = userEvent.setup();
+    const { router } = renderApp("/create-account");
+
+    await fillRegister(user);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    expect(savedToken()).toBeNull();
+  });
+});
+
+describe("session", () => {
+  it("restores a saved session on reload and skips the sign-in page", async () => {
+    backendWithUser();
+    saveToken(token);
+    const { router } = renderApp("/");
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    expect(screen.getByRole("button", { name: "Open profile menu" })).toHaveTextContent("AL");
+  });
+
+  it("keeps guests out of every protected page", async () => {
+    for (const path of ["/workspace", "/workspace/exam", "/profile", "/settings", "/statistics"]) {
+      const { router, unmount } = renderApp(path);
+      expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/");
+      unmount();
+    }
+    expect(api.history.get).toHaveLength(0);
+  });
+
+  it("drops an expired saved token without calling the backend", async () => {
+    saveToken(makeToken(-60));
+    renderApp("/workspace");
+
+    expect(await screen.findByText("Your session has expired. Please sign in again.")).toBeInTheDocument();
+    expect(savedToken()).toBeNull();
+    expect(api.history.get).toHaveLength(0);
+  });
+
+  it("signs out when the backend rejects the saved token", async () => {
+    backendWithUser();
+    saveToken(makeToken(900)); // valid-looking, but not the token the backend issued
+    renderApp("/workspace");
+
+    expect(await screen.findByText("Your session has expired. Please sign in again.")).toBeInTheDocument();
+    expect(savedToken()).toBeNull();
+  });
+
+  it("signs out when any later request comes back 401", async () => {
+    backendWithUser();
+    api.onGet("/materials").reply(401, { detail: "Invalid or expired token" });
+    saveToken(token);
+    const { router } = renderApp("/workspace");
+    await screen.findByRole("button", { name: "Open profile menu" });
+
+    await act(() => apiClient.get("/materials").catch(() => {}));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    expect(screen.getByText("Your session has expired. Please sign in again.")).toBeInTheDocument();
+  });
+
+  it("signs out when another tab signs out", async () => {
+    backendWithUser();
+    saveToken(token);
+    const { router } = renderApp("/workspace");
+    await screen.findByRole("button", { name: "Open profile menu" });
+
+    act(() => {
+      localStorage.clear();
+      window.dispatchEvent(new StorageEvent("storage", { key: "lectra.authToken", newValue: null }));
+    });
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
+
+  it("sign out from the profile menu ends the session", async () => {
+    backendWithUser();
+    saveToken(token);
+    const user = userEvent.setup();
+    const { router } = renderApp("/workspace");
+    await screen.findByRole("button", { name: "Open profile menu" });
+
+    await openProfileMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    expect(savedToken()).toBeNull();
+    expect(screen.queryByText(/session has expired/)).not.toBeInTheDocument();
+
+    // The workspace is closed again.
+    await act(() => router.navigate("/workspace"));
+    expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("profile pages still open for a signed-in user", async () => {
+    backendWithUser();
+    saveToken(token);
+    const user = userEvent.setup();
+    const { router } = renderApp("/workspace");
+    await screen.findByRole("button", { name: "Open profile menu" });
+
+    for (const [label, path, heading] of [
+      ["My profile", "/profile", "My profile"],
+      ["Account settings", "/settings", "Account settings"],
+      ["Statistics", "/statistics", "Statistics"],
+    ]) {
+      await openProfileMenu(user);
+      await user.click(screen.getByRole("menuitem", { name: label }));
+      await waitFor(() => expect(router.state.location.pathname).toBe(path));
+      expect(screen.getByRole("heading", { level: 1, name: heading })).toBeInTheDocument();
+      if (path === "/profile") expect(screen.getByText(TEST_USER.email)).toBeInTheDocument();
+    }
+  });
+});

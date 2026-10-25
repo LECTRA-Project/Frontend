@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Icon from "../../../components/ui/Icon.jsx";
-import { DEMO_USER } from "../../../app/demoUser.js";
+import { getInitials, useAuth } from "../../auth/authContext.js";
 
 /*
   The small menu that opens under the avatar.
@@ -10,6 +10,7 @@ import { DEMO_USER } from "../../../app/demoUser.js";
 */
 export default function ProfileMenu({ onClose }) {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -37,13 +38,19 @@ export default function ProfileMenu({ onClose }) {
     navigate(path);
   }
 
+  // Clearing the session makes RequireAuth send the user to the sign-in screen.
+  function signOut() {
+    onClose();
+    logout();
+  }
+
   return (
     <div className="profile-menu" ref={menuRef} role="menu" aria-label="Profile menu">
       <div className="profile-menu__user">
-        <span className="avatar avatar--lg">{DEMO_USER.initials}</span>
+        <span className="avatar avatar--lg">{getInitials(user)}</span>
         <div>
-          <p className="profile-menu__name">{DEMO_USER.name}</p>
-          <p className="profile-menu__email">{DEMO_USER.email}</p>
+          <p className="profile-menu__name">{user?.full_name}</p>
+          <p className="profile-menu__email">{user?.email}</p>
         </div>
       </div>
 
@@ -56,7 +63,7 @@ export default function ProfileMenu({ onClose }) {
       </div>
 
       <div className="profile-menu__group">
-        <MenuRow icon="logout" label="Sign out" muted onClick={() => goTo("/")} />
+        <MenuRow icon="logout" label="Sign out" muted onClick={signOut} />
       </div>
     </div>
   );

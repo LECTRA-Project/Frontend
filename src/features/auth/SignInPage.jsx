@@ -1,32 +1,44 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import Brand from "../../components/Brand.jsx";
 import Button from "../../components/ui/Button.jsx";
 import TextField from "../../components/ui/TextField.jsx";
+import { useAuth } from "./authContext.js";
 import "./auth.css";
 
 /*
   Sign-in screen.
-  DEMO MODE: there is no authentication yet. If both fields are filled in, the
-  button opens the workspace. Nothing is sent anywhere and no account is checked.
+  Sends the form to POST /api/auth/login. On success the auth state flips to
+  "authenticated" and GuestOnly (RouteGuards.jsx) moves the user on to the workspace,
+  or back to the page they were trying to open.
 */
 export default function SignInPage() {
-  const navigate = useNavigate();
+  const { login, signOutReason } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
     const newErrors = {};
     if (!email.trim()) newErrors.email = "Please enter your email.";
     if (!password) newErrors.password = "Please enter your password.";
     setErrors(newErrors);
+    setFormError("");
 
-    if (Object.keys(newErrors).length === 0) {
-      navigate("/workspace");
+    if (Object.keys(newErrors).length > 0) return;
+
+    setSubmitting(true);
+    try {
+      await login({ email: email.trim(), password });
+    } catch (error) {
+      setErrors(error.fieldErrors ?? {});
+      setFormError(error.message);
+      setSubmitting(false);
     }
   }
 
@@ -39,6 +51,18 @@ export default function SignInPage() {
           <h1 className="auth-card__title">Sign in</h1>
           <p className="auth-card__subtitle">Continue to your study workspace.</p>
         </div>
+
+        {formError ? (
+          <p className="auth-card__alert" role="alert">
+            {formError}
+          </p>
+        ) : (
+          signOutReason === "expired" && (
+            <p className="auth-card__alert auth-card__alert--info" role="status">
+              Your session has expired. Please sign in again.
+            </p>
+          )
+        )}
 
         <TextField
           label="Email"
@@ -61,19 +85,14 @@ export default function SignInPage() {
           error={errors.password}
         />
 
-        <Button type="submit" variant="primary" fullWidth className="auth-card__submit">
-          Sign in
+        <Button type="submit" variant="primary" fullWidth className="auth-card__submit" disabled={submitting}>
+          {submitting ? "Signing in…" : "Sign in"}
         </Button>
 
         <p className="auth-card__switch">
           New to LECTRA? <Link to="/create-account">Create an account</Link>
         </p>
       </form>
-
-      <p className="auth-demo-note">
-        Demo mode — sign-in isn’t connected yet. Any email and password open the prototype workspace;
-        no account is checked.
-      </p>
     </main>
   );
 }
