@@ -87,6 +87,7 @@ const PATHS = {
     </>
   ),
   close: <path d="M5 5l10 10M15 5 5 15" />,
+  check: <path d="m4 10 4 4 8-8" />,
   chevronLeft: <path d="m12 5-5 5 5 5" />,
   chevronRight: <path d="m8 5 5 5-5 5" />,
   chevronDown: <path d="m5 8 5 5 5-5" />,
@@ -136,4 +137,3 @@ export default function Icon({ name, size = 18, strokeWidth = 1.6, className }) 
     </svg>
   );
 }
-

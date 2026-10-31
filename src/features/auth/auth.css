@@ -41,6 +41,42 @@
   margin-top: var(--space-2);
 }
 
+.auth-card__forgot-password {
+  margin-top: calc(-1 * var(--space-3));
+  text-align: right;
+  font-size: var(--text-sm);
+}
+.auth-card__forgot-password a {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 2px;
+}
+.auth-card__forgot-password a:hover {
+  text-decoration: underline;
+}
+
+.password-requirements {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: calc(-1 * var(--space-3));
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+}
+.password-requirements__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--danger);
+}
+.password-requirements__item--met {
+  color: var(--accent-strong);
+}
+.password-requirements__icon {
+  flex: 0 0 auto;
+}
+
 .auth-card__switch {
   text-align: center;
   font-size: var(--text-sm);
