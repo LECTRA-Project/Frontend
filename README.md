@@ -49,7 +49,7 @@ src/
 
 The app entry point is `src/main.jsx`. Routes and access guards live in `src/app/router.jsx` and `src/features/auth/RouteGuards.jsx`. Forms use Formik with Yup schemas; shared form bindings are in `src/components/ui/FormikTextField.jsx`. New passwords must be 8–14 characters and include uppercase and lowercase letters, a number, and a special character. The password checklist updates as the user types.
 
-The workspace includes demo/sample-only behavior in some areas: picked files are local to the browser session, profile/settings saves are not persisted, statistics are illustrative, and the study assistant is not connected unless its service reports otherwise. Success and action-confirmation messages dismiss after three seconds; validation and error messages remain visible.
+The workspace includes demo/sample-only behavior in some areas: picked files are local to the browser session, profile/settings saves are not persisted, statistics are illustrative, and the study assistant is not connected unless its service reports otherwise. The course-materials panel starts collapsed and can be expanded from its menu button; the notebook/PDF center column automatically uses the available space, and uploaded PDFs auto-fit to the viewer width until the user manually changes zoom. Success and action-confirmation messages dismiss after three seconds; validation and error messages remain visible.
 
 ## Backend
 

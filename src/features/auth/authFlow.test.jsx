@@ -384,6 +384,29 @@ describe("profile form validation", () => {
 });
 
 describe("session", () => {
+  it("starts with course materials collapsed and toggles the list open", async () => {
+    backendWithUser();
+    saveToken(token);
+    const user = userEvent.setup();
+    const { container } = renderApp("/workspace");
+
+    await screen.findByRole("button", { name: "Open profile menu" });
+    const sidebar = screen.getByRole("region", { name: "Course materials" });
+    const toggle = screen.getByRole("button", { name: "Show course materials" });
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(sidebar).toHaveClass("materials--collapsed");
+    expect(screen.queryByText("Lecture 01 — Notes")).not.toBeVisible();
+    expect(container.querySelector(".center-panel")).toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(screen.getByRole("button", { name: "Hide course materials" })).toHaveAttribute("aria-expanded", "true");
+    expect(sidebar).not.toHaveClass("materials--collapsed");
+    expect(screen.getByText("Lecture 01 — Notes")).toBeVisible();
+    expect(container.querySelector(".workspace__body")).not.toHaveClass("workspace__body--materials-collapsed");
+  });
+
   it("restores a saved session on reload and skips the sign-in page", async () => {
     backendWithUser();
     saveToken(token);

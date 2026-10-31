@@ -15,6 +15,7 @@ const PATHS = {
       <path d="m13 13 4 4" />
     </>
   ),
+  menu: <path d="M3 5h14M3 10h14M3 15h14" />,
   slides: (
     <>
       <rect x="2.5" y="3.5" width="15" height="10" rx="1" />

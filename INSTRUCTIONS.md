@@ -126,6 +126,8 @@ Vite only exposes variables prefixed with `VITE_` to browser code. Do not put se
 
 Unknown routes redirect to sign-in. Reset links remain accessible when a browser already has an authenticated session. The reset token must be present in the emailed URL to bootstrap the flow; after the app captures it, the URL is replaced with `/reset-password` before rendering.
 
+The course-materials panel starts collapsed. Its menu button expands or hides the materials list; on desktop the notebook/PDF viewer column resizes to use the available width, and on smaller screens the panel stacks above the workspace content. Uploaded PDFs automatically fit their viewer width when the panel resizes; manual zoom overrides auto-fit.
+
 ## 6. Password and form behavior
 
 Formik manages form values and submission state; Yup schemas are defined in `src/features/auth/validationSchemas.js`. `FormikTextField` connects shared text inputs to Formik, and `PasswordRequirements` presents the same live policy used by Yup.
