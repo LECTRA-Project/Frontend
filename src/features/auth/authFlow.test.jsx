@@ -41,6 +41,16 @@ async function fillSignIn(user, email, password) {
 const openProfileMenu = (user) => user.click(screen.getByRole("button", { name: "Open profile menu" }));
 
 describe("sign in", () => {
+  it("opens the password reset page from the forgot-password link", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp("/");
+
+    await user.click(screen.getByRole("link", { name: "Forgot password?" }));
+
+    expect(router.state.location.pathname).toBe("/forget-password");
+    expect(await screen.findByRole("heading", { name: "Forgot your password?" })).toBeInTheDocument();
+  });
+
   it("signs in and opens the workspace with the real user", async () => {
     backendWithUser();
     const user = userEvent.setup();
@@ -105,8 +115,127 @@ describe("sign in", () => {
   });
 });
 
+describe("forgot password", () => {
+  it("sends the email and displays the server confirmation", async () => {
+    const message = "If an account with this email exists, a reset link has been sent";
+    api.onPost("/auth/forgot-password").reply(200, ok(null, message));
+    const user = userEvent.setup();
+    renderApp("/forget-password");
+
+    await user.type(screen.getByLabelText("Email"), TEST_USER.email);
+    await user.click(screen.getByRole("button", { name: "Send reset link" }));
+
+    expect(JSON.parse(api.history.post[0].data)).toEqual({ email: TEST_USER.email });
+    expect(await screen.findByRole("status")).toHaveTextContent(message);
+  });
+
+  it("validates the email before sending a reset request", async () => {
+    const user = userEvent.setup();
+    renderApp("/forget-password");
+
+    await user.click(screen.getByRole("button", { name: "Send reset link" }));
+
+    expect(screen.getByText("Please enter your email.")).toBeInTheDocument();
+    expect(api.history.post).toHaveLength(0);
+  });
+
+  it("displays the API error if the reset request fails", async () => {
+    api.onPost("/auth/forgot-password").reply(400, { message: "Reset request failed" });
+    const user = userEvent.setup();
+    renderApp("/forget-password");
+
+    await user.type(screen.getByLabelText("Email"), TEST_USER.email);
+    await user.click(screen.getByRole("button", { name: "Send reset link" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reset request failed");
+  });
+});
+
+describe("reset password", () => {
+  it("resets the password and returns to sign in", async () => {
+    api.onPost("/auth/reset-password").reply(200, ok(null, "Password has been reset successfully"));
+    const user = userEvent.setup();
+    const { router } = renderApp("/reset-password?token=reset-token");
+
+    await waitFor(() => expect(router.state.location.search).toBe(""));
+    expect(router.state.location.state).toEqual({ resetToken: "reset-token" });
+    expect(screen.getByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("New password"), "StrongerPass1!");
+    await user.type(screen.getByLabelText("Confirm password"), "StrongerPass1!");
+    await user.click(screen.getByRole("button", { name: "Reset password" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    expect(JSON.parse(api.history.post[0].data)).toEqual({
+      token: "reset-token",
+      new_password: "StrongerPass1!",
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Your password has been reset. Please sign in with your new password."
+    );
+  });
+
+  it("validates matching passwords before sending a reset request", async () => {
+    const user = userEvent.setup();
+    renderApp("/reset-password?token=reset-token");
+
+    await user.type(screen.getByLabelText("New password"), "StrongerPass1!");
+    await user.type(screen.getByLabelText("Confirm password"), "different-secret");
+    await user.click(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(screen.getByText("The passwords don’t match.")).toBeInTheDocument();
+    expect(api.history.post).toHaveLength(0);
+  });
+
+  it("requires a strong password when resetting", async () => {
+    const user = userEvent.setup();
+    renderApp("/reset-password?token=reset-token");
+
+    await user.type(screen.getByLabelText("New password"), "weak");
+    await user.type(screen.getByLabelText("Confirm password"), "weak");
+    await user.click(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(screen.getByText("Password must be between 8 and 14 characters.")).toBeInTheDocument();
+    expect(api.history.post).toHaveLength(0);
+  });
+
+  it("shows a reset request error for an invalid token", async () => {
+    api.onPost("/auth/reset-password").reply(400, { detail: "Invalid or expired reset token" });
+    const user = userEvent.setup();
+    renderApp("/reset-password?token=invalid-token");
+
+    await user.type(screen.getByLabelText("New password"), "StrongerPass1!");
+    await user.type(screen.getByLabelText("Confirm password"), "StrongerPass1!");
+    await user.click(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid or expired reset token");
+  });
+
+  it("does not submit when the reset token is missing", async () => {
+    const user = userEvent.setup();
+    renderApp("/reset-password");
+
+    expect(screen.getByRole("button", { name: "Reset password" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Request a new link" })).toHaveAttribute("href", "/forget-password");
+    await user.click(screen.getByRole("button", { name: "Reset password" }));
+    expect(api.history.post).toHaveLength(0);
+  });
+
+  it("keeps the emailed reset route available for authenticated users", async () => {
+    api.onGet("/auth/user").reply(200, ok(TEST_USER));
+    saveToken(token);
+    const { router } = renderApp("/reset-password?token=reset-token");
+
+    expect(await screen.findByRole("heading", { name: "Reset your password" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/reset-password");
+  });
+});
+
 describe("create account", () => {
-  async function fillRegister(user, { fullName = "Ada Lovelace", email = TEST_USER.email, password = "secret123", confirm = password } = {}) {
+  async function fillRegister(
+    user,
+    { fullName = "Ada Lovelace", email = TEST_USER.email, password = "StrongerPass1!", confirm = password } = {}
+  ) {
     await user.type(screen.getByLabelText("Full name"), fullName);
     await user.type(screen.getByLabelText("Email"), email);
     await user.type(screen.getByLabelText("Password"), password);
@@ -115,7 +244,7 @@ describe("create account", () => {
   }
 
   it("registers, signs in automatically and opens the workspace", async () => {
-    backendWithUser();
+    backendWithUser({ password: "StrongerPass1!" });
     api.onPost("/auth/register").reply(201, ok(TEST_USER, "User registered successfully"));
     const user = userEvent.setup();
     const { router } = renderApp("/create-account");
@@ -125,7 +254,7 @@ describe("create account", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
     expect(JSON.parse(api.history.post[0].data)).toEqual({
       email: TEST_USER.email,
-      password: "secret123",
+      password: "StrongerPass1!",
       full_name: "Ada Lovelace",
     });
     expect(api.history.post[1].url).toBe("/auth/login");
@@ -168,6 +297,48 @@ describe("create account", () => {
     expect(api.history.post).toHaveLength(0);
   });
 
+  it("requires a strong password when creating an account", async () => {
+    const user = userEvent.setup();
+    renderApp("/create-account");
+
+    await fillRegister(user, { password: "weak", confirm: "weak" });
+
+    expect(screen.getByText("Password must be between 8 and 14 characters.")).toBeInTheDocument();
+    expect(api.history.post).toHaveLength(0);
+  });
+
+  it("shows password requirements only after typing and updates them live", async () => {
+    const user = userEvent.setup();
+    renderApp("/create-account");
+
+    expect(screen.queryByRole("list", { name: "Password requirements" })).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Password"), "a");
+
+    expect(screen.getByRole("list", { name: "Password requirements" })).toBeInTheDocument();
+    expect(screen.getByRole("listitem", { name: "A lowercase letter: met" })).toHaveClass(
+      "password-requirements__item--met"
+    );
+    expect(screen.getByRole("listitem", { name: "An uppercase letter: not met" })).not.toHaveClass(
+      "password-requirements__item--met"
+    );
+    expect(screen.getByRole("listitem", { name: "8–14 characters: not met" }).querySelector("svg")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Password"), "BC12345!");
+
+    for (const requirement of [
+      "8–14 characters",
+      "An uppercase letter",
+      "A lowercase letter",
+      "A number",
+      "A special character",
+    ]) {
+      expect(screen.getByRole("listitem", { name: `${requirement}: met` })).toHaveClass(
+        "password-requirements__item--met"
+      );
+    }
+  });
+
   it("sends the user to sign-in if the automatic sign-in fails", async () => {
     api.onPost("/auth/register").reply(201, ok(TEST_USER));
     api.onPost("/auth/login").networkError();
@@ -181,7 +352,61 @@ describe("create account", () => {
   });
 });
 
+describe("profile form validation", () => {
+  it("validates optional profile email when provided", async () => {
+    backendWithUser();
+    saveToken(token);
+    const user = userEvent.setup();
+    renderApp("/profile");
+
+    await screen.findByRole("heading", { name: "My profile" });
+    await user.type(screen.getByLabelText("Email"), "not-an-email");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Please enter a valid email.")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("requires complete password-change details and a sufficiently long new password", async () => {
+    backendWithUser();
+    saveToken(token);
+    const user = userEvent.setup();
+    renderApp("/profile");
+
+    await screen.findByRole("heading", { name: "My profile" });
+    await user.type(screen.getByLabelText("New password"), "short");
+    await user.type(screen.getByLabelText("Confirm new password"), "short");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("New password must be between 8 and 14 characters.")).toBeInTheDocument();
+    expect(screen.getByText("To change your password, enter your current password.")).toBeInTheDocument();
+  });
+});
+
 describe("session", () => {
+  it("starts with course materials collapsed and toggles the list open", async () => {
+    backendWithUser();
+    saveToken(token);
+    const user = userEvent.setup();
+    const { container } = renderApp("/workspace");
+
+    await screen.findByRole("button", { name: "Open profile menu" });
+    const sidebar = screen.getByRole("region", { name: "Course materials" });
+    const toggle = screen.getByRole("button", { name: "Show course materials" });
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(sidebar).toHaveClass("materials--collapsed");
+    expect(screen.queryByText("Lecture 01 — Notes")).not.toBeVisible();
+    expect(container.querySelector(".center-panel")).toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(screen.getByRole("button", { name: "Hide course materials" })).toHaveAttribute("aria-expanded", "true");
+    expect(sidebar).not.toHaveClass("materials--collapsed");
+    expect(screen.getByText("Lecture 01 — Notes")).toBeVisible();
+    expect(container.querySelector(".workspace__body")).not.toHaveClass("workspace__body--materials-collapsed");
+  });
+
   it("restores a saved session on reload and skips the sign-in page", async () => {
     backendWithUser();
     saveToken(token);

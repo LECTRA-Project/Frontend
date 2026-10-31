@@ -15,6 +15,7 @@ const PATHS = {
       <path d="m13 13 4 4" />
     </>
   ),
+  menu: <path d="M3 5h14M3 10h14M3 15h14" />,
   slides: (
     <>
       <rect x="2.5" y="3.5" width="15" height="10" rx="1" />
@@ -87,6 +88,7 @@ const PATHS = {
     </>
   ),
   close: <path d="M5 5l10 10M15 5 5 15" />,
+  check: <path d="m4 10 4 4 8-8" />,
   chevronLeft: <path d="m12 5-5 5 5 5" />,
   chevronRight: <path d="m8 5 5 5-5 5" />,
   chevronDown: <path d="m5 8 5 5 5-5" />,
@@ -136,4 +138,3 @@ export default function Icon({ name, size = 18, strokeWidth = 1.6, className }) 
     </svg>
   );
 }
-

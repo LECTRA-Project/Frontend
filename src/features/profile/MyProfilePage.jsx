@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Formik, Form } from "formik";
 
 import PageShell from "../../components/PageShell.jsx";
 import Button from "../../components/ui/Button.jsx";
-import TextField from "../../components/ui/TextField.jsx";
+import FormikTextField from "../../components/ui/FormikTextField.jsx";
+import PasswordRequirements from "../../components/ui/PasswordRequirements.jsx";
+import TransientStatus from "../../components/ui/TransientStatus.jsx";
 import { getInitials, useAuth } from "../auth/authContext.js";
+import { profileSchema } from "../auth/validationSchemas.js";
 import "./profile.css";
 
 /*
@@ -14,41 +18,22 @@ import "./profile.css";
 export default function MyProfilePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [form, setForm] = useState({
-    username: "",
-    email: "",
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
-  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-
-  function handleChange(event) {
-    setForm({ ...form, [event.target.name]: event.target.value });
-    setSaved(false);
-  }
-
-  function handleSubmit(event) {
-    event.preventDefault();
-    const { currentPassword, newPassword, confirmPassword } = form;
-    const changingPassword = currentPassword || newPassword || confirmPassword;
-
-    if (changingPassword && (!currentPassword || !newPassword)) {
-      setError("To change your password, fill in your current and new password.");
-    } else if (newPassword && newPassword.length < 8) {
-      setError("The new password needs at least 8 characters.");
-    } else if (newPassword !== confirmPassword) {
-      setError("The new passwords don’t match.");
-    } else {
-      setError("");
-      setSaved(true);
-    }
-  }
 
   return (
     <PageShell title="My profile" subtitle="Update your username, email and password.">
-      <form onSubmit={handleSubmit} noValidate>
+      <Formik
+        initialValues={{
+          username: "",
+          email: "",
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        }}
+        validationSchema={profileSchema}
+        onSubmit={() => setSaved(true)}
+      >
+        <Form noValidate>
         <div className="profile-grid">
           <section className="card" aria-labelledby="details-title">
             <h2 id="details-title" className="card__title">
@@ -65,8 +50,19 @@ export default function MyProfilePage() {
             </div>
 
             <div className="card__fields">
-              <TextField label="Username" name="username" placeholder={user?.full_name} value={form.username} onChange={handleChange} />
-              <TextField label="Email" name="email" type="email" placeholder={user?.email} value={form.email} onChange={handleChange} />
+              <FormikTextField
+                label="Username"
+                name="username"
+                placeholder={user?.full_name}
+                onChange={() => setSaved(false)}
+              />
+              <FormikTextField
+                label="Email"
+                name="email"
+                type="email"
+                placeholder={user?.email}
+                onChange={() => setSaved(false)}
+              />
             </div>
           </section>
 
@@ -74,57 +70,55 @@ export default function MyProfilePage() {
             <h2 id="password-title" className="card__title">
               Change password
             </h2>
-            <p className="card__subtitle">Use at least 8 characters.</p>
+            <p className="card__subtitle">Choose a strong new password.</p>
 
             <div className="card__fields card__fields--tight">
-              <TextField
+              <FormikTextField
                 label="Current password"
                 name="currentPassword"
                 type="password"
                 placeholder="Enter current password"
                 autoComplete="current-password"
-                value={form.currentPassword}
-                onChange={handleChange}
+                onChange={() => setSaved(false)}
               />
-              <TextField
+              <PasswordRequirements name="newPassword" />
+              <FormikTextField
                 label="New password"
                 name="newPassword"
                 type="password"
+                maxLength={14}
                 placeholder="Enter new password"
                 autoComplete="new-password"
-                value={form.newPassword}
-                onChange={handleChange}
+                onChange={() => setSaved(false)}
               />
-              <TextField
+              <FormikTextField
                 label="Confirm new password"
                 name="confirmPassword"
                 type="password"
+                maxLength={14}
                 placeholder="Repeat new password"
                 autoComplete="new-password"
-                value={form.confirmPassword}
-                onChange={handleChange}
+                onChange={() => setSaved(false)}
               />
             </div>
           </section>
         </div>
 
         <div className="page-actions">
-          {error && (
-            <p className="field__error" role="alert">
-              {error}
-            </p>
-          )}
           {saved && (
-            <p className="notice notice--accent" role="status">
-              Demo mode — changes are not saved yet.
-            </p>
+            <TransientStatus onDismiss={() => setSaved(false)}>
+              <p className="notice notice--accent" role="status">
+                Demo mode — changes are not saved yet.
+              </p>
+            </TransientStatus>
           )}
           <Button onClick={() => navigate("/workspace")}>Cancel</Button>
           <Button type="submit" variant="primary">
             Save changes
           </Button>
         </div>
-      </form>
+        </Form>
+      </Formik>
     </PageShell>
   );
 }

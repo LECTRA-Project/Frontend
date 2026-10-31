@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
+import IconButton from "../../../components/ui/IconButton.jsx";
 import { MATERIAL_GROUPS } from "../../../data/sampleMaterials.js";
 
 /*
@@ -10,23 +11,40 @@ import { MATERIAL_GROUPS } from "../../../data/sampleMaterials.js";
   Props:
     materials      array of { id, type, name, meta } (demo items + files added this session)
     selectedId     id of the highlighted item
+    collapsed      whether the materials list is hidden
+    onToggleCollapsed toggles the materials list
     onSelect       called with the material when an item is clicked
     onUploadClick  called when "Upload materials" is clicked
 */
-export default function CourseMaterialsPanel({ materials, selectedId, onSelect, onUploadClick }) {
+export default function CourseMaterialsPanel({
+  materials,
+  selectedId,
+  collapsed,
+  onToggleCollapsed,
+  onSelect,
+  onUploadClick,
+}) {
   const [filter, setFilter] = useState("");
 
   const query = filter.trim().toLowerCase();
   const visibleMaterials = materials.filter((item) => item.name.toLowerCase().includes(query));
 
   return (
-    <section className="panel materials" aria-labelledby="materials-title">
+    <section
+      className={`panel materials ${collapsed ? "materials--collapsed" : ""}`}
+      aria-label="Course materials"
+    >
       <div className="materials__top">
-        <h2 id="materials-title" className="panel__title">
-          Course materials
-        </h2>
+        {!collapsed && <h2 className="panel__title">Course materials</h2>}
+        <IconButton
+          icon={collapsed ? "menu" : "chevronLeft"}
+          label={collapsed ? "Show course materials" : "Hide course materials"}
+          aria-expanded={!collapsed}
+          aria-controls="course-material-list"
+          onClick={onToggleCollapsed}
+        />
 
-        <label className="materials__filter">
+        <label className="materials__filter" hidden={collapsed}>
           <span className="visually-hidden">Filter materials</span>
           <Icon name="search" size={16} />
           <input
@@ -38,7 +56,7 @@ export default function CourseMaterialsPanel({ materials, selectedId, onSelect, 
         </label>
       </div>
 
-      <div className="materials__list">
+      <div className="materials__list" id="course-material-list" hidden={collapsed}>
         {MATERIAL_GROUPS.map((group) => {
           const items = visibleMaterials.filter((item) => item.type === group.type);
           if (items.length === 0) return null;
@@ -71,7 +89,7 @@ export default function CourseMaterialsPanel({ materials, selectedId, onSelect, 
         {visibleMaterials.length === 0 && <p className="materials__empty">No materials match “{filter}”.</p>}
       </div>
 
-      <div className="materials__bottom">
+      <div className="materials__bottom" hidden={collapsed}>
         <Button icon="upload" fullWidth onClick={onUploadClick}>
           Upload materials
         </Button>

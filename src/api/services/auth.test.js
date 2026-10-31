@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { getCurrentUser, login, logout, register } from "./auth.js";
-import { getAuthToken } from "../client.js";
+import { getCurrentUser, login, logout, register, requestPasswordReset, resetPassword } from "./auth.js";
+import { ApiError, getAuthToken } from "../client.js";
 import { mockApi, ok, TEST_USER } from "../../test/helpers.jsx";
 
 describe("auth service", () => {
@@ -39,6 +39,42 @@ describe("auth service", () => {
 
     await expect(login({ email: TEST_USER.email, password: "nope" })).rejects.toThrow("Invalid email or password");
     expect(getAuthToken()).toBeNull();
+  });
+
+  it("requests a password reset and returns the server message", async () => {
+    const message = "If an account with this email exists, a reset link has been sent";
+    api.onPost("/auth/forgot-password").reply(200, ok(null, message));
+
+    const response = await requestPasswordReset({ email: TEST_USER.email });
+
+    expect(JSON.parse(api.history.post[0].data)).toEqual({ email: TEST_USER.email });
+    expect(response.message).toBe(message);
+  });
+
+  it("rejects a password-reset response with a false status", async () => {
+    api.onPost("/auth/forgot-password").reply(200, { status: false, message: "Reset unavailable" });
+
+    await expect(requestPasswordReset({ email: TEST_USER.email })).rejects.toThrow(ApiError);
+  });
+
+  it("resets the password with the reset token", async () => {
+    api.onPost("/auth/reset-password").reply(200, ok(null, "Password has been reset successfully"));
+
+    const response = await resetPassword({ token: "reset-token", newPassword: "new-secret" });
+
+    expect(JSON.parse(api.history.post[0].data)).toEqual({
+      token: "reset-token",
+      new_password: "new-secret",
+    });
+    expect(response.message).toBe("Password has been reset successfully");
+  });
+
+  it("rejects an invalid reset token response", async () => {
+    api.onPost("/auth/reset-password").reply(400, { detail: "Invalid or expired reset token" });
+
+    await expect(resetPassword({ token: "invalid-token", newPassword: "new-secret" })).rejects.toThrow(
+      "Invalid or expired reset token"
+    );
   });
 
   it("getCurrentUser sends the token and returns the user", async () => {

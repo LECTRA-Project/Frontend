@@ -43,6 +43,7 @@ export default function WorkspaceLayout() {
   const location = useLocation();
 
   const [selectedId, setSelectedId] = useState("notebook-01");
+  const [materialsCollapsed, setMaterialsCollapsed] = useState(true);
   const [uploadTarget, setUploadTarget] = useState(null); // null | "materials" | "assistant"
   // The PDF shown inline in the centre panel, plus the URL it was opened on:
   // { material, path } or null. It only shows while the URL is unchanged, so using the
@@ -99,10 +100,12 @@ export default function WorkspaceLayout() {
     <div className="workspace">
       <WorkspaceHeader />
 
-      <div className="workspace__body">
+      <div className={`workspace__body ${materialsCollapsed ? "workspace__body--materials-collapsed" : ""}`}>
         <CourseMaterialsPanel
           materials={materials}
           selectedId={selectedId}
+          collapsed={materialsCollapsed}
+          onToggleCollapsed={() => setMaterialsCollapsed((collapsed) => !collapsed)}
           onSelect={handleSelectMaterial}
           onUploadClick={() => setUploadTarget("materials")}
         />

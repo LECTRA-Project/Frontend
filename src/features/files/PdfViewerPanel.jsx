@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import IconButton from "../../components/ui/IconButton.jsx";
 import Icon from "../../components/ui/Icon.jsx";
+import { getFitZoomIndex, ZOOM_STEPS } from "./pdfZoom.js";
 import "./files.css";
 
 /*
@@ -15,21 +16,38 @@ import "./files.css";
 
   Props:
     material    the PDF to show: { name, meta, pages?, url? }
-    onCollapse  called by the collapse button; the workspace then shows the
+    onCollapse  called by the close button; the workspace then shows the
                 notebook or exam view again
 */
-const ZOOM_STEPS = [50, 75, 100, 125, 150, 200];
-
 export default function PdfViewerPanel({ material, onCollapse }) {
   const hasRealFile = Boolean(material.url);
   const pageCount = material.pages ?? null; // unknown for real files
   const panelRef = useRef(null);
   const [page, setPage] = useState(1);
-  const [zoomIndex, setZoomIndex] = useState(2); // 100%
+  const [panelWidth, setPanelWidth] = useState(0);
+  const [manualZoomIndex, setManualZoomIndex] = useState(null);
+  const zoomIndex = manualZoomIndex ?? (panelWidth > 0 ? getFitZoomIndex(panelWidth) : 2);
   const zoom = ZOOM_STEPS[zoomIndex];
 
   const canGoBack = page > 1;
   const canGoForward = pageCount === null || page < pageCount;
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+
+    const measure = () => setPanelWidth(panel.clientWidth);
+    measure();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, []);
 
   // On narrow screens the panels are stacked, so bring the viewer into view when it opens.
   // On desktop it is already visible and nothing moves.
@@ -49,11 +67,18 @@ export default function PdfViewerPanel({ material, onCollapse }) {
     <section ref={panelRef} className="panel center-panel pdf" aria-label={`PDF viewer: ${material.name}`}>
       <div className="pdf__toolbar">
         <div className="pdf__file">
-          <IconButton icon="arrowLeft" label="Collapse PDF viewer" outlined onClick={onCollapse} />
           <Icon name="fileText" className="pdf__title-icon" />
           <h2 className="pdf__title">{material.name}</h2>
           <span className="pdf__title-meta">{material.meta}</span>
         </div>
+
+        <IconButton
+          icon="close"
+          label="Close PDF viewer"
+          outlined
+          className="pdf__close"
+          onClick={onCollapse}
+        />
 
         <div className="pdf__controls">
           <div className="pdf__pager">
@@ -73,7 +98,7 @@ export default function PdfViewerPanel({ material, onCollapse }) {
           </div>
 
           <div className="pdf__zoom">
-            <IconButton icon="zoomOut" label="Zoom out" disabled={zoomIndex === 0} onClick={() => setZoomIndex(zoomIndex - 1)} />
+            <IconButton icon="zoomOut" label="Zoom out" disabled={zoomIndex === 0} onClick={() => setManualZoomIndex(zoomIndex - 1)} />
             <span className="pdf__zoom-value" aria-live="polite">
               {zoom}%
             </span>
@@ -81,7 +106,7 @@ export default function PdfViewerPanel({ material, onCollapse }) {
               icon="zoomIn"
               label="Zoom in"
               disabled={zoomIndex === ZOOM_STEPS.length - 1}
-              onClick={() => setZoomIndex(zoomIndex + 1)}
+              onClick={() => setManualZoomIndex(zoomIndex + 1)}
             />
           </div>
         </div>

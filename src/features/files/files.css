@@ -89,15 +89,15 @@
 
 /* ---------- PDF viewer (inline, in the workspace centre panel) ---------- */
 .pdf {
+  min-width: 0;
   min-height: 0;
   /* keeps the toolbar below the sticky header when scrolled into view on phones */
   scroll-margin-top: calc(var(--header-height) + var(--space-4));
 }
 .pdf__toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
   min-height: 56px;
   padding: var(--space-2) var(--space-4);
@@ -109,9 +109,14 @@
   gap: var(--space-2);
   min-width: 0;
 }
-.pdf__file .icon-btn {
-  margin-right: var(--space-1);
+.pdf__close {
+  grid-column: 2;
+  grid-row: 1;
   flex-shrink: 0;
+  color: var(--danger);
+}
+.pdf__close:hover:not(:disabled) {
+  color: var(--danger);
 }
 .pdf__title-icon {
   flex-shrink: 0;
@@ -130,6 +135,7 @@
   white-space: nowrap;
 }
 .pdf__controls {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   gap: var(--space-4);

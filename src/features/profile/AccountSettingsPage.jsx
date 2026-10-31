@@ -3,6 +3,7 @@ import { useState } from "react";
 import PageShell from "../../components/PageShell.jsx";
 import Button from "../../components/ui/Button.jsx";
 import Toggle from "../../components/ui/Toggle.jsx";
+import TransientStatus from "../../components/ui/TransientStatus.jsx";
 import "./profile.css";
 
 /*
@@ -70,9 +71,11 @@ export default function AccountSettingsPage() {
 
       <div className="page-actions">
         {saved && (
-          <p className="notice notice--accent" role="status">
-            Demo mode — settings are not saved yet.
-          </p>
+          <TransientStatus onDismiss={() => setSaved(false)}>
+            <p className="notice notice--accent" role="status">
+              Demo mode — settings are not saved yet.
+            </p>
+          </TransientStatus>
         )}
         <Button variant="primary" onClick={() => setSaved(true)}>
           Save settings

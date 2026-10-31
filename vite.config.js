@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
+      // Password-reset emails target the backend's default FRONTEND_URL.
+      port: 5173,
+      strictPort: true,
       // Forward /api/* to the backend during development (avoids CORS).
       proxy: {
         '/api': {
