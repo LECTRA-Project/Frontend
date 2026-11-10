@@ -58,6 +58,12 @@ export default function SignInPage() {
               Your password has been reset. Please sign in with your new password.
             </p>
           </TransientStatus>
+        ) : signOutReason === "password-changed" ? (
+          <TransientStatus>
+            <p className="auth-card__alert auth-card__alert--info" role="status">
+              Your password has been changed. Please sign in again.
+            </p>
+          </TransientStatus>
         ) : (
           signOutReason === "expired" && (
             <p className="auth-card__alert auth-card__alert--info" role="status">

@@ -4,9 +4,9 @@ import { createContext, useContext } from "react";
   Auth state shared by the whole app (provided by AuthProvider.jsx).
 
   status          "loading" (checking a saved token) | "authenticated" | "guest"
-  user            { id, email, full_name, … } from GET /api/auth/user, or null
+  user            { id, email, full_name, … } from GET /api/users/me, or null
   signOutReason   "expired" when the session ended because the token ran out, else null
-  login, register, logout
+  login, register, logout, updateUser
 */
 export const AuthContext = createContext(null);
 

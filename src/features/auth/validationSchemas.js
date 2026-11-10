@@ -74,22 +74,14 @@ export const resetPasswordSchema = Yup.object({
     .required("Please confirm your new password."),
 });
 
-const optionalTrimmedString = () =>
-  Yup.string()
-    .transform((value) => (typeof value === "string" && value.trim() === "" ? undefined : value?.trim()))
-    .optional();
-
 const optionalPassword = () => Yup.string().transform((value) => (value === "" ? undefined : value)).optional();
 
 const optionalNewPasswordSchema = () =>
   strongPasswordRules(optionalPassword(), "New password").optional();
 
 export const profileSchema = Yup.object({
-  username: optionalTrimmedString(),
-  email: Yup.string()
-    .transform((value) => (typeof value === "string" && value.trim() === "" ? undefined : value?.trim()))
-    .email("Please enter a valid email.")
-    .optional(),
+  fullName: Yup.string().trim().required("Please enter your full name."),
+  email: emailSchema,
   currentPassword: optionalPassword(),
   newPassword: optionalNewPasswordSchema(),
   confirmPassword: optionalPassword(),
