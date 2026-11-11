@@ -1,12 +1,18 @@
-import { useEffect, useRef, useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 
 import WorkspaceHeader from "./components/WorkspaceHeader.jsx";
 import CourseMaterialsPanel from "./components/CourseMaterialsPanel.jsx";
 import StudyAssistantPanel from "./components/StudyAssistantPanel.jsx";
 import UploadDialog from "../files/UploadDialog.jsx";
 import PdfViewerPanel from "../files/PdfViewerPanel.jsx";
-import { SAMPLE_MATERIALS } from "../../data/sampleMaterials.js";
+import TransientStatus from "../../components/ui/TransientStatus.jsx";
+import EditLectureDialog from "../lectures/EditLectureDialog.jsx";
+import DeleteLectureDialog from "../lectures/DeleteLectureDialog.jsx";
+import LectureContentPanel from "../lectures/LectureContentPanel.jsx";
+import { toMaterial } from "../lectures/materialTypes.js";
+import { useLectureLibrary } from "../lectures/useLectureLibrary.js";
+import { fetchLectureFile } from "../../api/services/lectures.js";
 import "./workspace.css";
 
 /* The blank cells the notebook starts with (no content, only placeholders). */
@@ -17,121 +23,183 @@ const STARTING_CELLS = [
   { id: "cell-4", type: "code", value: "" },
 ];
 
-/* Works out which material group a picked file belongs to, from its extension. */
-function typeFromFileName(name) {
-  const extension = name.split(".").pop().toLowerCase();
-  if (extension === "pdf") return "pdf";
-  if (extension === "pptx" || extension === "ppt") return "slides";
-  if (extension === "ipynb") return "notebook";
-  return "notes";
-}
-
 /*
   The main study workspace:
     header on top, then three columns —
-    Course materials | Notebook, Exam or PDF viewer | Study assistant
+    Course materials | Notebook, Exam or an open lecture | Study assistant
 
-  This component owns the state that several parts share:
-    - whether the upload dialog is open
-    - which PDF is open in the centre panel
-    - files picked this session (kept only in the browser, never uploaded)
-    - files attached to the assistant message
+  Lecture materials come from the backend (useLectureLibrary). This component owns
+  the state shared between the panels:
+    - which lecture is open in the centre (and which page/slide/cell to show)
+    - the open PDF's file, fetched with the auth token as a temporary blob URL
+    - the upload / edit / delete dialogs
     - the notebook cells
 */
 export default function WorkspaceLayout() {
-  const navigate = useNavigate();
   const location = useLocation();
+  const library = useLectureLibrary();
+  const materials = library.lectures.map(toMaterial);
 
-  const [selectedId, setSelectedId] = useState("notebook-01");
+  const [selectedId, setSelectedId] = useState(null);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(true);
-  const [uploadTarget, setUploadTarget] = useState(null); // null | "materials" | "assistant"
-  // The PDF shown inline in the centre panel, plus the URL it was opened on:
-  // { material, path } or null. It only shows while the URL is unchanged, so using the
-  // Exam button or "Back to notebook" leaves the PDF view automatically.
-  const [openPdf, setOpenPdf] = useState(null);
-  const [sessionFiles, setSessionFiles] = useState([]); // files picked in the upload dialog
-  const [attachments, setAttachments] = useState([]); // files attached to the next assistant message
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [editing, setEditing] = useState(null); // lecture
+  const [deleting, setDeleting] = useState(null); // lecture
+  const [notice, setNotice] = useState(null);
   const [cells, setCells] = useState(STARTING_CELLS);
+  // The lecture shown in the centre, plus the URL it was opened on: it only shows while
+  // the URL is unchanged, so the Exam button or "Back to notebook" leaves it automatically.
+  // focus = { sourceType, sourceNumber } from a cited source.
+  const [open, setOpen] = useState(null); // { lectureId, path, focus }
+  const [pdfFile, setPdfFile] = useState(null); // { key, url, error }
 
-  // Free the temporary browser URLs of picked files when leaving the workspace.
-  const sessionFilesRef = useRef(sessionFiles);
+  const openMaterial =
+    open && open.path === location.pathname ? materials.find((item) => item.id === open.lectureId) ?? null : null;
+  const openPdfKey = openMaterial?.type === "pdf" ? `${openMaterial.id}:${openMaterial.lecture.content_version}` : null;
+
+  // Fetch the open PDF (the file endpoint needs the auth header, so an <iframe src> can't load it directly).
   useEffect(() => {
-    sessionFilesRef.current = sessionFiles;
-  }, [sessionFiles]);
-  useEffect(() => () => sessionFilesRef.current.forEach((item) => URL.revokeObjectURL(item.url)), []);
+    if (!openPdfKey) return undefined;
+    const [lectureId] = openPdfKey.split(":");
+    const controller = new AbortController();
+    let url = null;
+    fetchLectureFile(lectureId, { signal: controller.signal }).then(
+      (blob) => {
+        url = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: "application/pdf" }));
+        setPdfFile({ key: openPdfKey, url, error: null });
+      },
+      (err) => {
+        if (!controller.signal.aborted) setPdfFile({ key: openPdfKey, url: null, error: err.message || "The PDF could not be loaded." });
+      }
+    );
+    return () => {
+      controller.abort();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [openPdfKey]);
 
-  const materials = [...SAMPLE_MATERIALS, ...sessionFiles];
+  function openLecture(lectureId, focus = null) {
+    setSelectedId(lectureId);
+    setOpen({ lectureId, path: location.pathname, focus });
+  }
 
-  const pdfIsOpen = openPdf !== null && openPdf.path === location.pathname;
+  function handleOpenReference(ref) {
+    if (!materials.some((item) => item.id === ref.lecture_id)) {
+      setNotice("That lecture is no longer in your materials.");
+      return;
+    }
+    openLecture(ref.lecture_id, { sourceType: ref.source_type, sourceNumber: ref.source_number });
+  }
 
-  function handleSelectMaterial(material) {
-    setSelectedId(material.id);
-    if (material.type === "pdf") {
-      // Show (or switch to) this PDF in the centre panel.
-      setOpenPdf({ material, path: location.pathname });
-    } else if (material.type === "notebook") {
-      setOpenPdf(null);
-      if (location.pathname !== "/workspace") navigate("/workspace");
+  async function handleUpload(files, options) {
+    setUploadOpen(false);
+    setMaterialsCollapsed(false);
+    const created = await library.upload(files, options);
+    if (created.length) setNotice(`${created.length === 1 ? "1 file" : `${created.length} files`} uploaded — processing for the assistant.`);
+  }
+
+  async function handleRetry(material) {
+    try {
+      await library.retry(material.id);
+    } catch (err) {
+      setNotice(err.message);
     }
   }
 
-  function handleUpload(files) {
-    const picked = files.map((file) => ({
-      id: crypto.randomUUID(),
-      name: file.name,
-      file,
-    }));
-
-    if (uploadTarget === "assistant") {
-      setAttachments((list) => [...list, ...picked]);
-    } else {
-      const newMaterials = picked.map((item) => ({
-        ...item,
-        type: typeFromFileName(item.name),
-        meta: "Added this session · not saved",
-        url: URL.createObjectURL(item.file), // lets the PDF viewer show the real file
-      }));
-      setSessionFiles((list) => [...list, ...newMaterials]);
-    }
-    setUploadTarget(null);
+  async function handleSave(changes) {
+    await library.update(editing.id, changes);
+    setEditing(null);
+    setNotice(changes.file ? "File replaced — processing the new version." : "Lecture updated.");
   }
+
+  async function handleDelete() {
+    await library.remove(deleting.id);
+    if (open?.lectureId === deleting.id) setOpen(null);
+    if (selectedId === deleting.id) setSelectedId(null);
+    setDeleting(null);
+    setNotice("Lecture deleted.");
+  }
+
+  const pdfMaterial =
+    openMaterial?.type === "pdf"
+      ? {
+          ...openMaterial,
+          url: pdfFile?.key === openPdfKey ? pdfFile.url : null,
+          loading: pdfFile?.key !== openPdfKey,
+          loadError: pdfFile?.key === openPdfKey ? pdfFile.error : null,
+        }
+      : null;
+  // A cited page can be out of range after the file was replaced with a shorter one.
+  const citedPage = open?.focus?.sourceType === "page" ? open.focus.sourceNumber : 1;
+  const pdfPage = Math.max(1, Math.min(citedPage, openMaterial?.pages || citedPage));
 
   return (
     <div className="workspace">
       <WorkspaceHeader />
 
+      {notice && (
+        <TransientStatus key={notice} duration={4000} onDismiss={() => setNotice(null)}>
+          <p className="workspace__notice" role="status">
+            {notice}
+          </p>
+        </TransientStatus>
+      )}
+
       <div className={`workspace__body ${materialsCollapsed ? "workspace__body--materials-collapsed" : ""}`}>
         <CourseMaterialsPanel
           materials={materials}
+          uploads={library.uploads}
+          loading={library.loading}
+          error={library.error}
           selectedId={selectedId}
           collapsed={materialsCollapsed}
           onToggleCollapsed={() => setMaterialsCollapsed((collapsed) => !collapsed)}
-          onSelect={handleSelectMaterial}
-          onUploadClick={() => setUploadTarget("materials")}
+          onSelect={(item) => openLecture(item.id)}
+          onEdit={(item) => setEditing(item.lecture)}
+          onDelete={(item) => setDeleting(item.lecture)}
+          onRetry={handleRetry}
+          onDismissUpload={library.dismissUpload}
+          onReload={() => library.refresh()}
+          onUploadClick={() => setUploadOpen(true)}
         />
 
         {/*
           Centre panel: NotebookPage or ExamPage, depending on the URL (see router.jsx).
-          While a PDF is open it is only hidden, not removed, so collapsing the PDF brings
+          While a lecture is open it is only hidden, not removed, so closing the lecture brings
           back the notebook or exam exactly as it was (e.g. the chosen exam answer).
         */}
-        <div className="center-slot" hidden={pdfIsOpen}>
+        <div className="center-slot" hidden={openMaterial !== null}>
           <Outlet context={{ cells, setCells }} />
         </div>
-        {pdfIsOpen && (
-          // `key` resets page and zoom when another PDF is selected.
-          <PdfViewerPanel key={openPdf.material.id} material={openPdf.material} onCollapse={() => setOpenPdf(null)} />
+        {pdfMaterial && (
+          // `key` resets page and zoom when another PDF, version or cited page is opened.
+          <PdfViewerPanel
+            key={`${openPdfKey}:${pdfPage}`}
+            material={pdfMaterial}
+            initialPage={pdfPage}
+            onCollapse={() => setOpen(null)}
+          />
+        )}
+        {openMaterial && openMaterial.type !== "pdf" && (
+          <LectureContentPanel
+            key={openMaterial.id}
+            lecture={openMaterial.lecture}
+            focus={open.focus}
+            onRetry={() => handleRetry(openMaterial)}
+            onClose={() => setOpen(null)}
+          />
         )}
 
         <StudyAssistantPanel
-          attachments={attachments}
-          onAttachClick={() => setUploadTarget("assistant")}
-          onClearAttachments={() => setAttachments([])}
-          onRemoveAttachment={(id) => setAttachments((list) => list.filter((file) => file.id !== id))}
+          materials={materials}
+          onAttachClick={() => setUploadOpen(true)}
+          onOpenReference={handleOpenReference}
         />
       </div>
 
-      {uploadTarget && <UploadDialog onCancel={() => setUploadTarget(null)} onUpload={handleUpload} />}
+      {uploadOpen && <UploadDialog onCancel={() => setUploadOpen(false)} onUpload={handleUpload} />}
+      {editing && <EditLectureDialog lecture={editing} onSave={handleSave} onCancel={() => setEditing(null)} />}
+      {deleting && <DeleteLectureDialog lecture={deleting} onConfirm={handleDelete} onCancel={() => setDeleting(null)} />}
     </div>
   );
 }

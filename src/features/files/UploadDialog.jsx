@@ -3,24 +3,33 @@ import { useRef, useState } from "react";
 import Modal from "../../components/ui/Modal.jsx";
 import Button from "../../components/ui/Button.jsx";
 import Icon from "../../components/ui/Icon.jsx";
+import TextField from "../../components/ui/TextField.jsx";
+import { ACCEPTED_EXTENSIONS, hasAcceptedExtension } from "../lectures/materialTypes.js";
 import "./files.css";
 
 /*
-  Upload dialog — shared by "Upload materials" and the + button in the assistant.
+  Upload dialog — used by "Upload materials" and the + button in the assistant.
 
-  FRONTEND ONLY: files are picked in the browser and handed to `onUpload(files)`.
-  Nothing is sent to a server and nothing is saved; the files disappear when the
-  page is reloaded.
+  The picked files are handed to `onUpload(files, { course })`; the workspace uploads
+  them to the backend (POST /student_profile/upload-lecture). Each file becomes a
+  lecture titled after its file name; AI processing starts automatically and the
+  progress shows in the Course materials list.
 */
-const ACCEPTED = ".pdf,.pptx,.ipynb";
+const ACCEPTED = ACCEPTED_EXTENSIONS.join(",");
+const MAX_BYTES = 100 * 1024 * 1024;
 
 export default function UploadDialog({ onCancel, onUpload }) {
   const inputRef = useRef(null);
   const [files, setFiles] = useState([]);
+  const [course, setCourse] = useState("");
+  const [rejected, setRejected] = useState([]);
   const [dragging, setDragging] = useState(false);
 
   function addFiles(fileList) {
-    setFiles((current) => [...current, ...Array.from(fileList)]);
+    const picked = Array.from(fileList);
+    const ok = picked.filter((file) => hasAcceptedExtension(file.name) && file.size > 0 && file.size <= MAX_BYTES);
+    setRejected(picked.filter((file) => !ok.includes(file)).map((file) => file.name));
+    setFiles((current) => [...current, ...ok]);
   }
 
   function handleDrop(event) {
@@ -30,7 +39,7 @@ export default function UploadDialog({ onCancel, onUpload }) {
   }
 
   return (
-    <Modal title="Upload files" width={480} onClose={onCancel}>
+    <Modal title="Upload lecture materials" width={480} onClose={onCancel}>
       <div className="upload">
         <div
           className={`upload__drop ${dragging ? "upload__drop--active" : ""}`}
@@ -53,6 +62,7 @@ export default function UploadDialog({ onCancel, onUpload }) {
             accept={ACCEPTED}
             multiple
             hidden
+            data-testid="upload-input"
             onChange={(event) => {
               addFiles(event.target.files);
               event.target.value = ""; // allows picking the same file again
@@ -60,7 +70,13 @@ export default function UploadDialog({ onCancel, onUpload }) {
           />
         </div>
 
-        <p className="upload__help">Supported: PDF, slides (PPTX) and notebooks (IPYNB).</p>
+        <p className="upload__help">Supported: PDF, slides (PPT, PPTX) and notebooks (IPYNB), up to 100 MB each.</p>
+
+        {rejected.length > 0 && (
+          <p className="field__error" role="alert">
+            Not added (unsupported type, empty or over 100 MB): {rejected.join(", ")}
+          </p>
+        )}
 
         {files.length > 0 && (
           <ul className="upload__list" aria-label="Selected files">
@@ -81,11 +97,21 @@ export default function UploadDialog({ onCancel, onUpload }) {
           </ul>
         )}
 
-        <p className="upload__local-note">Files stay in this browser tab only — they are not uploaded or saved yet.</p>
+        <TextField
+          label="Course (optional)"
+          value={course}
+          maxLength={255}
+          placeholder="e.g. Grundlagen der KI"
+          onChange={(event) => setCourse(event.target.value)}
+        />
+
+        <p className="upload__local-note">
+          Files are saved to your account. Lectra then reads them so the study assistant can answer questions about them.
+        </p>
 
         <div className="upload__actions">
           <Button onClick={onCancel}>Cancel</Button>
-          <Button variant="primary" disabled={files.length === 0} onClick={() => onUpload(files)}>
+          <Button variant="primary" disabled={files.length === 0} onClick={() => onUpload(files, { course: course.trim() })}>
             Upload
           </Button>
         </div>

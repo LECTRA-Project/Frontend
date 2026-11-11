@@ -467,24 +467,35 @@ describe("profile form validation", () => {
 describe("session", () => {
   it("starts with course materials collapsed and toggles the list open", async () => {
     backendWithUser();
+    api.onGet("/student_profile/lectures").reply(200, ok({
+      lectures: [{
+        id: "lecture-1", user_id: TEST_USER.id, title: "Lecture 01 — Notes", original_filename: "notes.pdf",
+        file_type: "application/pdf", file_size: 42, s3_url: "local://lectures/x/notes.pdf",
+        uploaded_at: "2026-11-01T10:00:00Z", updated_at: "2026-11-01T10:00:00Z", description: null, course: null,
+        processing_status: "completed", processing_error: null, processing_attempts: 1, processed_at: "2026-11-01T10:00:05Z",
+        content_version: 1, chunk_count: 3, source_count: 12, source_type: "page",
+      }],
+      page: 1, page_size: 100, total: 1, total_pages: 1,
+    }));
     saveToken(token);
     const user = userEvent.setup();
     const { container } = renderApp("/workspace");
 
     await screen.findByRole("button", { name: "Open profile menu" });
+    await screen.findByText("Lecture 01 — Notes", { selector: ".material-row__name" });
     const sidebar = screen.getByRole("region", { name: "Course materials" });
     const toggle = screen.getByRole("button", { name: "Show course materials" });
 
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(sidebar).toHaveClass("materials--collapsed");
-    expect(screen.queryByText("Lecture 01 — Notes")).not.toBeVisible();
+    expect(screen.queryByText("Lecture 01 — Notes", { selector: ".material-row__name" })).not.toBeVisible();
     expect(container.querySelector(".center-panel")).toBeInTheDocument();
 
     await user.click(toggle);
 
     expect(screen.getByRole("button", { name: "Hide course materials" })).toHaveAttribute("aria-expanded", "true");
     expect(sidebar).not.toHaveClass("materials--collapsed");
-    expect(screen.getByText("Lecture 01 — Notes")).toBeVisible();
+    expect(screen.getByText("Lecture 01 — Notes", { selector: ".material-row__name" })).toBeVisible();
     expect(container.querySelector(".workspace__body")).not.toHaveClass("workspace__body--materials-collapsed");
   });
 

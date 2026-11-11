@@ -15,15 +15,17 @@ import "./files.css";
     placeholder lines is shown instead. No document text is invented.
 
   Props:
-    material    the PDF to show: { name, meta, pages?, url? }
+    material    the PDF to show: { name, meta, pages?, url?, loading?, loadError? }
+                (lecture PDFs are fetched by the workspace; `loading` is true meanwhile)
+    initialPage page to open first (e.g. the page an assistant answer cited)
     onCollapse  called by the close button; the workspace then shows the
                 notebook or exam view again
 */
-export default function PdfViewerPanel({ material, onCollapse }) {
+export default function PdfViewerPanel({ material, initialPage = 1, onCollapse }) {
   const hasRealFile = Boolean(material.url);
   const pageCount = material.pages ?? null; // unknown for real files
   const panelRef = useRef(null);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Math.max(1, Math.min(initialPage, material.pages ?? initialPage)));
   const [panelWidth, setPanelWidth] = useState(0);
   const [manualZoomIndex, setManualZoomIndex] = useState(null);
   const zoomIndex = manualZoomIndex ?? (panelWidth > 0 ? getFitZoomIndex(panelWidth) : 2);
@@ -112,7 +114,11 @@ export default function PdfViewerPanel({ material, onCollapse }) {
         </div>
       </div>
 
-      {hasRealFile ? (
+      {material.loading || material.loadError ? (
+        <div className="pdf__stage" role={material.loadError ? "alert" : "status"}>
+          <p className="notice">{material.loadError || "Loading PDF…"}</p>
+        </div>
+      ) : hasRealFile ? (
         <div className="pdf__frame-wrap">
           {/* `key` reloads the frame when the page or zoom changes so the browser jumps there. */}
           <iframe

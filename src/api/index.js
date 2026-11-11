@@ -12,3 +12,4 @@ export {
 export { get, post, put, patch, del } from "./http.js";
 export { useApi } from "./useApi.js";
 export * as authApi from "./services/auth.js";
+export * as lecturesApi from "./services/lectures.js";
