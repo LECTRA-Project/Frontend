@@ -93,6 +93,7 @@ const PATHS = {
   chevronRight: <path d="m8 5 5 5-5 5" />,
   chevronDown: <path d="m5 8 5 5 5-5" />,
   arrowLeft: <path d="M16 10H4M9 5l-5 5 5 5" />,
+  arrowRight: <path d="M4 10h12M11 5l5 5-5 5" />,
   arrowUp: <path d="M10 16V4M5 9l5-5 5 5" />,
   arrowDown: <path d="M10 4v12M5 11l5 5 5-5" />,
   trash: (

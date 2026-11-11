@@ -20,7 +20,7 @@ import "../../notebook/notebook.css";
   (services/python/), and the notebook is saved in this browser only.
 */
 export default function NotebookPage() {
-  const { notebookState, kernel, kernelState, assistantDraft } = useOutletContext();
+  const { notebookState, kernel, kernelState, assistantDraft, notebookHandle = null } = useOutletContext();
   const { notebook, runState, saveInfo, notice, lastRunFailed, pendingOpen, actions } = notebookState;
   const { cells } = notebook;
 
@@ -236,6 +236,7 @@ export default function NotebookPage() {
         onNew={() => (cells.length > 0 ? setConfirm({ kind: "new" }) : actions.newNotebook())}
         onImport={() => fileInputRef.current?.click()}
         onDownload={download}
+        handle={notebookHandle}
       />
       <input
         ref={fileInputRef}

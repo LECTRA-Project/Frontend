@@ -26,10 +26,14 @@ export default function ChatComposer({
   dropOver = false,
   onRemoveCell,
   disabled = false,
+  materials = [],
+  onRemoveMaterial = () => {},
+  dropHint = "Drop to add this cell to your question",
+  dropInvalid = false,
 }) {
   const [text, setText] = useState("");
   const canSend = text.trim().length > 0 && !disabled;
-  const hasContext = cellContext.length > 0 || attachments.length > 0;
+  const hasContext = cellContext.length > 0 || attachments.length > 0 || materials.length > 0;
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -41,12 +45,38 @@ export default function ChatComposer({
   const dropClass = dropOver ? "composer--drop-over" : cellDragActive ? "composer--drop-ready" : "";
 
   return (
-    <form className={`composer ${dropClass}`} onSubmit={handleSubmit}>
+    <form className={`composer ${dropClass} ${dropInvalid ? "composer--drop-invalid" : ""}`} onSubmit={handleSubmit}>
       {(cellDragActive || dropOver) && (
         <p className="composer__drop-hint" aria-hidden="true">
-          <Icon name="plus" size={14} />
-          Drop to add this cell to your question
+          <Icon name={dropInvalid ? "close" : "plus"} size={14} />
+          {dropHint}
         </p>
+      )}
+
+      {materials.length > 0 && (
+        <div className="composer__section">
+          <p className="composer__section-title" id="composer-materials-title">
+            Course materials
+          </p>
+          <ul className="composer__materials" aria-labelledby="composer-materials-title">
+            {materials.map((item) => (
+              <li key={item.id} className="composer__material">
+                <Icon name="fileText" size={14} />
+                <span className="composer__material-name">{item.fileName}</span>
+                <span className="composer__material-type">{item.typeLabel}</span>
+                <button
+                  type="button"
+                  className="composer__remove"
+                  aria-label={`Remove ${item.fileName} from your message`}
+                  onClick={() => onRemoveMaterial(item.id)}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="composer__material-note">The assistant will answer from these materials only.</p>
+        </div>
       )}
 
       {cellContext.length > 0 && (

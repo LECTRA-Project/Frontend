@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
@@ -22,7 +22,64 @@ import { STATUS_LABEL } from "../../lectures/materialTypes.js";
     onDismissUpload   removes a failed upload from the list
     onReload          retries loading after an error
     onUploadClick     called when "Upload materials" is clicked
+    handle            optional grip for moving the panel in the workspace (SectionHandle)
+    materialDrag      optional: dragging materials into the Study Assistant composer
+                        start(material, point), move(point), end(point), cancel()
+                        add(material)   keyboard / click on a row's grip
+                      Mouse: drag the row itself or its grip. Touch / pen: drag the grip (so
+                      the list still scrolls). A drag never opens or selects the material.
 */
+
+const DRAG_THRESHOLD = 6; // px before a press becomes a drag
+
+/* Pointer handlers that turn a press-and-move into a material drag. */
+function useMaterialPointerDrag(materialDrag) {
+  const press = useRef(null); // { pointerId, x, y, dragging, material }
+  const suppressClick = useRef(false);
+
+  return (material, { mouseOnly }) => ({
+    onPointerDown(event) {
+      if (!materialDrag) return;
+      if (mouseOnly && event.pointerType !== "mouse") return; // touch on a row scrolls the list
+      if (event.button !== 0) return;
+      press.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, dragging: false, material };
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    },
+    onPointerMove(event) {
+      const current = press.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      const point = { x: event.clientX, y: event.clientY };
+      if (!current.dragging) {
+        if (Math.hypot(point.x - current.x, point.y - current.y) < DRAG_THRESHOLD) return;
+        current.dragging = true;
+        materialDrag.start(current.material, point);
+      }
+      event.preventDefault(); // no text selection or scrolling while dragging
+      materialDrag.move(point);
+    },
+    onPointerUp(event) {
+      const current = press.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      press.current = null;
+      if (!current.dragging) return;
+      suppressClick.current = true;
+      materialDrag.end({ x: event.clientX, y: event.clientY });
+    },
+    onPointerCancel(event) {
+      const current = press.current;
+      if (!current || current.pointerId !== event.pointerId) return;
+      press.current = null;
+      if (current.dragging) materialDrag.cancel();
+    },
+    // The click a browser sends after a drag must not open the material (or add it twice).
+    onClickCapture(event) {
+      if (!suppressClick.current) return;
+      suppressClick.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+  });
+}
 export default function CourseMaterialsPanel({
   materials,
   uploads = [],
@@ -38,8 +95,11 @@ export default function CourseMaterialsPanel({
   onDismissUpload,
   onReload,
   onUploadClick,
+  handle = null,
+  materialDrag = null,
 }) {
   const [filter, setFilter] = useState("");
+  const dragHandlers = useMaterialPointerDrag(materialDrag);
 
   const query = filter.trim().toLowerCase();
   const visibleMaterials = materials.filter(
@@ -52,6 +112,7 @@ export default function CourseMaterialsPanel({
       aria-label="Course materials"
     >
       <div className="materials__top">
+        {handle}
         {!collapsed && <h2 className="panel__title">Course materials</h2>}
         <IconButton
           icon={collapsed ? "menu" : "chevronLeft"}
@@ -140,6 +201,7 @@ export default function CourseMaterialsPanel({
                       className={`material-row ${item.id === selectedId ? "material-row--selected" : ""}`}
                       aria-current={item.id === selectedId ? "true" : undefined}
                       onClick={() => onSelect(item)}
+                      {...(materialDrag ? dragHandlers(item, { mouseOnly: true }) : {})}
                     >
                       <Icon name={group.icon} />
                       <span className="material-row__text">
@@ -158,6 +220,18 @@ export default function CourseMaterialsPanel({
                       </span>
                     </button>
                     <span className="material-item__actions">
+                      {materialDrag && (
+                        <button
+                          type="button"
+                          className="icon-btn material-drag"
+                          aria-label={`Add ${item.name} to your Study Assistant message`}
+                          title="Drag into the Study Assistant, or press to add it to your message"
+                          {...dragHandlers(item, { mouseOnly: false })}
+                          onClick={() => materialDrag.add(item)}
+                        >
+                          <Icon name="grip" size={16} />
+                        </button>
+                      )}
                       {item.status === "failed" && onRetry && (
                         <IconButton icon="refresh" label={`Retry processing ${item.name}`} onClick={() => onRetry(item)} />
                       )}

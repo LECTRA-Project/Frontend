@@ -8,16 +8,17 @@ const KEY_STEP = 0.05;
 const clamp = (value) => Math.round(Math.min(MAX_SHARE, Math.max(MIN_SHARE, value)) * 100) / 100;
 
 /*
-  The horizontal divider between the PDF (above) and the notebook (below) in the
-  centre panel's split view. Drag it, or focus it and use the arrow keys / Home / End.
+  The horizontal divider between the PDF and the notebook when they are stacked next to
+  each other (either may be on top). Drag it, or focus it and use the arrow keys / Home / End.
 
   Props:
-    share          fraction of the height given to the PDF (MIN_SHARE…MAX_SHARE)
+    share          fraction of the pair's height given to the upper section (MIN_SHARE…MAX_SHARE)
+    upperLabel     name of the upper section, for screen readers (default "PDF")
     onChange       called with the new share
     containerRef   the split container, used to turn the pointer position into a share
     onResizing     called with true while dragging (so the PDF frame doesn't swallow the pointer)
 */
-export default function SplitDivider({ share, onChange, containerRef, onResizing }) {
+export default function SplitDivider({ share, onChange, containerRef, onResizing, upperLabel = "PDF", style }) {
   const dragging = useRef(false);
 
   function shareAt(clientY) {
@@ -65,9 +66,10 @@ export default function SplitDivider({ share, onChange, containerRef, onResizing
       aria-valuemin={Math.round(MIN_SHARE * 100)}
       aria-valuemax={Math.round(MAX_SHARE * 100)}
       aria-valuenow={Math.round(share * 100)}
-      aria-valuetext={`PDF ${Math.round(share * 100)}% of the height`}
+      aria-valuetext={`${upperLabel} ${Math.round(share * 100)}% of the height`}
       title="Drag to resize the PDF and notebook"
       tabIndex={0}
+      style={style}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={stopDragging}

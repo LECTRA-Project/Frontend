@@ -20,8 +20,9 @@ import "./files.css";
     initialPage page to open first (e.g. the page an assistant answer cited)
     onCollapse  called by the close button; the workspace then shows the
                 notebook or exam view again
+    handle      optional grip for moving the panel in the workspace (SectionHandle)
 */
-export default function PdfViewerPanel({ material, initialPage = 1, onCollapse }) {
+export default function PdfViewerPanel({ material, initialPage = 1, onCollapse, handle = null }) {
   const pageCount = material.pages ?? null;
   const panelRef = useRef(null);
   const [page, setPage] = useState(() => Math.max(1, Math.min(initialPage, pageCount ?? initialPage)));
@@ -69,6 +70,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, onCollapse }
     <section ref={panelRef} className="panel center-panel pdf" aria-label={`PDF viewer: ${material.name}`}>
       <div className="pdf__toolbar">
         <div className="pdf__file">
+          {handle}
           <Icon name="fileText" className="pdf__title-icon" />
           <h2 className="pdf__title">{material.name}</h2>
           <span className="pdf__title-meta">{meta}</span>

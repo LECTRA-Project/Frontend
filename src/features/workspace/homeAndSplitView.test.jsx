@@ -66,6 +66,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const slot = (section) => document.querySelector(`[data-section="${section}"]`);
+const gridRow = (section) => slot(section).style.getPropertyValue("--slot-row");
+const gridColumn = (section) => slot(section).style.getPropertyValue("--slot-column");
+
 async function showMaterialsPanel(user) {
   const panel = screen.getByRole("region", { name: "Course materials" });
   const show = within(panel).queryByRole("button", { name: "Show course materials" });
@@ -109,7 +113,7 @@ describe("Home / Welcome screen", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
     expect(await screen.findByRole("region", { name: "PDF viewer: Lecture 1" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Notebook" })).toBeVisible();
-    expect(document.querySelector(".center-area")).toHaveClass("center-area--split");
+    expect(slot("pdf")).toBeVisible();
   });
 
   it("opens the course-materials panel from “Browse course materials”", async () => {
@@ -134,14 +138,14 @@ describe("PDF + notebook split view", () => {
 
     await openMaterialFromPanel(user, "Lecture 1");
 
-    const area = document.querySelector(".center-area");
-    expect(area).toHaveClass("center-area--split");
+    expect(slot("pdf")).toBeVisible();
     const pdfPane = screen.getByRole("region", { name: "PDF viewer: Lecture 1" });
     await waitFor(() => expect(pdfPane.querySelector("iframe")).not.toBeNull()); // file fetched
     const notebookPane = screen.getByRole("region", { name: "Notebook" });
     expect(notebookPane).toBeVisible();
     // PDF on top, divider, notebook below.
-    expect(pdfPane.compareDocumentPosition(notebookPane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(gridColumn("pdf")).toBe(gridColumn("notebook"));
+    expect([gridRow("pdf"), gridRow("notebook")]).toEqual(["1 / 2", "2 / 3"]);
     expect(screen.getByRole("separator", { name: "Resize PDF and notebook" })).toBeInTheDocument();
 
     // The same notebook element is still there: not remounted, cell source unchanged.
@@ -164,7 +168,7 @@ describe("PDF + notebook split view", () => {
     // Closing returns to the notebook alone, still the same notebook.
     await user.click(within(secondPane).getByRole("button", { name: "Close PDF viewer" }));
     expect(screen.queryByRole("region", { name: /PDF viewer/ })).not.toBeInTheDocument();
-    expect(area).not.toHaveClass("center-area--split");
+    expect(slot("pdf")).not.toBeVisible();
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Python cell 1" })).toBe(cell);
   });
@@ -181,7 +185,7 @@ describe("PDF + notebook split view", () => {
     divider.focus();
     await user.keyboard("{ArrowDown}{ArrowDown}");
     expect(divider).toHaveAttribute("aria-valuenow", "60");
-    expect(document.querySelector(".center-area").style.getPropertyValue("--split-pdf")).toBe("0.6fr");
+    expect(document.querySelector(".workspace__body").style.getPropertyValue("--ws-rows")).toBe("minmax(0, 0.6fr) minmax(0, 0.4fr)");
     fireEvent.keyDown(divider, { key: "Home" });
     expect(divider).toHaveAttribute("aria-valuenow", "20");
     fireEvent.keyDown(divider, { key: "End" });
@@ -196,7 +200,8 @@ describe("PDF + notebook split view", () => {
     await openMaterialFromPanel(user, "Lecture 1");
 
     expect(screen.getByRole("region", { name: "PDF viewer: Lecture 1" })).toBeInTheDocument();
-    expect(document.querySelector(".center-area")).not.toHaveClass("center-area--split");
+    expect(slot("pdf")).not.toBeVisible();
+    expect(within(slot("notebook")).getByRole("region", { name: "PDF viewer: Lecture 1" })).toBeInTheDocument();
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
   });
 });

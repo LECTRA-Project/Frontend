@@ -1,10 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import WorkspaceHeader from "./components/WorkspaceHeader.jsx";
 import CourseMaterialsPanel from "./components/CourseMaterialsPanel.jsx";
 import StudyAssistantPanel from "./components/StudyAssistantPanel.jsx";
 import SplitDivider from "./components/SplitDivider.jsx";
+import SectionHandle from "./components/SectionHandle.jsx";
+import {
+  computeGrid,
+  DEFAULT_LAYOUT,
+  loadLayout,
+  minimumWidth,
+  moveSection,
+  placeSection,
+  saveLayout,
+  sameLayout,
+  SECTION_LABELS,
+} from "./sectionLayout.js";
 import UploadDialog from "../files/UploadDialog.jsx";
 import PdfViewerPanel from "../files/PdfViewerPanel.jsx";
 import MaterialViewerPanel from "../files/MaterialViewerPanel.jsx";
@@ -18,7 +30,8 @@ import { useAuth } from "../auth/authContext.js";
 import { useNotebook } from "../notebook/useNotebook.js";
 import { usePythonKernel } from "../notebook/usePythonKernel.js";
 import { fetchLectureFile } from "../../api/services/lectures.js";
-import { cellContextLabel, isSameCellContext } from "../../services/notebook/cellContext.js";
+import { cellContextLabel, isOverCellDropZone, isSameCellContext } from "../../services/notebook/cellContext.js";
+import { fileNameOf, materialContextProblem, toMaterialContext } from "./materialContext.js";
 import "./workspace.css";
 
 // Opened in the centre with their original file (fetched from the backend).
@@ -41,6 +54,12 @@ async function downloadFromStorage(url) {
   switching or closing PDFs never resets its cells, outputs or kernel. Opening a PDF
   from Home goes to the notebook first.
 
+  The four sections (Course materials, PDF viewer, Notebook, Study assistant) can be
+  rearranged by dragging the grip in their header or with its Move menu (see
+  sectionLayout.js and SectionHandle). Each section is rendered once, in a fixed place in
+  the DOM; only its CSS grid position changes, so moving it never resets its state. When
+  the arrangement can't fit the window, the sections stack in one column, in layout order.
+
   Lecture materials come from the backend (useLectureLibrary). What a click opens:
     PDF       the PDF viewer (at the cited page when opened from an assistant source)
     notes     the rendered Markdown (MaterialViewerPanel)
@@ -53,8 +72,12 @@ async function downloadFromStorage(url) {
   file/content/assistant endpoints and only supports renaming. Files are then opened
   from the lecture's public S3 URL, and the AI parts say they are not available.
 
+  Course materials can be dragged from their panel onto the Study assistant (or added with
+  the keyboard from a row's grip); they are sent with the next message as the lectures to
+  answer from (see materialContext.js). Dropping never opens, moves or changes a material.
+
   This component owns the state shared between the panels: the open lecture, its fetched
-  file, the dialogs, the notebook cells added to the assistant message, and the notebook
+  file, the dialogs, the notebook cells and materials added to the assistant message, and the notebook
   with its kernel (so they survive switching to the Exam view and back).
 */
 export default function WorkspaceLayout() {
@@ -85,7 +108,14 @@ export default function WorkspaceLayout() {
   const [draftAnnouncement, setDraftAnnouncement] = useState({ text: "", seq: 0 });
   const [pdfShare, setPdfShare] = useState(0.5); // split view: fraction of the height for the PDF
   const [resizingSplit, setResizingSplit] = useState(false);
-  const centerRef = useRef(null);
+  const pairRef = useRef(null); // spans the PDF + notebook pair, for the divider's drag maths
+  const bodyRef = useRef(null);
+  const [sectionLayout, setSectionLayout] = useState(() => loadLayout(userKey));
+  const [stacked, setStacked] = useState(false); // all sections in one column (narrow window)
+  // A section being dragged: { section, x, y, target: { id, edge } | null }
+  const [sectionDrag, setSectionDrag] = useState(null);
+  const sectionDragRef = useRef(null);
+  const [layoutAnnouncement, setLayoutAnnouncement] = useState({ text: "", seq: 0 });
 
   // Screen-reader feedback for the assistant draft; `seq` makes a repeated message announce again.
   const announce = useCallback((text) => setDraftAnnouncement((previous) => ({ text, seq: previous.seq + 1 })), []);
@@ -113,6 +143,73 @@ export default function WorkspaceLayout() {
     },
     [cellContext, announce]
   );
+
+  /* ---------- Course materials as assistant context ---------- */
+  const [materialContext, setMaterialContext] = useState([]); // materials added to the next message
+  // A material being dragged: { material, x, y, over, problem }
+  const [materialDrag, setMaterialDrag] = useState(null);
+  const materialDragRef = useRef(null);
+
+  /* Adds a material to the draft; refuses (with the reason) what the assistant can't read. */
+  function addMaterialToDraft(material) {
+    const problem = materialContextProblem(material);
+    if (problem) {
+      setNotice(problem);
+      announce(problem);
+      return false;
+    }
+    const item = toMaterialContext(material);
+    if (materialContext.some((existing) => existing.lectureId === item.lectureId)) {
+      announce(`${item.fileName} is already in your message to the study assistant.`);
+      return false;
+    }
+    setMaterialContext((list) => [...list, item]);
+    announce(`${item.fileName} added to your message to the study assistant.`);
+    return true;
+  }
+
+  function removeMaterialFromDraft(id) {
+    const item = materialContext.find((existing) => existing.id === id);
+    if (!item) return;
+    setMaterialContext((list) => list.filter((existing) => existing.id !== id));
+    announce(`${item.fileName} removed from your message.`);
+  }
+
+  function finishMaterialDrag(point) {
+    const drag = materialDragRef.current;
+    if (!drag) return;
+    materialDragRef.current = null;
+    setMaterialDrag(null);
+    if (point && isOverCellDropZone(point.x, point.y)) addMaterialToDraft(drag.material);
+    else announce(`${fileNameOf(drag.material)} was not added to your message.`);
+  }
+
+  const materialDragApi = {
+    start(material, point) {
+      materialDragRef.current = { material };
+      setMaterialDrag({ material, ...point, over: isOverCellDropZone(point.x, point.y), problem: materialContextProblem(material) });
+    },
+    move(point) {
+      if (!materialDragRef.current) return;
+      const over = isOverCellDropZone(point.x, point.y);
+      setMaterialDrag((drag) => drag && { ...drag, ...point, over });
+    },
+    end: (point) => finishMaterialDrag(point),
+    cancel: () => finishMaterialDrag(null),
+    add(material) {
+      if (addMaterialToDraft(material)) document.getElementById("composer-input")?.focus();
+    },
+  };
+
+  // Escape cancels a material drag.
+  useEffect(() => {
+    if (!materialDrag) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") finishMaterialDrag(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   const assistantDraft = useMemo(
     () => ({
@@ -246,6 +343,174 @@ export default function WorkspaceLayout() {
   // A PDF opened over the notebook is shown above it instead of replacing it.
   const splitView = openMaterial !== null && openMaterial.type === "pdf" && !showsSource && location.pathname === "/workspace";
 
+  /* ---------- Section arrangement ---------- */
+  const visibleSections = new Set(["materials", "notebook", "assistant", ...(splitView ? ["pdf"] : [])]);
+  const grid = computeGrid(sectionLayout, { visible: visibleSections, materialsCollapsed, pdfShare });
+  const gridKey = JSON.stringify([grid.columns, grid.maxStack]);
+  const gridRef = useRef(grid);
+  gridRef.current = grid;
+
+  // Stack the sections when the arrangement needs more room than the window has.
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return undefined;
+    const measure = () => {
+      const { columns, maxStack } = gridRef.current;
+      if (window.matchMedia?.("(max-width: 880px)").matches) return setStacked(true);
+      const width = body.clientWidth;
+      if (!width) return setStacked(false); // not laid out (e.g. tests): keep the grid
+      const style = getComputedStyle(body);
+      const px = (name, fallback) => parseFloat(style.getPropertyValue(name)) || fallback;
+      const needed = minimumWidth(columns, {
+        materials: materialsCollapsed ? px("--ws-collapsed-w", 48) : px("--ws-materials-w", 280),
+        assistant: px("--ws-assistant-w", 340),
+        flexMin: 320,
+        gap: 16,
+        padding: 16,
+      });
+      // Height from the viewport, not the body: a stacked body grows with its content.
+      const available = window.innerHeight - body.getBoundingClientRect().top - 32 - 16 * (maxStack - 1);
+      setStacked(width < needed || available / maxStack < 160);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(body);
+    return () => {
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, [gridKey, materialsCollapsed]);
+
+  const announceLayout = useCallback(
+    (text) => setLayoutAnnouncement((previous) => ({ text, seq: previous.seq + 1 })),
+    []
+  );
+
+  function applyLayout(next, message) {
+    setSectionLayout(next);
+    saveLayout(userKey, next);
+    announceLayout(message);
+  }
+
+  const EDGE_TEXT = { left: "to the left of", right: "to the right of", top: "above", bottom: "below" };
+
+  function dropTargetAt({ x, y }) {
+    const zone = document.elementFromPoint?.(x, y)?.closest?.("[data-drop-edge]");
+    return zone ? { id: zone.dataset.dropTarget, edge: zone.dataset.dropEdge } : null;
+  }
+
+  function finishSectionDrag(target) {
+    const drag = sectionDragRef.current;
+    if (!drag) return;
+    sectionDragRef.current = null;
+    setSectionDrag(null);
+    const label = SECTION_LABELS[drag.section];
+    const next = target ? placeSection(sectionLayout, drag.section, target.id, target.edge) : null;
+    if (next) applyLayout(next, `${label} moved ${EDGE_TEXT[target.edge]} ${SECTION_LABELS[target.id]}.`);
+    else announceLayout(`${label} was not moved.`);
+  }
+
+  const sections = {
+    menuItems(section) {
+      const move = (direction, label, icon) => {
+        const next = moveSection(sectionLayout, section, direction, visibleSections);
+        return {
+          label,
+          icon,
+          disabled: !next,
+          onSelect: () => next && applyLayout(next, `${SECTION_LABELS[section]} moved ${direction}.`),
+        };
+      };
+      return [
+        move("left", "Move left", "arrowLeft"),
+        move("right", "Move right", "arrowRight"),
+        move("up", "Move up", "arrowUp"),
+        move("down", "Move down", "arrowDown"),
+        "separator",
+        {
+          label: "Reset layout",
+          icon: "restart",
+          disabled: sameLayout(sectionLayout, DEFAULT_LAYOUT),
+          onSelect: () => applyLayout(DEFAULT_LAYOUT, "Workspace layout reset."),
+        },
+      ];
+    },
+    startDrag(section, point) {
+      sectionDragRef.current = { section };
+      setSectionDrag({ section, ...point, target: null });
+    },
+    moveDrag(point) {
+      if (!sectionDragRef.current) return;
+      const target = dropTargetAt(point);
+      setSectionDrag((drag) => drag && { ...drag, ...point, target });
+    },
+    endDrag(point) {
+      finishSectionDrag(dropTargetAt(point));
+    },
+    cancelDrag() {
+      finishSectionDrag(null);
+    },
+  };
+
+  // Escape cancels a section drag; the section stays where it was.
+  useEffect(() => {
+    if (!sectionDrag) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") finishSectionDrag(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  const handleFor = (section) => <SectionHandle section={section} sections={sections} />;
+
+  function slotProps(section, extraClass = "") {
+    const place = grid.place[section];
+    const classes = [
+      "ws-slot",
+      place?.compact || (section === "materials" && materialsCollapsed) ? "ws-slot--compact" : "",
+      sectionDrag?.section === section ? "ws-slot--dragging" : "",
+      extraClass,
+    ];
+    return {
+      className: classes.filter(Boolean).join(" "),
+      "data-section": section,
+      hidden: !visibleSections.has(section),
+      style: place
+        ? { "--slot-column": place.column, "--slot-row": `${place.rowStart} / ${place.rowEnd}`, "--slot-order": grid.order[section] }
+        : undefined,
+    };
+  }
+
+  /* Drop zones over a section while another one is dragged; only edges that make sense. */
+  function dropOverlay(section) {
+    if (!sectionDrag || sectionDrag.section === section || !visibleSections.has(section)) return null;
+    const edges = (stacked ? ["top", "bottom"] : ["left", "right", "top", "bottom"]).filter((edge) =>
+      placeSection(sectionLayout, sectionDrag.section, section, edge)
+    );
+    const active = sectionDrag.target?.id === section ? sectionDrag.target.edge : null;
+    return (
+      <div className="section-drop" aria-hidden="true">
+        {edges.map((edge) => (
+          <div
+            key={edge}
+            className={`section-drop__zone section-drop__zone--${edge} ${active === edge ? "section-drop__zone--active" : ""}`}
+            data-drop-target={section}
+            data-drop-edge={edge}
+          />
+        ))}
+        {active && (
+          <span className="section-drop__label">
+            Place {EDGE_TEXT[active]} {SECTION_LABELS[section]}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  const divider = !stacked ? grid.divider : null;
+
   const home = {
     materials,
     loading: library.loading,
@@ -267,6 +532,7 @@ export default function WorkspaceLayout() {
         }
         initialPage={pdfPage}
         onCollapse={() => setOpen(null)}
+        handle={splitView ? handleFor("pdf") : null}
       />
     );
   } else if (openMaterial && openMaterial.type === "notes" && !showsSource && fileState?.file) {
@@ -290,7 +556,7 @@ export default function WorkspaceLayout() {
   }
 
   return (
-    <div className="workspace">
+    <div className={`workspace ${stacked ? "workspace--stacked" : ""}`}>
       <WorkspaceHeader />
 
       {notice && (
@@ -301,61 +567,126 @@ export default function WorkspaceLayout() {
         </TransientStatus>
       )}
 
-      <div className={`workspace__body ${materialsCollapsed ? "workspace__body--materials-collapsed" : ""}`}>
-        <CourseMaterialsPanel
-          materials={materials}
-          uploads={library.uploads}
-          loading={library.loading}
-          error={library.error}
-          selectedId={selectedId}
-          collapsed={materialsCollapsed}
-          onToggleCollapsed={() => setMaterialsCollapsed((collapsed) => !collapsed)}
-          onSelect={handleSelectMaterial}
-          onEdit={(item) => setEditing(item.lecture)}
-          onDelete={(item) => setDeleting(item.lecture)}
-          onRetry={handleRetry}
-          onDismissUpload={library.dismissUpload}
-          onReload={() => library.refresh()}
-          onUploadClick={() => setUploadOpen(true)}
-        />
-
-        {/*
-          Centre panel: NotebookPage, ExamPage or HomePage, depending on the URL (see router.jsx).
-          The Outlet always stays at the same place in the tree so it is never remounted:
-          - split view: the PDF and a divider are shown above the notebook;
-          - other lectures: it is only hidden, so closing the lecture brings back the
-            notebook or exam exactly as it was (e.g. the chosen exam answer).
-          `center-area` adds no box of its own except in split view.
-        */}
-        <div
-          ref={centerRef}
-          className={`center-area ${splitView ? "center-area--split" : ""} ${resizingSplit ? "center-area--resizing" : ""}`}
-          style={splitView ? { "--split-pdf": `${pdfShare}fr`, "--split-notebook": `${1 - pdfShare}fr` } : undefined}
-        >
-          {splitView && centre}
-          {splitView && (
-            <SplitDivider share={pdfShare} onChange={setPdfShare} containerRef={centerRef} onResizing={setResizingSplit} />
-          )}
-          <div className="center-slot" hidden={openMaterial !== null && !splitView}>
-            <Outlet context={{ notebookState, kernel, kernelState, assistantDraft, home }} />
-          </div>
-          {!splitView && centre}
+      <div
+        ref={bodyRef}
+        className={[
+          "workspace__body",
+          materialsCollapsed ? "workspace__body--materials-collapsed" : "",
+          stacked ? "workspace__body--stacked" : "",
+          sectionDrag ? "workspace__body--section-dragging" : "",
+          resizingSplit ? "workspace__body--resizing" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={{ "--ws-columns": grid.columns.map((column) => column.track).join(" "), "--ws-rows": grid.rows.join(" ") }}
+      >
+        <div {...slotProps("materials")}>
+          <CourseMaterialsPanel
+            materials={materials}
+            uploads={library.uploads}
+            loading={library.loading}
+            error={library.error}
+            selectedId={selectedId}
+            collapsed={materialsCollapsed}
+            onToggleCollapsed={() => setMaterialsCollapsed((collapsed) => !collapsed)}
+            onSelect={handleSelectMaterial}
+            onEdit={(item) => setEditing(item.lecture)}
+            onDelete={(item) => setDeleting(item.lecture)}
+            onRetry={handleRetry}
+            onDismissUpload={library.dismissUpload}
+            onReload={() => library.refresh()}
+            onUploadClick={() => setUploadOpen(true)}
+            handle={handleFor("materials")}
+            materialDrag={materialDragApi}
+          />
+          {dropOverlay("materials")}
         </div>
 
-        <StudyAssistantPanel
-          materials={materials}
-          available={library.features ? library.features.ai : null}
-          onAttachClick={() => setUploadOpen(true)}
-          onOpenReference={handleOpenReference}
-          cellContext={cellContext}
-          cellDragActive={cellDragActive}
-          cellDragOver={cellDragOver}
-          announcement={draftAnnouncement}
-          onAddCell={addCellToDraft}
-          onRemoveCell={removeCellFromDraft}
-          onSent={({ cellIds }) => setCellContext((list) => list.filter((item) => !cellIds.includes(item.id)))}
-        />
+        {/* PDF viewer section: only shown while a PDF is open over the notebook (split view). */}
+        <div {...slotProps("pdf")}>
+          {splitView && centre}
+          {dropOverlay("pdf")}
+        </div>
+
+        {/*
+          Notebook section: NotebookPage, ExamPage or HomePage, depending on the URL (see
+          router.jsx). The Outlet always stays at the same place in the tree so it is never
+          remounted. Other open lectures (and PDFs over the Exam) are shown here in its place;
+          the Outlet is then only hidden, so closing the lecture brings back the notebook or
+          exam exactly as it was (e.g. the chosen exam answer).
+        */}
+        <div {...slotProps("notebook")}>
+          <div className="center-slot" hidden={openMaterial !== null && !splitView}>
+            <Outlet context={{ notebookState, kernel, kernelState, assistantDraft, home, notebookHandle: handleFor("notebook") }} />
+          </div>
+          {!splitView && centre}
+          {dropOverlay("notebook")}
+        </div>
+
+        <div {...slotProps("assistant")}>
+          <StudyAssistantPanel
+            materials={materials}
+            available={library.features ? library.features.ai : null}
+            onAttachClick={() => setUploadOpen(true)}
+            onOpenReference={handleOpenReference}
+            cellContext={cellContext}
+            cellDragActive={cellDragActive}
+            cellDragOver={cellDragOver}
+            announcement={draftAnnouncement}
+            onAddCell={addCellToDraft}
+            onRemoveCell={removeCellFromDraft}
+            materialContext={materialContext}
+            materialDrag={
+              materialDrag && {
+                fileName: fileNameOf(materialDrag.material),
+                over: materialDrag.over,
+                problem: materialDrag.problem,
+              }
+            }
+            onRemoveMaterial={removeMaterialFromDraft}
+            onSent={({ cellIds, materialIds = [] }) => {
+              setCellContext((list) => list.filter((item) => !cellIds.includes(item.id)));
+              setMaterialContext((list) => list.filter((item) => !materialIds.includes(item.id)));
+            }}
+            handle={handleFor("assistant")}
+          />
+          {dropOverlay("assistant")}
+        </div>
+
+        {/* PDF / notebook divider, when the two are stacked next to each other. */}
+        {divider && (
+          <div
+            ref={pairRef}
+            className="ws-pair-measure"
+            aria-hidden="true"
+            style={{ "--slot-column": divider.column, "--slot-row": `${divider.pairStart} / ${divider.pairEnd}` }}
+          />
+        )}
+        {divider && (
+          <SplitDivider
+            share={divider.upper === "pdf" ? pdfShare : 1 - pdfShare}
+            upperLabel={divider.upper === "pdf" ? "PDF" : "Notebook"}
+            onChange={(share) => setPdfShare(divider.upper === "pdf" ? share : 1 - share)}
+            containerRef={pairRef}
+            onResizing={setResizingSplit}
+            style={{ "--slot-column": divider.column, "--slot-row": `${divider.rowStart} / ${divider.rowEnd}` }}
+          />
+        )}
       </div>
+
+      <p className="visually-hidden" role="status">
+        <span key={layoutAnnouncement.seq}>{layoutAnnouncement.text}</span>
+      </p>
+      {materialDrag && (
+        <div className="section-ghost" style={{ left: materialDrag.x, top: materialDrag.y }} aria-hidden="true">
+          {fileNameOf(materialDrag.material)}
+        </div>
+      )}
+      {sectionDrag && (
+        <div className="section-ghost" style={{ left: sectionDrag.x, top: sectionDrag.y }} aria-hidden="true">
+          Moving {SECTION_LABELS[sectionDrag.section]}
+        </div>
+      )}
 
       {uploadOpen && <UploadDialog basic={basic} onCancel={() => setUploadOpen(false)} onUpload={handleUpload} />}
       {editing && <EditLectureDialog lecture={editing} titleOnly={basic} onSave={handleSave} onCancel={() => setEditing(null)} />}

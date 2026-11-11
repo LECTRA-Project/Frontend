@@ -98,16 +98,157 @@
   display: flex;
   flex-direction: column;
 }
+/* Columns and rows come from the section arrangement (WorkspaceLayout / sectionLayout.js);
+   the widths of the side panels are set here so they follow the window size. */
 .workspace__body {
+  --ws-materials-w: 280px;
+  --ws-assistant-w: 340px;
+  --ws-collapsed-w: 48px;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 340px;
+  grid-template-columns: var(--ws-columns, var(--ws-materials-w) minmax(0, 1fr) var(--ws-assistant-w));
+  grid-template-rows: var(--ws-rows, minmax(0, 1fr));
   gap: var(--space-4);
   padding: var(--space-4);
 }
-.workspace__body--materials-collapsed {
-  grid-template-columns: 48px minmax(0, 1fr) 340px;
+
+/* One wrapper per section. It is the grid item, so moving a section only changes these
+   coordinates — the panel inside is never moved in the DOM or recreated. */
+.ws-slot {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  grid-column: var(--slot-column);
+  grid-row: var(--slot-row);
+}
+.ws-slot[hidden] {
+  display: none;
+}
+.ws-slot > .panel,
+.ws-slot > .center-slot > .panel {
+  flex: 1 1 auto;
+}
+/* The collapsed materials bar keeps its own small height at the top of its area. */
+.ws-slot--compact {
+  align-self: start;
+}
+.ws-slot--compact > .panel {
+  flex: 0 0 auto;
+}
+
+/* Grip in each section header: drag to move the section, click for the Move menu. */
+.section-handle > .icon-btn {
+  width: 24px;
+  height: 28px;
+  color: var(--text-tertiary);
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.section-handle > .icon-btn:hover:not(:disabled) {
+  color: var(--text-secondary);
+}
+.section-handle > .icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.panel__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* While a section is dragged */
+.workspace__body--section-dragging {
+  cursor: grabbing;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.workspace__body--section-dragging iframe {
+  pointer-events: none;
+}
+.ws-slot--dragging > .panel,
+.ws-slot--dragging > .center-slot > .panel {
+  opacity: 0.5;
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+/* Drop zones over the other sections: left / right bands, top / bottom bands between them. */
+.section-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border: 1.5px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  background: rgba(238, 244, 239, 0.55); /* --accent-soft, see-through */
+}
+.section-drop__zone {
+  position: absolute;
+  border-radius: var(--radius-md);
+  transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+.section-drop__zone--left {
+  inset: 0 auto 0 0;
+  width: 28%;
+}
+.section-drop__zone--right {
+  inset: 0 0 0 auto;
+  width: 28%;
+}
+.section-drop__zone--top {
+  inset: 0 28% auto 28%;
+  height: 50%;
+}
+.section-drop__zone--bottom {
+  inset: auto 28% 0 28%;
+  height: 50%;
+}
+/* Stacked: only above / below, across the whole width. */
+.workspace__body--stacked .section-drop__zone--top,
+.workspace__body--stacked .section-drop__zone--bottom {
+  left: 0;
+  right: 0;
+}
+.section-drop__zone--active {
+  background: rgba(78, 122, 95, 0.22); /* --accent */
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.section-drop__label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: max-content;
+  max-width: 220px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-strong);
+  text-align: center;
+}
+.section-ghost {
+  position: fixed;
+  z-index: 1000;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-pop);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  pointer-events: none;
+  transform: translate(14px, 14px); /* below-right of the pointer, clear of the drop label */
 }
 
 .panel {
@@ -143,26 +284,28 @@
   display: none;
 }
 
-/* Holds the centre view. Like .center-slot it adds no box of its own, except in the
-   PDF + notebook split view, where it stacks the PDF, a divider and the notebook. */
-.center-area {
-  display: contents;
+/* Spans the PDF + notebook pair; the divider measures it while being dragged. */
+.ws-pair-measure {
+  grid-column: var(--slot-column);
+  grid-row: var(--slot-row);
+  visibility: hidden;
+  pointer-events: none;
 }
-.center-area--split {
-  min-width: 0;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0, var(--split-pdf, 1fr)) auto minmax(0, var(--split-notebook, 1fr));
-}
-.center-area--resizing {
+.workspace__body--resizing {
   cursor: row-resize;
   user-select: none;
 }
 /* The PDF frame would otherwise swallow the pointer while the divider is dragged. */
-.center-area--resizing iframe {
+.workspace__body--resizing iframe {
   pointer-events: none;
 }
+/* Sits in the gap above the lower of the two sections. */
 .split-divider {
+  grid-column: var(--slot-column);
+  grid-row: var(--slot-row);
+  align-self: start;
+  z-index: 3;
+  margin-top: calc(-1 * var(--space-4));
   display: grid;
   place-items: center;
   height: var(--space-4);
@@ -178,7 +321,7 @@
   transition: background-color 0.15s ease;
 }
 .split-divider:hover .split-divider__grip,
-.center-area--resizing .split-divider__grip {
+.workspace__body--resizing .split-divider__grip {
   background: var(--accent);
 }
 .split-divider:focus-visible {
@@ -301,11 +444,22 @@
 }
 .materials--collapsed {
   align-self: start;
-  height: 48px;
+  overflow: visible; /* lets the grip's Move menu open beyond the narrow bar */
 }
 .materials--collapsed .materials__top {
   justify-content: center;
+  gap: var(--space-1);
   padding: 8px;
+}
+.materials--collapsed .section-handle {
+  order: 1; /* the show/hide button stays first */
+}
+/* Collapsed shows only the show/hide button and the grip. (Their own display rules
+   would otherwise override the `hidden` attribute now that the bar isn't clipped.) */
+.materials--collapsed .materials__filter,
+.materials--collapsed .materials__list,
+.materials--collapsed .materials__bottom {
+  display: none;
 }
 .materials--collapsed .materials__top .icon-btn {
   flex: 0 0 auto;
@@ -755,6 +909,84 @@
   outline: 2px dashed var(--accent);
   outline-offset: -2px;
 }
+/* A material the assistant can't read is over the panel: say so instead of inviting a drop. */
+.assistant--drop-invalid {
+  outline-color: var(--danger);
+}
+.composer--drop-invalid .composer__drop-hint {
+  color: var(--danger);
+}
+.composer--drop-invalid.composer--drop-ready .composer__box,
+.composer--drop-invalid.composer--drop-over .composer__box {
+  border-color: var(--danger);
+  box-shadow: none;
+}
+.composer--drop-invalid.composer--drop-over {
+  background: var(--danger-soft);
+}
+/* Course materials added to the message */
+.composer__materials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.composer__material {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 2px 2px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.composer__material-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.composer__material-type {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+.composer__material .composer__remove {
+  margin-left: 0;
+}
+.composer__material-note {
+  margin-top: var(--space-1);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.composer__remove:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* Grip on a course-material row: drag it into the Study Assistant, or press to add it. */
+.material-drag {
+  cursor: grab;
+  touch-action: none;
+  color: var(--text-tertiary);
+}
+.material-drag:active {
+  cursor: grabbing;
+}
+.material-drag:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
 .composer {
   position: relative;
   border-radius: var(--radius-lg);
@@ -866,58 +1098,44 @@
    and on tablets/phones the three panels stack vertically. */
 @media (max-width: 1180px) {
   .workspace__body {
-    grid-template-columns: 240px minmax(0, 1fr) 290px;
-  }
-  .workspace__body--materials-collapsed {
-    grid-template-columns: 48px minmax(0, 1fr) 290px;
+    --ws-materials-w: 240px;
+    --ws-assistant-w: 290px;
   }
 }
 
+/* Stacked: one column, sections in layout order, the page scrolls. WorkspaceLayout turns
+   this on at 880px and below, and whenever the chosen arrangement doesn't fit. */
+.workspace--stacked {
+  height: auto;
+  min-height: 100%;
+}
+.workspace__body--stacked {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: none;
+}
+.workspace__body--stacked > .ws-slot {
+  grid-column: auto;
+  grid-row: auto;
+  order: var(--slot-order);
+}
+.workspace__body--stacked .materials--collapsed {
+  width: 48px;
+}
+.workspace__body--stacked .materials:not(.materials--collapsed) {
+  max-height: 420px;
+}
+.workspace__body--stacked .center-panel {
+  min-height: 520px;
+}
+.workspace__body--stacked .pdf {
+  min-height: 480px;
+  height: 70vh;
+}
+.workspace__body--stacked .assistant {
+  min-height: 420px;
+}
+
 @media (max-width: 880px) {
-  .workspace {
-    height: auto;
-    min-height: 100%;
-  }
-  .workspace__body {
-    grid-template-columns: 1fr;
-  }
-  .workspace__body--materials-collapsed {
-    grid-template-columns: 1fr;
-  }
-  .materials {
-    order: -2;
-  }
-  .materials--collapsed {
-    width: 48px;
-    max-height: 48px;
-  }
-  .materials:not(.materials--collapsed) {
-    max-height: 420px;
-  }
-  .center-panel {
-    order: -1; /* show the notebook / exam first */
-    min-height: 520px;
-  }
-  /* Split view: PDF and notebook stacked at full size; the page scrolls instead. */
-  .center-area--split {
-    order: -1;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-  .center-area--split .split-divider {
-    display: none;
-  }
-  .center-area--split .pdf {
-    min-height: 480px;
-    height: 70vh;
-  }
-  .materials {
-    max-height: 420px;
-  }
-  .assistant {
-    min-height: 420px;
-  }
   .ws-header {
     padding: 0 var(--space-4);
   }

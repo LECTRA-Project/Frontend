@@ -33,6 +33,12 @@ import {
     onAddCell          adds a dropped cell to the draft
     onRemoveCell       removes one cell from the draft
     onSent             called with { cellIds } once a message has been answered
+    handle             optional grip for moving the panel in the workspace (SectionHandle)
+    materialContext    course materials added to the message (see materialContext.js); sent as
+                       the lectures to answer from, instead of the "Search in" choice
+    materialDrag       while a course material is dragged: { fileName, over, problem }
+                       (the drop itself is handled by the workspace; this panel is its target)
+    onRemoveMaterial   removes one material from the draft
 */
 export default function StudyAssistantPanel({
   materials = [],
@@ -46,11 +52,19 @@ export default function StudyAssistantPanel({
   onAddCell = () => {},
   onRemoveCell = () => {},
   onSent = () => {},
+  handle = null,
+  materialContext = [],
+  materialDrag = null,
+  onRemoveMaterial = () => {},
 }) {
   const unavailable = available === false;
   const [messages, setMessages] = useState([]);
   const [nativeDragOver, setNativeDragOver] = useState(false);
-  const dropOver = nativeDragOver || cellDragOver;
+  const dropOver = nativeDragOver || cellDragOver || Boolean(materialDrag?.over);
+  const dropInvalid = Boolean(materialDrag?.problem);
+  const dropHint = materialDrag
+    ? (materialDrag.problem ?? `Drop to add “${materialDrag.fileName}” to your question`)
+    : "Drop to add this cell to your question";
 
   function handleDragOver(event) {
     if (!isCellDrag(event.dataTransfer)) return;
@@ -81,17 +95,28 @@ export default function StudyAssistantPanel({
   async function handleSend(text) {
     const history = messages;
     const cells = cellContext;
-    setMessages((list) => [...list, { id: crypto.randomUUID(), role: "student", text, cells: cells.map(cellContextLabel) }]);
+    const attached = materialContext;
+    setMessages((list) => [
+      ...list,
+      {
+        id: crypto.randomUUID(),
+        role: "student",
+        text,
+        cells: cells.map(cellContextLabel),
+        materials: attached.map((item) => item.fileName),
+      },
+    ]);
     setBusy(true);
     try {
       const result = await sendStudyMessage({
         text,
-        lectureIds: activeScope === "all" ? [] : [activeScope],
+        // Added materials are the lectures to answer from; otherwise the "Search in" choice.
+        lectureIds: attached.length ? attached.map((item) => item.lectureId) : activeScope === "all" ? [] : [activeScope],
         history,
         notebookCells: cells.map(toAssistantContext),
       });
-      // Clear the sent cells only once the message went through; on failure they stay in the draft.
-      onSent({ cellIds: cells.map((cell) => cell.id) });
+      // Clear the sent context only once the message went through; on failure it stays in the draft.
+      onSent({ cellIds: cells.map((cell) => cell.id), materialIds: attached.map((item) => item.id) });
       setMessages((list) => [
         ...list,
         { id: crypto.randomUUID(), role: "assistant", text: result.reply, found: result.found, references: result.references },
@@ -108,7 +133,7 @@ export default function StudyAssistantPanel({
 
   return (
     <section
-      className={`panel assistant ${dropOver ? "assistant--drop-over" : ""}`}
+      className={`panel assistant ${dropOver ? "assistant--drop-over" : ""} ${dropOver && dropInvalid ? "assistant--drop-invalid" : ""}`}
       aria-labelledby="assistant-title"
       {...{ [CELL_DROP_ZONE_ATTR]: "" }}
       onDragEnter={handleDragOver}
@@ -117,9 +142,12 @@ export default function StudyAssistantPanel({
       onDrop={handleDrop}
     >
       <div className="panel__header">
-        <h2 id="assistant-title" className="panel__title">
-          Study assistant
-        </h2>
+        <div className="panel__heading">
+          {handle}
+          <h2 id="assistant-title" className="panel__title">
+            Study assistant
+          </h2>
+        </div>
         <span className="pill" title={unavailable ? "The server has no AI assistant yet" : "Materials the assistant can search"}>
           <span className={`pill__dot ${searchable.length && !unavailable ? "pill__dot--on" : ""}`} />
           {unavailable ? "Not available" : searchable.length === 1 ? "1 material" : `${searchable.length} materials`}
@@ -164,6 +192,7 @@ export default function StudyAssistantPanel({
               >
                 <AnswerText text={message.text} references={message.references} onOpen={onOpenReference} />
                 {message.cells?.length > 0 && <span className="chat-msg__files">Notebook context: {message.cells.join(", ")}</span>}
+                {message.materials?.length > 0 && <span className="chat-msg__files">Materials: {message.materials.join(", ")}</span>}
                 {message.references?.length > 0 && (
                   <ol className="chat-sources" aria-label="Sources">
                     {message.references.map((ref) => (
@@ -196,8 +225,12 @@ export default function StudyAssistantPanel({
       <ChatComposer
         attachments={[]}
         cellContext={cellContext}
-        cellDragActive={cellDragActive}
+        cellDragActive={cellDragActive || Boolean(materialDrag)}
         dropOver={dropOver}
+        dropHint={dropHint}
+        dropInvalid={dropInvalid}
+        materials={materialContext}
+        onRemoveMaterial={onRemoveMaterial}
         connected={!unavailable}
         onSend={handleSend}
         onAttachClick={onAttachClick}

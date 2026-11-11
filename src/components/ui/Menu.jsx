@@ -11,10 +11,11 @@ import Icon from "./Icon.jsx";
     text     optional visible text next to the icon
     items    array of { label, icon?, onSelect, disabled?, danger? } or "separator"
     align    "end" (default) or "start": which edge of the button the list lines up with
+    triggerProps  optional extra props for the button (e.g. pointer handlers of a drag handle)
 
   Keyboard: arrow keys move between items, Enter/Space choose, Escape closes.
 */
-export default function Menu({ label, icon = "more", text, items, align = "end", className = "" }) {
+export default function Menu({ label, icon = "more", text, items, align = "end", className = "", triggerProps = {} }) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const rootRef = useRef(null);
@@ -69,6 +70,7 @@ export default function Menu({ label, icon = "more", text, items, align = "end",
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
+        {...triggerProps}
         onClick={() => setOpen((value) => !value)}
       >
         <Icon name={icon} />

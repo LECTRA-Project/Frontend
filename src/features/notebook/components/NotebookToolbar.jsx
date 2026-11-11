@@ -51,6 +51,7 @@ export default function NotebookToolbar({
   onNew,
   onImport,
   onDownload,
+  handle = null,
 }) {
   // The title is edited locally and committed on every change; an empty title is replaced on blur.
   const [draftTitle, setDraftTitle] = useState(null);
@@ -64,6 +65,7 @@ export default function NotebookToolbar({
     <div className="notebook-toolbar">
       <div className="notebook-toolbar__row">
         <div className="notebook-toolbar__file">
+          {handle}
           <Icon name="notebook" />
           <input
             className="notebook-toolbar__title"
