@@ -38,13 +38,13 @@ src/
 ├── data/                Illustrative statistics
 ├── features/
 │   ├── auth/            Sign-in, registration, reset-password, auth state and schemas
-│   ├── files/           Upload dialog, uploaded-materials state and the PDF / notes / slides viewers
+│   ├── files/           Upload dialog and the PDF / notes viewers
 │   ├── notebook/        Notebook cells, editor, outputs, toolbar, notebook state and kernel hooks
 │   ├── profile/         Profile and account settings
 │   ├── statistics/      Sample performance display
 │   └── workspace/       Study workspace, notebook, exam and assistant panel
 ├── services/
-│   ├── materials/       Supported material types and browser storage (IndexedDB) for uploads
+│   ├── materials/       Supported material types (one list for the whole app)
 │   ├── notebook/        .ipynb import/export, browser storage, Markdown rendering
 │   ├── python/          Python kernel: Pyodide Web Worker and its main-thread client
 │   └── studyAssistant.js  Study-assistant integration boundary
@@ -56,13 +56,13 @@ The app entry point is `src/main.jsx`. Routes and access guards live in `src/app
 
 The notebook in the centre panel runs real Python 3.14 in the browser through Pyodide, inside a Web Worker, with one shared namespace per kernel (variables persist across cells until Restart). It supports code and Markdown cells, Run / Run all / Stop / Restart, rich outputs (text, errors with tracebacks, pandas tables, matplotlib figures), and .ipynb import and download. Packages from the Pyodide distribution load automatically on import, and `%pip install name` (or `!pip install name`) installs compatible packages — this is a LECTRA convenience backed by Pyodide/micropip, not a system shell, and packages that need native code without a Pyodide build (such as `torch`) are reported as unavailable. Cells can be dragged by their grip into the Study Assistant message as context; this never runs them. Python is downloaded from the jsDelivr CDN the first time the notebook opens, so it needs internet access (or a self-hosted copy via `VITE_PYODIDE_INDEX_URL`). **Notebooks are saved in the browser's local storage only, per signed-in user — not on the server.** See [`INSTRUCTIONS.md`](INSTRUCTIONS.md#9-python-notebook) for details and limitations.
 
-The Course Materials panel lists only files the student uploads (PDF, PPTX, IPYNB, MD), grouped by type, with filtering, download and removal; it starts empty. Uploaded materials are saved per signed-in user in this browser's IndexedDB, **not on the server**. PDFs and Markdown notes open in the centre panel, notebooks open in the notebook, and PPTX files (which browsers cannot render) can be downloaded.
+The Course Materials panel lists the student's lectures from the backend (`/student_profile` lecture APIs): upload, list, rename/edit and delete, grouped by type with filtering. PDFs open in the centre panel, notebooks open in the runnable notebook, and slides can be downloaded. When the backend runs AI lecture processing, the panel also shows processing status (Processing / Completed / Failed with retry), slides and notebooks show their extracted text, Markdown notes, PPT files and course/description/file replacement are supported, and the study assistant answers from the student's materials with page/slide/cell sources. The app detects this automatically; against a backend without it (e.g. the current Render deployment) these parts say they are not available.
 
-The workspace includes demo/sample-only behavior in some areas: files attached to an assistant message are local to the browser tab, profile/settings saves are not persisted, statistics are illustrative, and the study assistant is not connected unless its service reports otherwise. The course-materials panel starts collapsed and can be expanded from its menu button; the notebook/PDF center column automatically uses the available space, and uploaded PDFs auto-fit to the viewer width until the user manually changes zoom. Success and action-confirmation messages dismiss after three seconds; validation and error messages remain visible.
+The workspace includes demo/sample-only behavior in some areas: files attached to an assistant message are local to the browser tab, account preferences are local-only because the backend has no preferences endpoint, statistics are illustrative, and the study assistant only works when the backend provides it (see above). Profile details and password changes use the backend user endpoints; changing a password signs the user out and returns them to sign-in. The course-materials panel starts collapsed and can be expanded from its menu button; the notebook/PDF center column automatically uses the available space, and uploaded PDFs auto-fit to the viewer width until the user manually changes zoom. Success and action-confirmation messages dismiss after three seconds; validation and error messages remain visible.
 
 ## Backend
 
-The API source is in the sibling `Backend/TaskGeneration/backend` project. The frontend uses `/api` as its default base URL and the Vite proxy in `vite.config.js` to forward API traffic. For production or a direct cross-origin setup, configure `VITE_API_BASE_URL` and the backend's `CORS_ORIGINS` appropriately.
+The backend is deployed at https://taskgeneration.onrender.com. The browser calls it directly at `VITE_API_PROXY_TARGET` + `VITE_API_BASE_URL` (e.g. `https://taskgeneration.onrender.com/api`), so the backend's `CORS_ORIGINS` must include the site's origin. With `VITE_API_PROXY_TARGET` empty, requests stay relative (`/api`) and the Vite proxy in `vite.config.js` forwards them to `http://127.0.0.1:8000`.
 
 The backend's `FRONTEND_URL` must match the address where this frontend is reachable (default `http://localhost:5173`) for email reset links to open the app. The reset token is captured from the emailed link and the query string is immediately removed from the browser address bar. See the [backend instructions](../Backend/TaskGeneration/INSTRUCTIONS.md) for database, email, LLM configuration, and endpoint details.
 

@@ -22,7 +22,7 @@ Frontend files that are useful starting points:
 - `src/app/App.jsx` provides the auth context and router.
 - `src/app/router.jsx` defines routes.
 - `src/api/client.js` configures Axios, auth tokens, and normalized API errors.
-- `src/api/services/auth.js` contains auth-related API calls.
+- `src/api/services/auth.js` and `src/api/services/users.js` contain auth and signed-in user API calls.
 - `src/features/auth/` contains auth pages, route guards, password validation, and session state.
 - `src/features/workspace/` contains the main study workspace.
 - `src/components/ui/` contains reusable controls, including Formik bindings.
@@ -75,7 +75,7 @@ Useful URLs:
 - Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - Health check: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
-The frontend proxy health check is [http://localhost:5173/api/health](http://localhost:5173/api/health).
+The backend health check is [https://taskgeneration.onrender.com/api/health](https://taskgeneration.onrender.com/api/health).
 
 ### Password-reset email configuration
 
@@ -105,7 +105,7 @@ The checked-in `.env.example` contains:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | `/api` | API base used by the browser |
-| `VITE_API_PROXY_TARGET` | `http://127.0.0.1:8000` | Backend target for the Vite development proxy |
+| `VITE_API_PROXY_TARGET` | `https://taskgeneration.onrender.com` | Backend the browser calls directly (`<target>/api/...`); empty = relative `/api` through the Vite proxy to `http://127.0.0.1:8000` |
 | `VITE_API_TIMEOUT_MS` | `15000` | Axios request timeout |
 | `VITE_PYODIDE_INDEX_URL` | jsDelivr URL for the pinned Pyodide version | Where the notebook downloads Python from (optional; see section 9) |
 
@@ -128,13 +128,18 @@ Vite only exposes variables prefixed with `VITE_` to browser code. Do not put se
 
 Unknown routes redirect to sign-in. Reset links remain accessible when a browser already has an authenticated session. The reset token must be present in the emailed URL to bootstrap the flow; after the app captures it, the URL is replaced with `/reset-password` before rendering.
 
-The course-materials panel starts collapsed and contains no sample files: it lists only materials the student uploads (PDF, PPTX, IPYNB and MD; other types are rejected in the upload dialog), grouped into PDFs, Slides, Notebook and Lecture notes, with a "No course materials yet" empty state. Each file can be opened, downloaded or removed (with confirmation), and the filter box searches by file name. Uploads are stored per signed-in user in the browser's IndexedDB (`lectra-materials` database), so they survive reloads but are **not uploaded to the backend** and are lost if site data is cleared; if the browser blocks IndexedDB, files are kept for the current tab only and the panel says so. PDFs open in the inline PDF viewer, `.md` notes are rendered (sanitised) in the centre panel, `.ipynb` files open in the notebook, and `.pptx` files show a download button because browsers cannot preview them.
+The course-materials panel starts collapsed and lists the signed-in student's lectures from the backend (`GET/POST/PATCH/DELETE /api/student_profile/...lecture...`), grouped into Lecture notes, Slides, PDFs and Notebook, with a "No course materials yet" empty state and a filter box. Each lecture can be opened, edited and deleted (with confirmation). PDFs open in the inline PDF viewer, `.ipynb` files open in the runnable notebook, and slides offer a download (browsers cannot render PowerPoint).
+
+On load the app checks which backend it talks to (`GET /api/student_profile/lectures/<zero-uuid>`: 404 = AI-enabled backend, 405 = backend without AI processing):
+
+- **Backend without AI processing** (the current Render deployment): uploads accept PDF, PPTX and IPYNB; editing renames only; files open from the lecture's S3 URL; the study assistant shows "not available". Opening a notebook downloads it from S3 in the browser, so the bucket's CORS rule must allow the frontend's origin (it allows `http://localhost:5173`); otherwise the app offers a download instead.
+- **AI-enabled backend**: additionally `.ppt` and `.md` uploads with an optional course, processing status with retry, editing course/description and replacing the file, extracted slide/notebook/notes text, and the RAG study assistant with clickable page/slide/cell sources.
 
 The course-materials panel starts collapsed. Its menu button expands or hides the materials list; on desktop the notebook/PDF viewer column resizes to use the available width, and on smaller screens the panel stacks above the workspace content. Uploaded PDFs automatically fit their viewer width when the panel resizes; manual zoom overrides auto-fit.
 
-Opening a PDF from the notebook (or from Home) shows it in a split view: the PDF above, the notebook below, with a divider that can be dragged (or moved with the arrow keys, Home and End) to give either pane more room. The notebook stays mounted the whole time, so opening, switching or closing a PDF never resets its cells, outputs, variables or kernel; closing the PDF returns to the notebook alone. On narrow screens the two panes stack and the page scrolls. Over the Exam view, and for slides and notes, files still open in place of the centre view as before.
+Opening a PDF from the notebook (or from Home) shows it in a split view: the PDF above, the notebook below, with a divider that can be dragged (or moved with the arrow keys, Home and End) to give either pane more room. The notebook stays mounted the whole time, so opening, switching or closing a PDF never resets its cells, outputs, variables or kernel; closing the PDF returns to the notebook alone. On narrow screens the two panes stack and the page scrolls. Over the Exam view, for slides and notes, and for cited sources shown as extracted content, lectures still open in place of the centre view as before.
 
-After creating an account, the student lands on the Home / Welcome screen (`/workspace/home`). It offers *Upload materials* and *Browse course materials*, and its *Recent study materials* list shows only the student's real uploads, newest first, with an empty state when there are none. Signing in still opens `/workspace` (or the page the student was sent away from).
+After creating an account, the student lands on the Home / Welcome screen (`/workspace/home`). It offers *Upload materials* and *Browse course materials*, and its *Recent study materials* list shows only the student's real lectures from the backend, most recently uploaded first, with an empty state when there are none. Signing in still opens `/workspace` (or the page the student was sent away from).
 
 ## 6. Password and form behavior
 
@@ -161,11 +166,18 @@ The backend uses JSON responses in the `{ "status": true, "message": "...", "dat
 | --- | --- | --- |
 | `POST` | `/api/auth/register` | Register with `email`, `password`, and `full_name` |
 | `POST` | `/api/auth/login` | Sign in and receive `data.token` |
-| `GET` | `/api/auth/user` | Load the signed-in user; requires the bearer token |
 | `POST` | `/api/auth/forgot-password` | Request a reset email with `email` |
 | `POST` | `/api/auth/reset-password` | Reset using `token` and `new_password` |
 
-The Axios client stores the access token in browser local storage and attaches it to authenticated requests. API failures are normalized to an `ApiError` with a user-facing message and any field errors.
+Signed-in user endpoints (all require the bearer token):
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/users/me` | Load the current profile |
+| `PATCH` | `/api/users/me` | Update `full_name` and/or `email` |
+| `PUT` | `/api/users/me/password` | Change password using `current_password` and `new_password` |
+
+Changing the password from the profile page signs the user out and returns them to sign-in. The Axios client stores the access token in browser local storage and attaches it to authenticated requests. API failures are normalized to an `ApiError` with a user-facing message and any field errors.
 
 ## 8. Test, lint, and build
 
@@ -229,7 +241,7 @@ The notebook has no operating-system shell and no desktop `pip`: Python runs in 
 
 - Code cells (CodeMirror 6: Python highlighting, line numbers, auto-indent, bracket matching, keyword/name autocomplete) and Markdown cells (headings, emphasis, lists, links, tables, `$math$` via KaTeX). Raw cells from imported files are kept.
 - Per cell: Run, move up/down, delete, and a menu with insert above/below, duplicate, convert code↔Markdown and clear output.
-- **Cells as Study Assistant context:** drag a cell by the grip (⠿) at the left of its header and drop it anywhere on the Study Assistant panel; the panel and message box are highlighted while you drag. Touch and pen drags work on the grip too, and with the keyboard, focus the grip and press Enter or Space to add the cell and move to the message box. There is no menu action or dialog for this. The cell — code, Markdown or raw — appears above the message box as a removable card labelled by type and position (e.g. *Python cell 3*), with its complete source; each added cell is a separate item, listed apart from attached files. Adding a cell never runs or changes it and never sends anything — the message is only sent when you press Send. On send, the cells are passed to `sendStudyMessage()` as structured `notebookCells` (see `src/services/studyAssistant.js`) and cleared from the draft once the send has been handled. While the assistant is not connected, the draft can still be prepared, and sending shows that the message was not answered.
+- **Cells as Study Assistant context:** drag a cell by the grip (⠿) at the left of its header and drop it anywhere on the Study Assistant panel; the panel and message box are highlighted while you drag. Touch and pen drags work on the grip too, and with the keyboard, focus the grip and press Enter or Space to add the cell and move to the message box. There is no menu action or dialog for this. The cell — code, Markdown or raw — appears above the message box as a removable card labelled by type and position (e.g. *Python cell 3*), with its complete source; each added cell is a separate item. Adding a cell never runs or changes it and never sends anything — the message is only sent when you press Send. On send, the cells are passed to `sendStudyMessage()` as structured `notebookCells` (see `src/services/studyAssistant.js`); because the backend's ask endpoint has no field for them, they are appended to the question as a marked "Notebook context" block with their full source. They are cleared from the draft once the answer arrives and kept if sending fails. When the server has no AI assistant, cells can still be added to a draft, but sending is disabled and nothing is answered.
 - Toolbar: editable title, save state, kernel status (Loading / Idle / Busy / Error / Unavailable), add code/Markdown cell, Run all, Stop, Restart (with confirmation), Clear outputs, **Download .ipynb** (disabled while the notebook is empty), and File → New notebook / Import .ipynb. There is no Save button: saving is automatic (Ctrl/⌘ + S saves immediately).
 - **Run all** runs code cells in order on the same kernel and stops at the first error, like Jupyter.
 - Opening a `.ipynb` (File → Import, or a notebook added through *Upload materials* and selected in the materials list) replaces the current notebook after confirmation and starts a fresh kernel. Import/export follow nbformat 4 (exported as 4.5), preserving cell order, types, ids, metadata and outputs.
@@ -261,9 +273,9 @@ The notebook is saved automatically one second after each change (code or Markdo
 ## 10. Demo behavior and current boundaries
 
 - Statistics are illustrative data. There are no sample course materials.
-- Uploaded course materials are stored in this browser (IndexedDB) and are not uploaded to the backend; files attached to an assistant message are kept in the browser tab only.
+- Course materials are stored by the backend. The study assistant and AI processing need the AI-enabled backend (see the course-materials section).
 - Notebooks are saved in browser local storage only (see section 9), not on the backend.
-- Profile and settings forms currently show demo/local behavior and do not persist changes.
+- Profile details and password changes persist through the user API; a successful password change signs the user out. Account preferences are local-only because no preferences endpoint is currently implemented.
 - The study assistant UI is present, but its service may report that it is not connected.
 - The task-generator router is currently scaffolded without endpoint implementations.
 

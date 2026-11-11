@@ -27,7 +27,7 @@ function backendWithUser({ password = "secret123" } = {}) {
       ? [200, ok({ token }, "Login successful")]
       : [401, { detail: "Invalid email or password" }];
   });
-  api.onGet("/auth/user").reply((config) =>
+  api.onGet("/users/me").reply((config) =>
     config.headers.Authorization === `Bearer ${token}` ? [200, ok(TEST_USER)] : [401, { detail: "Invalid or expired token" }]
   );
 }
@@ -222,7 +222,7 @@ describe("reset password", () => {
   });
 
   it("keeps the emailed reset route available for authenticated users", async () => {
-    api.onGet("/auth/user").reply(200, ok(TEST_USER));
+    api.onGet("/users/me").reply(200, ok(TEST_USER));
     saveToken(token);
     const { router } = renderApp("/reset-password?token=reset-token");
 
@@ -253,7 +253,7 @@ describe("create account", () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/workspace/home"));
     expect(await screen.findByRole("heading", { name: "Welcome to LECTRA" })).toBeInTheDocument();
-    expect(screen.getByText("No recent study materials")).toBeInTheDocument();
+    expect(await screen.findByText("No recent study materials")).toBeInTheDocument();
     expect(JSON.parse(api.history.post[0].data)).toEqual({
       email: TEST_USER.email,
       password: "StrongerPass1!",
@@ -355,13 +355,14 @@ describe("create account", () => {
 });
 
 describe("profile form validation", () => {
-  it("validates optional profile email when provided", async () => {
+  it("validates a profile email before sending an update", async () => {
     backendWithUser();
     saveToken(token);
     const user = userEvent.setup();
     renderApp("/profile");
 
     await screen.findByRole("heading", { name: "My profile" });
+    await user.clear(screen.getByLabelText("Email"));
     await user.type(screen.getByLabelText("Email"), "not-an-email");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
@@ -383,29 +384,120 @@ describe("profile form validation", () => {
     expect(await screen.findByText("New password must be between 8 and 14 characters.")).toBeInTheDocument();
     expect(screen.getByText("To change your password, enter your current password.")).toBeInTheDocument();
   });
+
+  it("updates profile details through PATCH /users/me", async () => {
+    backendWithUser();
+    api.onPatch("/users/me").reply((config) => {
+      const body = JSON.parse(config.data);
+      return [200, ok({ ...TEST_USER, full_name: body.full_name, email: body.email }, "Profile updated")];
+    });
+    saveToken(token);
+    const user = userEvent.setup();
+    renderApp("/profile");
+
+    await screen.findByRole("heading", { name: "My profile" });
+    const nameField = screen.getByLabelText("Full name");
+    const emailField = screen.getByLabelText("Email");
+    const saveButton = screen.getByRole("button", { name: "Save changes" });
+    expect(nameField).toHaveValue(TEST_USER.full_name);
+    expect(emailField).toHaveValue(TEST_USER.email);
+    expect(saveButton).toBeDisabled();
+
+    await user.clear(nameField);
+    await user.type(nameField, "Grace Hopper");
+    expect(saveButton).toBeEnabled();
+    await user.clear(nameField);
+    await user.type(nameField, TEST_USER.full_name);
+    expect(saveButton).toBeDisabled();
+    await user.clear(nameField);
+    await user.type(nameField, "Grace Hopper");
+    await user.clear(emailField);
+    await user.type(emailField, "grace@example.com");
+    await user.click(saveButton);
+
+    await waitFor(() => expect(api.history.patch).toHaveLength(1));
+    expect(JSON.parse(api.history.patch[0].data)).toEqual({
+      full_name: "Grace Hopper",
+      email: "grace@example.com",
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("Profile updated successfully.");
+    expect(screen.getByText("grace@example.com")).toBeInTheDocument();
+  });
+
+  it("changes the password, logs out, and returns to sign in with a transient message", async () => {
+    backendWithUser();
+    api.onPut("/users/me/password").reply(200, ok(null, "Password changed"));
+    saveToken(token);
+    const user = userEvent.setup();
+    const { router } = renderApp("/profile");
+
+    await screen.findByRole("heading", { name: "My profile" });
+    await user.type(screen.getByLabelText("Current password"), "secret123");
+    await user.type(screen.getByLabelText("New password"), "StrongerPass1!");
+    await user.type(screen.getByLabelText("Confirm new password"), "StrongerPass1!");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(api.history.put).toHaveLength(1));
+    expect(JSON.parse(api.history.put[0].data)).toEqual({
+      current_password: "secret123",
+      new_password: "StrongerPass1!",
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    expect(savedToken()).toBeNull();
+    expect(await screen.findByRole("status")).toHaveTextContent("Your password has been changed. Please sign in again.");
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument(), { timeout: 4000 });
+  });
+
+  it("shows a password-change API error without claiming success", async () => {
+    backendWithUser();
+    api.onPut("/users/me/password").reply(400, { detail: "Current password is incorrect" });
+    saveToken(token);
+    const user = userEvent.setup();
+    renderApp("/profile");
+
+    await screen.findByRole("heading", { name: "My profile" });
+    await user.type(screen.getByLabelText("Current password"), "wrong-password");
+    await user.type(screen.getByLabelText("New password"), "StrongerPass1!");
+    await user.type(screen.getByLabelText("Confirm new password"), "StrongerPass1!");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Current password is incorrect");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
 });
 
 describe("session", () => {
   it("starts with course materials collapsed and toggles the list open", async () => {
     backendWithUser();
+    api.onGet("/student_profile/lectures").reply(200, ok({
+      lectures: [{
+        id: "lecture-1", user_id: TEST_USER.id, title: "Lecture 01 — Notes", original_filename: "notes.pdf",
+        file_type: "application/pdf", file_size: 42, s3_url: "local://lectures/x/notes.pdf",
+        uploaded_at: "2026-11-01T10:00:00Z", updated_at: "2026-11-01T10:00:00Z", description: null, course: null,
+        processing_status: "completed", processing_error: null, processing_attempts: 1, processed_at: "2026-11-01T10:00:05Z",
+        content_version: 1, chunk_count: 3, source_count: 12, source_type: "page",
+      }],
+      page: 1, page_size: 100, total: 1, total_pages: 1,
+    }));
     saveToken(token);
     const user = userEvent.setup();
     const { container } = renderApp("/workspace");
 
     await screen.findByRole("button", { name: "Open profile menu" });
+    await screen.findByText("Lecture 01 — Notes", { selector: ".material-row__name" });
     const sidebar = screen.getByRole("region", { name: "Course materials" });
     const toggle = screen.getByRole("button", { name: "Show course materials" });
 
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(sidebar).toHaveClass("materials--collapsed");
-    expect(screen.queryByText("No course materials yet")).not.toBeVisible();
+    expect(screen.queryByText("Lecture 01 — Notes", { selector: ".material-row__name" })).not.toBeVisible();
     expect(container.querySelector(".center-panel")).toBeInTheDocument();
 
     await user.click(toggle);
 
     expect(screen.getByRole("button", { name: "Hide course materials" })).toHaveAttribute("aria-expanded", "true");
     expect(sidebar).not.toHaveClass("materials--collapsed");
-    expect(screen.getByText("No course materials yet")).toBeVisible();
+    expect(screen.getByText("Lecture 01 — Notes", { selector: ".material-row__name" })).toBeVisible();
     expect(container.querySelector(".workspace__body")).not.toHaveClass("workspace__body--materials-collapsed");
   });
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AUTH_EXPIRED_EVENT, AUTH_TOKEN_KEY, getAuthToken, getTokenExpiry, isTokenExpired } from "../../api/client.js";
 import * as authApi from "../../api/services/auth.js";
+import * as usersApi from "../../api/services/users.js";
 import { AuthContext } from "./authContext.js";
 
 /* Starting state, read once from the saved token. An expired token is dropped right away. */
@@ -20,7 +21,7 @@ const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
 /*
   Owns the signed-in session:
-  - on start, turns a saved token into a user via GET /api/auth/user
+  - on start, turns a saved token into a user via GET /api/users/me
   - signs the user out when the token expires, when the backend rejects it,
     or when they sign out in another tab
 */
@@ -38,7 +39,7 @@ export default function AuthProvider({ children }) {
   useEffect(() => {
     if (!getAuthToken()) return undefined;
     const controller = new AbortController();
-    authApi.getCurrentUser({ signal: controller.signal }).then(
+    usersApi.getCurrentUser({ signal: controller.signal }).then(
       (currentUser) => {
         setUser(currentUser);
         setSession({ status: "authenticated", signOutReason: null });
@@ -79,7 +80,7 @@ export default function AuthProvider({ children }) {
   const login = useCallback(async ({ email, password }) => {
     await authApi.login({ email, password });
     try {
-      const currentUser = await authApi.getCurrentUser();
+      const currentUser = await usersApi.getCurrentUser();
       setUser(currentUser);
       setSession({ status: "authenticated", signOutReason: null });
       return currentUser;
@@ -89,11 +90,12 @@ export default function AuthProvider({ children }) {
     }
   }, []);
 
-  const logout = useCallback(() => endSession(null), [endSession]);
+  const logout = useCallback((signOutReason = null) => endSession(signOutReason), [endSession]);
+  const updateUser = useCallback((updatedUser) => setUser(updatedUser), []);
 
   const value = useMemo(
-    () => ({ ...session, user, login, register: authApi.register, logout }),
-    [session, user, login, logout]
+    () => ({ ...session, user, login, register: authApi.register, logout, updateUser }),
+    [session, user, login, logout, updateUser]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

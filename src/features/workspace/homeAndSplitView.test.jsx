@@ -13,14 +13,44 @@ import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../t
 
 const CODE = "total = 21 * 2\nprint(total)";
 
+function pdfLecture(id, title, uploadedAt) {
+  return {
+    id,
+    user_id: TEST_USER.id,
+    title,
+    original_filename: `${title}.pdf`,
+    file_type: "application/pdf",
+    file_size: 2048,
+    s3_url: `local://lectures/${id}.pdf`,
+    uploaded_at: uploadedAt,
+    updated_at: uploadedAt,
+    description: null,
+    course: null,
+    processing_status: "completed",
+    processing_error: null,
+    processing_attempts: 1,
+    processed_at: uploadedAt,
+    content_version: 1,
+    chunk_count: 3,
+    source_count: 5,
+    source_type: "page",
+  };
+}
+
 let api;
+let lectures;
 
 beforeEach(() => {
   api = mockApi();
   const token = makeToken(1800);
   saveToken(token);
-  api.onGet("/auth/user").reply(200, ok(TEST_USER));
-  api.onGet("/users/me").reply(200, ok(TEST_USER)); // auth.js currently calls /users/me
+  lectures = [];
+  api.onGet("/users/me").reply(200, ok(TEST_USER));
+  api.onGet("/student_profile/lectures").reply(() => [
+    200,
+    ok({ lectures, page: 1, page_size: 100, total: lectures.length, total_pages: 1 }),
+  ]);
+  api.onGet(/\/student_profile\/lectures\/.+\/file$/).reply(200, new Blob(["%PDF-1.4"], { type: "application/pdf" }));
 
   const notebook = createNotebook("Week 3");
   notebook.cells = [{ ...createCell("code"), source: CODE }];
@@ -36,8 +66,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const pdf = (name) => new File(["%PDF-1.4"], name, { type: "application/pdf" });
-
 async function showMaterialsPanel(user) {
   const panel = screen.getByRole("region", { name: "Course materials" });
   const show = within(panel).queryByRole("button", { name: "Show course materials" });
@@ -45,18 +73,9 @@ async function showMaterialsPanel(user) {
   return panel;
 }
 
-async function uploadMaterials(user, files) {
-  const panel = await showMaterialsPanel(user);
-  await user.click(within(panel).getByRole("button", { name: "Upload materials" }));
-  const dialog = await screen.findByRole("dialog");
-  await user.upload(dialog.querySelector('input[type="file"]'), files);
-  await user.click(within(dialog).getByRole("button", { name: "Upload" }));
-  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-}
-
 async function openMaterialFromPanel(user, name) {
   const panel = await showMaterialsPanel(user);
-  await user.click(within(panel).getByRole("button", { name: new RegExp(`^${name}`) }));
+  await user.click(await within(panel).findByRole("button", { name: new RegExp(`^${name}`) }));
 }
 
 describe("Home / Welcome screen", () => {
@@ -66,7 +85,7 @@ describe("Home / Welcome screen", () => {
     expect(await screen.findByRole("heading", { name: "Welcome to LECTRA" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Browse course materials" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Recent study materials" })).toBeInTheDocument();
-    expect(screen.getByText("No recent study materials")).toBeInTheDocument();
+    expect(await screen.findByText("No recent study materials")).toBeInTheDocument();
 
     // The rest of the workspace is unchanged.
     expect(screen.getByRole("region", { name: "Course materials" })).toBeInTheDocument();
@@ -75,21 +94,22 @@ describe("Home / Welcome screen", () => {
     expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
   });
 
-  it("lists real uploads as recent materials, and opening a PDF shows it above the notebook", async () => {
+  it("lists real lectures newest first, and opening a PDF shows it above the notebook", async () => {
+    lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z"), pdfLecture("l2", "Lecture 2", "2026-11-05T10:00:00Z")];
     const user = userEvent.setup();
     const { router } = renderApp("/workspace/home");
-    await screen.findByRole("heading", { name: "Welcome to LECTRA" });
 
-    const home = screen.getByRole("region", { name: "Welcome to LECTRA" });
-    await uploadMaterials(user, [pdf("Lecture 1.pdf")]);
-
-    const recent = within(home).getByRole("region", { name: "Recent study materials" });
+    const recent = await screen.findByRole("region", { name: "Recent study materials" });
+    const rows = await within(recent).findAllByRole("button");
+    expect(rows.map((row) => row.textContent)).toEqual([expect.stringMatching(/^Lecture 2/), expect.stringMatching(/^Lecture 1/)]);
     expect(within(recent).queryByText("No recent study materials")).not.toBeInTheDocument();
-    await user.click(within(recent).getByRole("button", { name: /Lecture 1\.pdf/ }));
+
+    await user.click(rows[1]);
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
-    expect(screen.getByRole("region", { name: "PDF viewer: Lecture 1.pdf" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "PDF viewer: Lecture 1" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Notebook" })).toBeVisible();
+    expect(document.querySelector(".center-area")).toHaveClass("center-area--split");
   });
 
   it("opens the course-materials panel from “Browse course materials”", async () => {
@@ -102,6 +122,7 @@ describe("Home / Welcome screen", () => {
 
 describe("PDF + notebook split view", () => {
   it("shows the PDF above the notebook, keeps the notebook intact, and switches and closes PDFs", async () => {
+    lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z"), pdfLecture("l2", "Lecture 2", "2026-11-05T10:00:00Z")];
     const user = userEvent.setup();
     renderApp("/workspace");
     const cell = await screen.findByRole("group", { name: "Python cell 1" });
@@ -111,12 +132,12 @@ describe("PDF + notebook split view", () => {
     await user.keyboard("{Escape}");
     cell.focus();
 
-    await uploadMaterials(user, [pdf("Lecture 1.pdf"), pdf("Lecture 2.pdf")]);
-    await openMaterialFromPanel(user, "Lecture 1.pdf");
+    await openMaterialFromPanel(user, "Lecture 1");
 
     const area = document.querySelector(".center-area");
     expect(area).toHaveClass("center-area--split");
-    const pdfPane = screen.getByRole("region", { name: "PDF viewer: Lecture 1.pdf" });
+    const pdfPane = screen.getByRole("region", { name: "PDF viewer: Lecture 1" });
+    await waitFor(() => expect(pdfPane.querySelector("iframe")).not.toBeNull()); // file fetched
     const notebookPane = screen.getByRole("region", { name: "Notebook" });
     expect(notebookPane).toBeVisible();
     // PDF on top, divider, notebook below.
@@ -134,10 +155,10 @@ describe("PDF + notebook split view", () => {
     expect(within(notebookPane).getByRole("button", { name: "Run cell 1" })).toBeEnabled();
 
     // Another PDF replaces the PDF pane (reset to page 1) without touching the notebook.
-    await openMaterialFromPanel(user, "Lecture 2.pdf");
-    const secondPane = screen.getByRole("region", { name: "PDF viewer: Lecture 2.pdf" });
+    await openMaterialFromPanel(user, "Lecture 2");
+    const secondPane = screen.getByRole("region", { name: "PDF viewer: Lecture 2" });
     expect(within(secondPane).getByLabelText("Page number")).toHaveValue("1");
-    expect(screen.queryByRole("region", { name: "PDF viewer: Lecture 1.pdf" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "PDF viewer: Lecture 1" })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Python cell 1" })).toBe(cell);
 
     // Closing returns to the notebook alone, still the same notebook.
@@ -149,11 +170,11 @@ describe("PDF + notebook split view", () => {
   });
 
   it("resizes the panes with the keyboard on the divider", async () => {
+    lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z")];
     const user = userEvent.setup();
     renderApp("/workspace");
     await screen.findByRole("group", { name: "Python cell 1" });
-    await uploadMaterials(user, [pdf("Lecture 1.pdf")]);
-    await openMaterialFromPanel(user, "Lecture 1.pdf");
+    await openMaterialFromPanel(user, "Lecture 1");
 
     const divider = screen.getByRole("separator", { name: "Resize PDF and notebook" });
     expect(divider).toHaveAttribute("aria-valuenow", "50");
@@ -168,13 +189,13 @@ describe("PDF + notebook split view", () => {
   });
 
   it("keeps the existing full viewer over the Exam view", async () => {
+    lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z")];
     const user = userEvent.setup();
     renderApp("/workspace/exam");
     await screen.findByRole("button", { name: "Exam" });
-    await uploadMaterials(user, [pdf("Lecture 1.pdf")]);
-    await openMaterialFromPanel(user, "Lecture 1.pdf");
+    await openMaterialFromPanel(user, "Lecture 1");
 
-    expect(screen.getByRole("region", { name: "PDF viewer: Lecture 1.pdf" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "PDF viewer: Lecture 1" })).toBeInTheDocument();
     expect(document.querySelector(".center-area")).not.toHaveClass("center-area--split");
     expect(screen.queryByRole("separator")).not.toBeInTheDocument();
   });

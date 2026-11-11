@@ -25,9 +25,10 @@ export default function ChatComposer({
   onRemoveAttachment,
   dropOver = false,
   onRemoveCell,
+  disabled = false,
 }) {
   const [text, setText] = useState("");
-  const canSend = text.trim().length > 0;
+  const canSend = text.trim().length > 0 && !disabled;
   const hasContext = cellContext.length > 0 || attachments.length > 0;
 
   function handleSubmit(event) {
@@ -105,12 +106,12 @@ export default function ChatComposer({
 
       {hasContext && !connected && (
         <p className="composer__note">
-          The assistant isn’t connected yet, so a message won’t get an answer. You can still prepare your question.
+          The assistant isn’t available on this server yet, so a message won’t get an answer. You can still prepare your question.
         </p>
       )}
 
       <div className="composer__box">
-        <IconButton icon="plus" label="Add files" outlined onClick={onAttachClick} />
+        <IconButton icon="plus" label="Upload materials" outlined onClick={onAttachClick} />
         <label className="visually-hidden" htmlFor="composer-input">
           Message to the study assistant
         </label>
@@ -121,6 +122,7 @@ export default function ChatComposer({
           value={text}
           onChange={(event) => setText(event.target.value)}
           autoComplete="off"
+          maxLength={2000}
         />
         <button type="submit" className="composer__send" aria-label="Send message" disabled={!canSend}>
           <Icon name="send" />

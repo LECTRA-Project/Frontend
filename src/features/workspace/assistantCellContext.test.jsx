@@ -27,8 +27,8 @@ beforeEach(() => {
   api = mockApi();
   const token = makeToken(1800);
   saveToken(token);
-  api.onGet("/auth/user").reply(200, ok(TEST_USER));
-  api.onGet("/users/me").reply(200, ok(TEST_USER)); // auth.js currently calls /users/me
+  api.onGet("/users/me").reply(200, ok(TEST_USER));
+  api.onGet("/student_profile/lectures").reply(200, ok({ lectures: [], page: 1, page_size: 100, total: 0, total_pages: 0 }));
 
   const notebook = createNotebook("Week 3");
   notebook.cells = [{ ...createCell("code"), source: CODE }, { ...createCell("markdown"), source: MARKDOWN }];
@@ -91,8 +91,6 @@ describe("notebook cells as Study Assistant context", () => {
     expect(within(list).getByText("4 lines")).toBeInTheDocument();
     expect(within(list).getByLabelText("Source of Python cell 1").textContent).toBe(CODE);
     expect(screen.getByText("Python cell 1 added to your message to the study assistant.")).toBeInTheDocument();
-    expect(screen.getByText(/The assistant isn’t connected yet, so a message won’t get an answer/)).toBeInTheDocument();
-    expect(screen.getByText("Not connected yet")).toBeInTheDocument();
 
     // Not run, not changed, not sent.
     expect(screen.queryByText("In [*]:")).not.toBeInTheDocument();
@@ -216,24 +214,45 @@ describe("notebook cells as Study Assistant context", () => {
     expect(screen.getByText("Python cell 1 removed from your message.")).toBeInTheDocument();
   });
 
-  it("sends cells as structured context while disconnected, without inventing an answer", async () => {
+  it("sends the cells with the question only when Send is pressed, then clears them", async () => {
+    let asked;
+    api.onPost("/student_profile/assistant/ask").reply((config) => {
+      asked = JSON.parse(config.data);
+      return [200, ok({ answer: "They are bullet notes.", found: true, references: [] })];
+    });
     const user = userEvent.setup();
     await openWorkspace();
     dragCellTo("Markdown cell 2");
+    dragCellTo("Python cell 1");
+    expect(asked).toBeUndefined();
 
     await user.type(screen.getByLabelText("Message to the study assistant"), "What do these notes mean?{Enter}");
 
     expect(sendStudyMessage).toHaveBeenCalledTimes(1);
-    expect(sendStudyMessage.mock.calls[0][0]).toEqual({
-      text: "What do these notes mean?",
-      attachments: [],
-      notebookCells: [{ kind: "notebook-cell", cellType: "markdown", position: 2, notebookTitle: "Week 3", source: MARKDOWN }],
-    });
-    expect(await screen.findByText("The study assistant isn’t connected yet, so this message wasn’t answered.")).toBeInTheDocument();
-    expect(screen.getByText("Notebook context: Markdown cell 2")).toBeInTheDocument();
+    expect(sendStudyMessage.mock.calls[0][0].notebookCells).toEqual([
+      { kind: "notebook-cell", cellType: "markdown", position: 2, notebookTitle: "Week 3", source: MARKDOWN },
+      { kind: "notebook-cell", cellType: "code", position: 1, notebookTitle: "Week 3", source: CODE },
+    ]);
+    expect(await screen.findByText("They are bullet notes.")).toBeInTheDocument();
+    // The backend has no cell field, so the full sources (indentation kept) follow the question.
+    expect(asked.question.startsWith("What do these notes mean?\n\nNotebook context")).toBe(true);
+    expect(asked.question).toContain(MARKDOWN);
+    expect(asked.question).toContain(CODE);
+    expect(screen.getByText("Notebook context: Markdown cell 2, Python cell 1")).toBeInTheDocument();
+    await waitFor(() => expect(cellList()).toBeNull());
+  });
+
+  it("lets a draft with cells be prepared when the server has no assistant, without inventing an answer", async () => {
+    api.onGet(/\/student_profile\/lectures\/.+/).reply(405);
+    await openWorkspace();
+    expect(await screen.findByText("Not available")).toBeInTheDocument();
+    dragCellTo("Python cell 1");
+
+    expect(within(cellList()).getByText("Python cell 1")).toBeInTheDocument();
+    expect(screen.getByText(/The assistant isn’t available on this server yet/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
     expect(document.querySelector(".chat-msg--assistant")).toBeNull();
-    expect(screen.getByText("Not connected yet")).toBeInTheDocument();
-    await waitFor(() => expect(cellList()).toBeNull()); // cleared once the send was handled
+    expect(sendStudyMessage).not.toHaveBeenCalled();
   });
 
   it("keeps the draft context if sending fails", async () => {
@@ -244,7 +263,7 @@ describe("notebook cells as Study Assistant context", () => {
 
     await user.type(screen.getByLabelText("Message to the study assistant"), "Why?{Enter}");
 
-    expect(await screen.findByText("The message couldn’t be sent (offline).")).toBeInTheDocument();
+    expect(await screen.findByText("offline")).toBeInTheDocument();
     expect(within(cellList()).getByText("Python cell 1")).toBeInTheDocument();
   });
 });

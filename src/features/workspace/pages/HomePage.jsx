@@ -2,7 +2,7 @@ import { useOutletContext } from "react-router-dom";
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
-import { formatFileSize, groupOf } from "../../../services/materials/materialTypes.js";
+import { groupOf } from "../../../services/materials/materialTypes.js";
 
 const RECENT_LIMIT = 5;
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
@@ -11,20 +11,22 @@ const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
   Home / Welcome screen in the centre panel (/workspace/home). New users land here
   after creating an account (see GuestOnly in RouteGuards.jsx).
 
-  "Recent study materials" lists the student's real uploads, newest first. With none,
-  it shows an empty state; nothing is made up.
+  "Recent study materials" lists the student's real lectures from the backend, most
+  recently uploaded first. With none, it shows an empty state; nothing is made up.
 
   Outlet context `home` (from WorkspaceLayout):
-    materials, status         the course materials (see useCourseMaterials)
+    materials                 the lecture materials (toMaterial items, see lectures/materialTypes.js)
+    loading                   true while the library is first loaded
     onUploadClick             opens the upload dialog
     onBrowseMaterials         opens the course-materials panel
     onOpenMaterial(material)  opens a material, exactly like clicking it in the panel
 */
 export default function HomePage() {
   const { home } = useOutletContext();
-  const { materials, status, onUploadClick, onBrowseMaterials, onOpenMaterial } = home;
+  const { materials, loading, onUploadClick, onBrowseMaterials, onOpenMaterial } = home;
 
-  const recent = [...materials].sort((a, b) => b.addedAt.localeCompare(a.addedAt)).slice(0, RECENT_LIMIT);
+  const uploadedAt = (item) => item.lecture?.uploaded_at ?? "";
+  const recent = [...materials].sort((a, b) => uploadedAt(b).localeCompare(uploadedAt(a))).slice(0, RECENT_LIMIT);
 
   return (
     <section className="panel center-panel home" aria-labelledby="home-title">
@@ -55,7 +57,7 @@ export default function HomePage() {
             Recent study materials
           </h3>
 
-          {status === "loading" ? (
+          {loading && materials.length === 0 ? (
             <p className="home__recent-message" role="status">
               Loading your materials…
             </p>
@@ -70,15 +72,16 @@ export default function HomePage() {
           ) : (
             <ul className="home__recent-list">
               {recent.map((material) => {
-                const group = groupOf(material.type);
+                const icon = groupOf(material.type)?.icon ?? "fileText"; // images have no group
                 return (
                   <li key={material.id}>
                     <button type="button" className="material-row home__recent-row" onClick={() => onOpenMaterial(material)}>
-                      <Icon name={group.icon} />
+                      <Icon name={icon} />
                       <span className="material-row__text">
                         <span className="material-row__name">{material.name}</span>
                         <span className="material-row__meta">
-                          {group.short} · {formatFileSize(material.size)} · Added {dateFormat.format(new Date(material.addedAt))}
+                          {material.meta}
+                          {uploadedAt(material) && ` · Added ${dateFormat.format(new Date(uploadedAt(material)))}`}
                         </span>
                       </span>
                     </button>

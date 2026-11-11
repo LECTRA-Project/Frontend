@@ -1,4 +1,4 @@
-import { get, post } from "../http.js";
+import { post } from "../http.js";
 import { ApiError, setAuthToken } from "../client.js";
 
 /*
@@ -43,12 +43,6 @@ export async function resetPassword({ token, newPassword }) {
     });
   }
   return response;
-}
-
-/* GET /auth/user → the signed-in user (needs the token) */
-export async function getCurrentUser({ signal } = {}) {
-  const response = await get("/users/me", { signal });
-  return response.data;
 }
 
 export function logout() {

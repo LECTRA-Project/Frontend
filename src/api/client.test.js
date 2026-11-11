@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { apiClient, ApiError, AUTH_EXPIRED_EVENT, getAuthToken, getTokenExpiry, isTokenExpired, setAuthToken } from "./client.js";
+import { apiClient, ApiError, AUTH_EXPIRED_EVENT, getAuthToken, getTokenExpiry, isTokenExpired, resolveApiBaseUrl, setAuthToken } from "./client.js";
 import { makeToken, mockApi } from "../test/helpers.jsx";
 
 describe("apiClient", () => {
@@ -70,9 +70,9 @@ describe("apiClient", () => {
     setAuthToken("stale");
     const onExpired = vi.fn();
     window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
-    api.onGet("/auth/user").reply(401, { detail: "Invalid or expired token" });
+    api.onGet("/users/me").reply(401, { detail: "Invalid or expired token" });
 
-    await apiClient.get("/auth/user").catch(() => {});
+    await apiClient.get("/users/me").catch(() => {});
     window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
 
     expect(getAuthToken()).toBeNull();
@@ -106,5 +106,21 @@ describe("token expiry", () => {
   it("treats an unreadable token as having no known expiry", () => {
     expect(getTokenExpiry("not-a-jwt")).toBeNull();
     expect(isTokenExpired("not-a-jwt")).toBe(false);
+  });
+});
+
+describe("resolveApiBaseUrl", () => {
+  it("calls the backend named by VITE_API_PROXY_TARGET directly", () => {
+    expect(resolveApiBaseUrl({ VITE_API_BASE_URL: "/api", VITE_API_PROXY_TARGET: "https://taskgeneration.onrender.com/" }))
+      .toBe("https://taskgeneration.onrender.com/api");
+    expect(resolveApiBaseUrl({ VITE_API_PROXY_TARGET: "https://taskgeneration.onrender.com" }))
+      .toBe("https://taskgeneration.onrender.com/api");
+  });
+
+  it("uses an absolute base URL as is and stays relative without a target", () => {
+    expect(resolveApiBaseUrl({ VITE_API_BASE_URL: "https://api.example.com/api/", VITE_API_PROXY_TARGET: "http://x" }))
+      .toBe("https://api.example.com/api");
+    expect(resolveApiBaseUrl({ VITE_API_BASE_URL: "/api" })).toBe("/api");
+    expect(resolveApiBaseUrl()).toBe("/api");
   });
 });

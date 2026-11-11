@@ -1,12 +1,15 @@
 /*
   The kinds of course material a student can upload, and how each is grouped in the
   Course Materials panel. Groups only appear when they contain uploaded files.
+  Images cannot be uploaded from the app (no extensions) but lectures uploaded as
+  images through the API are still listed.
 */
 export const MATERIAL_GROUPS = [
   { type: "notes", label: "Lecture notes", short: "Notes", icon: "book", extensions: ["md"] },
-  { type: "slides", label: "Slides", short: "Slides", icon: "slides", extensions: ["pptx"] },
+  { type: "slides", label: "Slides", short: "Slides", icon: "slides", extensions: ["pptx", "ppt"] },
   { type: "pdf", label: "PDFs", short: "PDF", icon: "fileText", extensions: ["pdf"] },
   { type: "notebook", label: "Notebook", short: "Notebook", icon: "notebook", extensions: ["ipynb"] },
+  { type: "image", label: "Images", short: "Image", icon: "book", extensions: [] },
 ];
 
 /* For <input type="file" accept>. */

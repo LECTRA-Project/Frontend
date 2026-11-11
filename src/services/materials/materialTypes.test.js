@@ -6,6 +6,7 @@ describe("material types", () => {
   it.each([
     ["Lecture 1.PDF", "pdf"],
     ["week2.pptx", "slides"],
+    ["legacy.PPT", "slides"],
     ["lab.ipynb", "notebook"],
     ["summary.md", "notes"],
     ["essay.docx", null],
@@ -15,8 +16,8 @@ describe("material types", () => {
   });
 
   it("describes the accepted files", () => {
-    expect(ACCEPTED_EXTENSIONS).toBe(".md,.pptx,.pdf,.ipynb");
-    expect(SUPPORTED_LABEL).toBe("MD, PPTX, PDF and IPYNB");
+    expect(ACCEPTED_EXTENSIONS).toBe(".md,.pptx,.ppt,.pdf,.ipynb");
+    expect(SUPPORTED_LABEL).toBe("MD, PPTX, PPT, PDF and IPYNB");
   });
 
   it("formats file sizes", () => {

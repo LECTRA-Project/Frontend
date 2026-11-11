@@ -3,13 +3,22 @@ import axios from "axios";
 /*
   API CLIENT — the one axios instance every request in the app goes through.
 
-  Base URL comes from VITE_API_BASE_URL (see .env.example) and defaults to "/api".
-  In development Vite proxies /api to the FastAPI backend (vite.config.js), so the
-  browser never makes a cross-origin request and the backend needs no CORS setup.
+  Requests go straight to the backend named by VITE_API_PROXY_TARGET (see .env), e.g.
+  https://taskgeneration.onrender.com + VITE_API_BASE_URL ("/api" by default). The
+  backend must allow this site's origin in its CORS settings.
+  An absolute VITE_API_BASE_URL is used as is; with no target set, requests stay
+  relative ("/api") and the Vite dev proxy forwards them (vite.config.js).
 */
 const env = import.meta.env ?? {};
 
-export const API_BASE_URL = env.VITE_API_BASE_URL || "/api";
+export function resolveApiBaseUrl({ VITE_API_BASE_URL: base, VITE_API_PROXY_TARGET: target } = {}) {
+  const path = base || "/api";
+  if (/^https?:\/\//i.test(path)) return path.replace(/\/+$/, "");
+  const origin = (target || "").trim().replace(/\/+$/, "");
+  return origin ? `${origin}/${path.replace(/^\/+/, "")}` : path;
+}
+
+export const API_BASE_URL = env.MODE === "test" ? "/api" : resolveApiBaseUrl(env);
 
 export const AUTH_TOKEN_KEY = "lectra.authToken";
 
