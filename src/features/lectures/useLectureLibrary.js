@@ -8,6 +8,7 @@ import {
   updateLecture,
   uploadLecture,
 } from "../../api/services/lectures.js";
+import { detectChat } from "../../api/services/chat.js";
 import { isInProgress, titleFromFileName } from "./materialTypes.js";
 
 const POLL_INTERVAL_MS = 3000;
@@ -25,7 +26,8 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
   const [lectures, setLectures] = useState([]);
   const [uploads, setUploads] = useState([]); // { id, name, progress, error }
   const [loading, setLoading] = useState(true);
-  // { ai: boolean } once known: whether the backend has AI processing and the assistant.
+  // { ai, chat } once known: whether the backend has AI processing (and the one-shot
+  // assistant), and whether it has the Lecture Chat API (saved chat sessions).
   const [features, setFeatures] = useState(null);
   const [error, setError] = useState(null);
   const mounted = useRef(true);
@@ -56,7 +58,10 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
   // Initial load (state is only set once the request settles, like useApi).
   useEffect(() => {
     const controller = new AbortController();
-    detectServerFeatures({ signal: controller.signal }).then(setFeatures, () => {});
+    Promise.all([detectServerFeatures({ signal: controller.signal }), detectChat({ signal: controller.signal })]).then(
+      ([server, chat]) => setFeatures({ ...server, chat }),
+      () => {}
+    );
     listAllLectures({ signal: controller.signal }).then(
       (list) => {
         setLectures(list);
