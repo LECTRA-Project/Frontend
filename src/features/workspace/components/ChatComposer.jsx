@@ -7,9 +7,9 @@ import IconButton from "../../../components/ui/IconButton.jsx";
   The message box at the bottom of the Study Assistant panel.
   + opens the shared upload dialog; the send button (or Enter) calls onSend(text).
 */
-export default function ChatComposer({ attachments, onSend, onAttachClick, onRemoveAttachment }) {
+export default function ChatComposer({ attachments, onSend, onAttachClick, onRemoveAttachment, disabled = false }) {
   const [text, setText] = useState("");
-  const canSend = text.trim().length > 0;
+  const canSend = text.trim().length > 0 && !disabled;
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -34,7 +34,7 @@ export default function ChatComposer({ attachments, onSend, onAttachClick, onRem
       )}
 
       <div className="composer__box">
-        <IconButton icon="plus" label="Add files" outlined onClick={onAttachClick} />
+        <IconButton icon="plus" label="Upload materials" outlined onClick={onAttachClick} />
         <label className="visually-hidden" htmlFor="composer-input">
           Message to the study assistant
         </label>
@@ -45,6 +45,7 @@ export default function ChatComposer({ attachments, onSend, onAttachClick, onRem
           value={text}
           onChange={(event) => setText(event.target.value)}
           autoComplete="off"
+          maxLength={2000}
         />
         <button type="submit" className="composer__send" aria-label="Send message" disabled={!canSend}>
           <Icon name="send" />

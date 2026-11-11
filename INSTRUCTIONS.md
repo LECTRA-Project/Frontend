@@ -75,7 +75,7 @@ Useful URLs:
 - Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - Health check: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
-The frontend proxy health check is [http://localhost:5173/api/health](http://localhost:5173/api/health).
+The backend health check is [https://taskgeneration.onrender.com/api/health](https://taskgeneration.onrender.com/api/health).
 
 ### Password-reset email configuration
 
@@ -105,7 +105,7 @@ The checked-in `.env.example` contains:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | `/api` | API base used by the browser |
-| `VITE_API_PROXY_TARGET` | `http://127.0.0.1:8000` | Backend target for the Vite development proxy |
+| `VITE_API_PROXY_TARGET` | `https://taskgeneration.onrender.com` | Backend the browser calls directly (`<target>/api/...`); empty = relative `/api` through the Vite proxy to `http://127.0.0.1:8000` |
 | `VITE_API_TIMEOUT_MS` | `15000` | Axios request timeout |
 | `VITE_PYODIDE_INDEX_URL` | jsDelivr URL for the pinned Pyodide version | Where the notebook downloads Python from (optional; see section 9) |
 
@@ -127,7 +127,12 @@ Vite only exposes variables prefixed with `VITE_` to browser code. Do not put se
 
 Unknown routes redirect to sign-in. Reset links remain accessible when a browser already has an authenticated session. The reset token must be present in the emailed URL to bootstrap the flow; after the app captures it, the URL is replaced with `/reset-password` before rendering.
 
-The course-materials panel starts collapsed and contains no sample files: it lists only materials the student uploads (PDF, PPTX, IPYNB and MD; other types are rejected in the upload dialog), grouped into PDFs, Slides, Notebook and Lecture notes, with a "No course materials yet" empty state. Each file can be opened, downloaded or removed (with confirmation), and the filter box searches by file name. Uploads are stored per signed-in user in the browser's IndexedDB (`lectra-materials` database), so they survive reloads but are **not uploaded to the backend** and are lost if site data is cleared; if the browser blocks IndexedDB, files are kept for the current tab only and the panel says so. PDFs open in the inline PDF viewer, `.md` notes are rendered (sanitised) in the centre panel, `.ipynb` files open in the notebook, and `.pptx` files show a download button because browsers cannot preview them.
+The course-materials panel starts collapsed and lists the signed-in student's lectures from the backend (`GET/POST/PATCH/DELETE /api/student_profile/...lecture...`), grouped into Lecture notes, Slides, PDFs and Notebook, with a "No course materials yet" empty state and a filter box. Each lecture can be opened, edited and deleted (with confirmation). PDFs open in the inline PDF viewer, `.ipynb` files open in the runnable notebook, and slides offer a download (browsers cannot render PowerPoint).
+
+On load the app checks which backend it talks to (`GET /api/student_profile/lectures/<zero-uuid>`: 404 = AI-enabled backend, 405 = backend without AI processing):
+
+- **Backend without AI processing** (the current Render deployment): uploads accept PDF, PPTX and IPYNB; editing renames only; files open from the lecture's S3 URL; the study assistant shows "not available". Opening a notebook downloads it from S3 in the browser, so the bucket's CORS rule must allow the frontend's origin (it allows `http://localhost:5173`); otherwise the app offers a download instead.
+- **AI-enabled backend**: additionally `.ppt` and `.md` uploads with an optional course, processing status with retry, editing course/description and replacing the file, extracted slide/notebook/notes text, and the RAG study assistant with clickable page/slide/cell sources.
 
 The course-materials panel starts collapsed. Its menu button expands or hides the materials list; on desktop the notebook/PDF viewer column resizes to use the available width, and on smaller screens the panel stacks above the workspace content. Uploaded PDFs automatically fit their viewer width when the panel resizes; manual zoom overrides auto-fit.
 
@@ -242,7 +247,7 @@ The notebook is saved automatically one second after each change (code or Markdo
 ## 10. Demo behavior and current boundaries
 
 - Statistics are illustrative data. There are no sample course materials.
-- Uploaded course materials are stored in this browser (IndexedDB) and are not uploaded to the backend; files attached to an assistant message are kept in the browser tab only.
+- Course materials are stored by the backend. The study assistant and AI processing need the AI-enabled backend (see the course-materials section).
 - Notebooks are saved in browser local storage only (see section 9), not on the backend.
 - Profile details and password changes persist through the user API; a successful password change signs the user out. Account preferences are local-only because no preferences endpoint is currently implemented.
 - The study assistant UI is present, but its service may report that it is not connected.

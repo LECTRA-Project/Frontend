@@ -3,42 +3,48 @@ import { useState } from "react";
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
-import { formatFileSize, groupOf, MATERIAL_GROUPS } from "../../../services/materials/materialTypes.js";
+import { MATERIAL_GROUPS } from "../../../services/materials/materialTypes.js";
+import { STATUS_LABEL } from "../../lectures/materialTypes.js";
 
 /*
-  Left panel: the student's uploaded course materials, grouped by file type, with a
-  filter box. Only real uploads are listed; with none, an empty state invites an upload.
+  Left panel: the student's lecture materials from the backend, grouped by type,
+  with a filter box, processing status and per-item actions.
 
   Props:
-    materials         uploaded files: { id, type, name, size, url, persisted } (see useCourseMaterials)
-    status            "loading" while saved materials are read, then "ready"
-    persistent        false if files can only be kept for this tab
-    error             message to show, or null
+    materials         array of { id, type, name, meta, status, error } (see toMaterial)
+    uploads           files being uploaded right now: { id, name, progress, error }
+    loading / error   state of the initial load
     selectedId        id of the highlighted item
     collapsed         whether the materials list is hidden
     onToggleCollapsed toggles the materials list
     onSelect          called with the material when an item is clicked
-    onRemove          called with the material when its remove button is clicked
+    onEdit / onDelete / onRetry   called with the material
+    onDismissUpload   removes a failed upload from the list
+    onReload          retries loading after an error
     onUploadClick     called when "Upload materials" is clicked
-    onDismissError    hides the error
 */
 export default function CourseMaterialsPanel({
   materials,
-  status,
-  persistent,
-  error,
+  uploads = [],
+  loading = false,
+  error = null,
   selectedId,
   collapsed,
   onToggleCollapsed,
   onSelect,
-  onRemove,
+  onEdit,
+  onDelete,
+  onRetry,
+  onDismissUpload,
+  onReload,
   onUploadClick,
-  onDismissError,
 }) {
   const [filter, setFilter] = useState("");
 
   const query = filter.trim().toLowerCase();
-  const visibleMaterials = materials.filter((item) => item.name.toLowerCase().includes(query));
+  const visibleMaterials = materials.filter(
+    (item) => item.name.toLowerCase().includes(query) || (item.lecture?.course ?? "").toLowerCase().includes(query)
+  );
 
   return (
     <section
@@ -68,26 +74,54 @@ export default function CourseMaterialsPanel({
       </div>
 
       <div className="materials__list" id="course-material-list" hidden={collapsed}>
-        {error && (
-          <div className="materials__error" role="alert">
-            <span>{error}</span>
-            <IconButton icon="close" label="Dismiss" onClick={onDismissError} />
+        {uploads.length > 0 && (
+          <div className="materials__group">
+            <h3 className="materials__group-title">Uploading</h3>
+            <ul>
+              {uploads.map((upload) => (
+                <li key={upload.id} className="material-upload">
+                  <Icon name={upload.error ? "alert" : "upload"} />
+                  <span className="material-row__text">
+                    <span className="material-row__name">{upload.name}</span>
+                    {upload.error ? (
+                      <span className="material-row__error" role="alert">
+                        {upload.error}
+                      </span>
+                    ) : (
+                      <span className="material-progress" aria-label={`Uploading ${upload.name}: ${upload.progress}%`}>
+                        <span className="material-progress__bar" style={{ width: `${upload.progress}%` }} />
+                      </span>
+                    )}
+                  </span>
+                  {upload.error && (
+                    <IconButton icon="close" label={`Dismiss ${upload.name}`} onClick={() => onDismissUpload(upload.id)} />
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
-        {status === "loading" && (
-          <p className="materials__empty" role="status">
-            Loading your materials…
-          </p>
+        {loading && <p className="materials__empty">Loading your materials…</p>}
+
+        {!loading && error && (
+          <div className="materials__empty" role="alert">
+            <p>{error.message || "Your materials could not be loaded."}</p>
+            <Button size="sm" icon="refresh" onClick={onReload}>
+              Try again
+            </Button>
+          </div>
         )}
 
-        {status === "ready" && materials.length === 0 && (
+        {!loading && !error && materials.length === 0 && uploads.length === 0 && (
           <div className="materials__empty-state">
             <span className="materials__empty-icon">
               <Icon name="uploadCloud" />
             </span>
             <p className="materials__empty-title">No course materials yet</p>
-            <p className="materials__empty-text">Upload your lecture notes, PDFs, slides, or notebooks to get started.</p>
+            <p className="materials__empty-text">
+              Upload your lecture notes, PDFs, slides or notebooks to get started. The study assistant answers from them.
+            </p>
           </div>
         )}
 
@@ -110,17 +144,25 @@ export default function CourseMaterialsPanel({
                       <Icon name={group.icon} />
                       <span className="material-row__text">
                         <span className="material-row__name">{item.name}</span>
-                        <span className="material-row__meta">
-                          {groupOf(item.type).short} · {formatFileSize(item.size)}
-                          {!item.persisted && " · this tab only"}
-                        </span>
+                        <span className="material-row__meta">{item.meta}</span>
+                        {item.status && item.status !== "completed" && (
+                          <span className={`status-badge status-badge--${item.status}`} title={item.error || undefined}>
+                            {STATUS_LABEL[item.status] ?? item.status}
+                          </span>
+                        )}
+                        {item.status === "failed" && item.error && (
+                          <span className="material-row__error" title={item.error}>
+                            {item.error}
+                          </span>
+                        )}
                       </span>
                     </button>
                     <span className="material-item__actions">
-                      <a className="icon-btn" href={item.url} download={item.name} aria-label={`Download ${item.name}`} title="Download">
-                        <Icon name="download" size={16} />
-                      </a>
-                      <IconButton icon="trash" label={`Remove ${item.name}`} onClick={() => onRemove(item)} />
+                      {item.status === "failed" && onRetry && (
+                        <IconButton icon="refresh" label={`Retry processing ${item.name}`} onClick={() => onRetry(item)} />
+                      )}
+                      {onEdit && <IconButton icon="edit" label={`Edit ${item.name}`} onClick={() => onEdit(item)} />}
+                      {onDelete && <IconButton icon="trash" label={`Delete ${item.name}`} onClick={() => onDelete(item)} />}
                     </span>
                   </li>
                 ))}
@@ -129,19 +171,12 @@ export default function CourseMaterialsPanel({
           );
         })}
 
-        {materials.length > 0 && visibleMaterials.length === 0 && (
+        {query && materials.length > 0 && visibleMaterials.length === 0 && (
           <p className="materials__empty">No materials match “{filter}”.</p>
         )}
       </div>
 
       <div className="materials__bottom" hidden={collapsed}>
-        {materials.length > 0 && (
-          <p className="materials__storage-note">
-            {persistent
-              ? "Saved in this browser only — not uploaded to the LECTRA server."
-              : "This browser can’t save files, so they are kept until you close this tab."}
-          </p>
-        )}
         <Button icon="upload" fullWidth onClick={onUploadClick}>
           Upload materials
         </Button>

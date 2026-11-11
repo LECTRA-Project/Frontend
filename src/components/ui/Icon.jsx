@@ -166,6 +166,24 @@ const PATHS = {
       <path d="M8.2 5a8.6 8.6 0 0 1 1.8-.5c5.5 0 8.5 5.5 8.5 5.5a14 14 0 0 1-2.3 3M5.6 6.3A13.7 13.7 0 0 0 1.5 10s3 5.5 8.5 5.5c1.5 0 2.8-.4 4-1" />
     </>
   ),
+  edit: (
+    <>
+      <path d="M12.5 4.5l3 3L7 16H4v-3z" />
+      <path d="M11 6l3 3" />
+    </>
+  ),
+  refresh: (
+    <>
+      <path d="M16 10a6 6 0 1 1-1.8-4.3" />
+      <path d="M16 3.5v3.5h-3.5" />
+    </>
+  ),
+  alert: (
+    <>
+      <circle cx="10" cy="10" r="7" />
+      <path d="M10 6.5v4M10 13.5v.01" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 18, strokeWidth = 1.6, className }) {

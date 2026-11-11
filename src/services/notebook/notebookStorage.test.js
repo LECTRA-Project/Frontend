@@ -25,10 +25,12 @@ describe("notebookStorage", () => {
   });
 
   it("explains a full browser storage", () => {
-    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+    // Spy on the prototype: newer jsdom versions ignore a spy on the localStorage instance.
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new DOMException("full", "QuotaExceededError");
     });
     expect(() => saveNotebook("user-1", notebook)).toThrow(/Browser storage is full/);
+    spy.mockRestore();
   });
 
   it("throws on unreadable saved data instead of silently dropping it", () => {
