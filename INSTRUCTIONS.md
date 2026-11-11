@@ -107,6 +107,7 @@ The checked-in `.env.example` contains:
 | `VITE_API_BASE_URL` | `/api` | API base used by the browser |
 | `VITE_API_PROXY_TARGET` | `http://127.0.0.1:8000` | Backend target for the Vite development proxy |
 | `VITE_API_TIMEOUT_MS` | `15000` | Axios request timeout |
+| `VITE_PYODIDE_INDEX_URL` | jsDelivr URL for the pinned Pyodide version | Where the notebook downloads Python from (optional; see section 9) |
 
 Vite only exposes variables prefixed with `VITE_` to browser code. Do not put secrets in frontend environment variables. With the default `/api` URL, requests are proxied to the backend without requiring browser CORS. For a direct API connection, set `VITE_API_BASE_URL` to the full backend API URL and include the frontend origin in backend `CORS_ORIGINS`.
 
@@ -118,13 +119,15 @@ Vite only exposes variables prefixed with `VITE_` to browser code. Do not put se
 | `/create-account` | Create account | Guest |
 | `/forget-password` | Request a reset email | Guest |
 | `/reset-password?token=...` | Choose a new password | Public reset link; the page captures the token and immediately removes it from the visible URL |
-| `/workspace` | Notebook workspace | Signed in |
+| `/workspace` | Python notebook workspace | Signed in |
 | `/workspace/exam` | Exam workspace | Signed in |
 | `/profile` | Profile and password fields | Signed in |
 | `/settings` | Account preferences | Signed in |
 | `/statistics` | Sample performance statistics | Signed in |
 
 Unknown routes redirect to sign-in. Reset links remain accessible when a browser already has an authenticated session. The reset token must be present in the emailed URL to bootstrap the flow; after the app captures it, the URL is replaced with `/reset-password` before rendering.
+
+The course-materials panel starts collapsed and contains no sample files: it lists only materials the student uploads (PDF, PPTX, IPYNB and MD; other types are rejected in the upload dialog), grouped into PDFs, Slides, Notebook and Lecture notes, with a "No course materials yet" empty state. Each file can be opened, downloaded or removed (with confirmation), and the filter box searches by file name. Uploads are stored per signed-in user in the browser's IndexedDB (`lectra-materials` database), so they survive reloads but are **not uploaded to the backend** and are lost if site data is cleared; if the browser blocks IndexedDB, files are kept for the current tab only and the panel says so. PDFs open in the inline PDF viewer, `.md` notes are rendered (sanitised) in the centre panel, `.ipynb` files open in the notebook, and `.pptx` files show a download button because browsers cannot preview them.
 
 The course-materials panel starts collapsed. Its menu button expands or hides the materials list; on desktop the notebook/PDF viewer column resizes to use the available width, and on smaller screens the panel stacks above the workspace content. Uploaded PDFs automatically fit their viewer width when the panel resizes; manual zoom overrides auto-fit.
 
@@ -176,7 +179,7 @@ npm run lint
 npm run build
 ```
 
-Vitest uses jsdom and mocked HTTP requests for normal tests. Test files are under `src/` and use `src/test/helpers.jsx` for API mocks and route rendering. A live auth test is optional:
+Vitest uses jsdom and mocked HTTP requests for normal tests. Test files are under `src/` and use `src/test/helpers.jsx` for API mocks and route rendering. jsdom has no Web Workers or WebAssembly, so `npm test` covers the notebook's kernel protocol (with a fake worker), reducer, .ipynb conversion, storage and Markdown sanitising; actually running Python must be checked in a real browser. A live auth test is optional:
 
 ```bash
 npm run test:live
@@ -192,17 +195,62 @@ pytest
 
 The default pytest configuration excludes live provider tests. To opt in to provider-dependent tests, configure the required keys and run `pytest -m live`.
 
-## 9. Demo behavior and current boundaries
+## 9. Python notebook
 
-- Sample materials and statistics are illustrative data.
-- Picked files are kept in the browser session and are not uploaded to the backend.
-- Profile detail and password changes persist through the user API; a successful password change signs the user out. Account preferences are local-only because no preferences endpoint is currently implemented.
+The centre panel at `/workspace` is a Jupyter-style notebook that runs real Python.
+
+### How it works
+
+- **Engine:** [Pyodide](https://pyodide.org) 314.0.7 (CPython 3.14 compiled to WebAssembly) runs in a Web Worker (`src/services/python/pyodideWorker.js`), so long-running code never freezes the page. Student code is never run with JavaScript `eval()` and never runs on the LECTRA backend.
+- **Kernel:** `PythonKernel` (`src/services/python/pythonKernel.js`) owns the worker. All cells share one Python namespace until **Restart**, which replaces the worker. The kernel lives in `WorkspaceLayout`, so variables and outputs survive switching to the Exam view and back; leaving the workspace shuts it down.
+- **Runtime:** `kernelRuntime.py` runs each cell, captures `print` output as it happens, shows the value of the last expression (`Out[n]`), supports `display()`, renders pandas tables as HTML and matplotlib figures as PNG (`plt.show()` or automatically at the end of the cell), and formats exceptions as Python tracebacks.
+- **Packages:** imports of packages in the Pyodide distribution (NumPy, pandas, matplotlib, SciPy, SymPy, …) are downloaded automatically on first import. `micropip` can install pure-Python wheels.
+- **Loading:** Python (~10 MB) is downloaded from `cdn.jsdelivr.net` the first time the notebook opens and then cached by the browser. If loading fails (offline, blocked CDN), the kernel shows **Unavailable** with the reason and a **Retry** button. To self-host, serve a Pyodide `full` distribution and set `VITE_PYODIDE_INDEX_URL`.
+
+### Features
+
+- Code cells (CodeMirror 6: Python highlighting, line numbers, auto-indent, bracket matching, keyword/name autocomplete) and Markdown cells (headings, emphasis, lists, links, tables, `$math$` via KaTeX). Raw cells from imported files are kept.
+- Per cell: Run, move up/down, delete, and a menu with insert above/below, duplicate, convert code↔Markdown and clear output.
+- Toolbar: editable title, save state, kernel status (Loading / Idle / Busy / Error / Unavailable), add code/Markdown cell, Run all, Stop, Restart (with confirmation), Clear outputs, **Download .ipynb** (disabled while the notebook is empty), and File → New notebook / Import .ipynb. There is no Save button: saving is automatic (Ctrl/⌘ + S saves immediately).
+- **Run all** runs code cells in order on the same kernel and stops at the first error, like Jupyter.
+- Opening a `.ipynb` (File → Import, or a notebook added through *Upload materials* and selected in the materials list) replaces the current notebook after confirmation and starts a fresh kernel. Import/export follow nbformat 4 (exported as 4.5), preserving cell order, types, ids, metadata and outputs.
+- Markdown and HTML outputs are sanitised with DOMPurify (no scripts, event handlers or `<style>`), and links open in a new tab.
+
+| Shortcut | Action |
+| --- | --- |
+| Shift + Enter | Run the cell (or render Markdown) and move to the next cell, creating one at the end |
+| Ctrl/⌘ + Enter | Run the cell in place |
+| Ctrl/⌘ + S | Save the notebook |
+| Escape | Leave the editor (command mode); closes autocomplete first if it is open |
+| Enter (command mode) | Edit the selected cell |
+| ↑ / ↓ (command mode) | Select the previous / next cell |
+| Delete (command mode) | Delete the selected cell (asks first unless the cell is empty) |
+
+### Saving
+
+The notebook is saved automatically one second after each change (code or Markdown edits, adding, deleting or moving cells, renaming), and immediately on Ctrl/⌘ + S, to the browser's **local storage**, keyed by the signed-in user's id (`lectra:notebook:v1:<user id>`). It is **not sent to the backend**: it is not available on other devices or browsers and is lost if site data is cleared. Download the `.ipynb` to keep a copy. If storage is full (large image outputs), the toolbar shows the error rather than claiming the notebook was saved.
+
+### Limits and safety
+
+- Each cell may run for at most 2 minutes (`EXECUTION_TIMEOUT_MS`); then it is stopped with a `TimeoutError`.
+- **Stop / timeouts:** a real `KeyboardInterrupt` that keeps variables requires the page to be cross-origin isolated (COOP/COEP headers, enabling `SharedArrayBuffer`). The dev server does not send these headers, because they would also restrict the Google Fonts stylesheet and embedded PDF previews; so by default Stop terminates the worker and restarts Python, which clears variables. The cell's output says so.
+- `input()` is not supported (cells have no interactive console); it raises a `RuntimeError` explaining this.
+- Printed output is capped at 500,000 characters per cell run; the cell keeps running and the output notes the truncation.
+- The worker cannot read the page, its DOM, local storage or the sign-in token. Python can make network requests from the browser (e.g. `pyodide.http`), like any web page; it cannot access the backend with the student's credentials.
+- Browser-based Python covers teaching use well but is slower than native Python, and packages with native code are limited to those built for Pyodide.
+
+## 10. Demo behavior and current boundaries
+
+- Statistics are illustrative data. There are no sample course materials.
+- Uploaded course materials are stored in this browser (IndexedDB) and are not uploaded to the backend; files attached to an assistant message are kept in the browser tab only.
+- Notebooks are saved in browser local storage only (see section 9), not on the backend.
+- Profile details and password changes persist through the user API; a successful password change signs the user out. Account preferences are local-only because no preferences endpoint is currently implemented.
 - The study assistant UI is present, but its service may report that it is not connected.
 - The task-generator router is currently scaffolded without endpoint implementations.
 
 Check the relevant service and feature before assuming a UI is backed by a persistent API.
 
-## 10. Change and documentation workflow
+## 11. Change and documentation workflow
 
 1. Make changes in the relevant feature or service; keep cross-cutting API behavior in the shared client/service layer.
 2. Add or update tests alongside behavior changes.

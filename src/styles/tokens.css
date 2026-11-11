@@ -31,6 +31,18 @@
 
   /* Feedback */
   --danger: #b04a3c;
+  --danger-strong: #933d31;
+  --danger-soft: #fbefed;
+
+  /* Code (notebook editor syntax colours and output) */
+  --code-keyword: #3e6450;
+  --code-string: #9a5b2e;
+  --code-number: #2f6f8f;
+  --code-comment: #959891;
+  --code-function: #5a4f9c;
+  --code-definition: #2a2b2a;
+  --code-output-bg: #ffffff;
+  --warning: #b07a1f;
 
   /* Typography */
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;

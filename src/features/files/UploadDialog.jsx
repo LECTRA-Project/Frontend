@@ -3,21 +3,21 @@ import { useRef, useState } from "react";
 import Modal from "../../components/ui/Modal.jsx";
 import Button from "../../components/ui/Button.jsx";
 import Icon from "../../components/ui/Icon.jsx";
+import { ACCEPTED_EXTENSIONS, materialTypeOf, SUPPORTED_LABEL } from "../../services/materials/materialTypes.js";
 import "./files.css";
 
 /*
   Upload dialog — shared by "Upload materials" and the + button in the assistant.
 
-  FRONTEND ONLY: files are picked in the browser and handed to `onUpload(files)`.
-  Nothing is sent to a server and nothing is saved; the files disappear when the
-  page is reloaded.
+  Files are picked in the browser and the supported ones are handed to `onUpload(files)`;
+  unsupported types are listed with a warning and left out. Nothing is sent to a server
+  here — `note` tells the student where the files will be kept.
 */
-const ACCEPTED = ".pdf,.pptx,.ipynb";
-
-export default function UploadDialog({ onCancel, onUpload }) {
+export default function UploadDialog({ note, onCancel, onUpload }) {
   const inputRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [dragging, setDragging] = useState(false);
+  const supportedFiles = files.filter((file) => materialTypeOf(file.name));
 
   function addFiles(fileList) {
     setFiles((current) => [...current, ...Array.from(fileList)]);
@@ -50,7 +50,7 @@ export default function UploadDialog({ onCancel, onUpload }) {
           <input
             ref={inputRef}
             type="file"
-            accept={ACCEPTED}
+            accept={ACCEPTED_EXTENSIONS}
             multiple
             hidden
             onChange={(event) => {
@@ -60,14 +60,15 @@ export default function UploadDialog({ onCancel, onUpload }) {
           />
         </div>
 
-        <p className="upload__help">Supported: PDF, slides (PPTX) and notebooks (IPYNB).</p>
+        <p className="upload__help">Supported: {SUPPORTED_LABEL} (PDFs, slides, notebooks and Markdown notes).</p>
 
         {files.length > 0 && (
           <ul className="upload__list" aria-label="Selected files">
             {files.map((file, index) => (
-              <li key={`${file.name}-${index}`}>
+              <li key={`${file.name}-${index}`} className={materialTypeOf(file.name) ? "" : "upload__item--rejected"}>
                 <Icon name="fileText" size={16} />
                 <span className="upload__file-name">{file.name}</span>
+                {!materialTypeOf(file.name) && <span className="upload__rejected">Not supported</span>}
                 <button
                   type="button"
                   className="upload__remove"
@@ -81,11 +82,11 @@ export default function UploadDialog({ onCancel, onUpload }) {
           </ul>
         )}
 
-        <p className="upload__local-note">Files stay in this browser tab only — they are not uploaded or saved yet.</p>
+        <p className="upload__local-note">{note}</p>
 
         <div className="upload__actions">
           <Button onClick={onCancel}>Cancel</Button>
-          <Button variant="primary" disabled={files.length === 0} onClick={() => onUpload(files)}>
+          <Button variant="primary" disabled={supportedFiles.length === 0} onClick={() => onUpload(supportedFiles)}>
             Upload
           </Button>
         </div>

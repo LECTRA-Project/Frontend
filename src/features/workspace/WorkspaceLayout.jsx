@@ -1,99 +1,87 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import WorkspaceHeader from "./components/WorkspaceHeader.jsx";
 import CourseMaterialsPanel from "./components/CourseMaterialsPanel.jsx";
 import StudyAssistantPanel from "./components/StudyAssistantPanel.jsx";
+import ConfirmDialog from "../../components/ui/ConfirmDialog.jsx";
 import UploadDialog from "../files/UploadDialog.jsx";
 import PdfViewerPanel from "../files/PdfViewerPanel.jsx";
-import { SAMPLE_MATERIALS } from "../../data/sampleMaterials.js";
+import MaterialViewerPanel from "../files/MaterialViewerPanel.jsx";
+import { useCourseMaterials } from "../files/useCourseMaterials.js";
+import { useAuth } from "../auth/authContext.js";
+import { useNotebook } from "../notebook/useNotebook.js";
+import { usePythonKernel } from "../notebook/usePythonKernel.js";
 import "./workspace.css";
 
-/* The blank cells the notebook starts with (no content, only placeholders). */
-const STARTING_CELLS = [
-  { id: "cell-1", type: "markdown", value: "" },
-  { id: "cell-2", type: "code", value: "" },
-  { id: "cell-3", type: "markdown", value: "" },
-  { id: "cell-4", type: "code", value: "" },
-];
-
-/* Works out which material group a picked file belongs to, from its extension. */
-function typeFromFileName(name) {
-  const extension = name.split(".").pop().toLowerCase();
-  if (extension === "pdf") return "pdf";
-  if (extension === "pptx" || extension === "ppt") return "slides";
-  if (extension === "ipynb") return "notebook";
-  return "notes";
-}
+const UPLOAD_NOTES = {
+  materials: "Files are saved in this browser only — they are not uploaded to the LECTRA server.",
+  assistant: "Files stay in this browser tab only — they are not uploaded or saved yet.",
+};
 
 /*
   The main study workspace:
     header on top, then three columns —
-    Course materials | Notebook, Exam or PDF viewer | Study assistant
+    Course materials | Notebook, Exam or file viewer | Study assistant
 
   This component owns the state that several parts share:
     - whether the upload dialog is open
-    - which PDF is open in the centre panel
-    - files picked this session (kept only in the browser, never uploaded)
+    - which uploaded file (PDF, notes, slides) is open in the centre panel
+    - the student's uploaded course materials (saved in this browser, see useCourseMaterials)
     - files attached to the assistant message
-    - the notebook cells
+    - the notebook (cells, outputs, run queue) and its Python kernel, so they survive
+      switching to the Exam view and back
 */
 export default function WorkspaceLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+  const userKey = user?.id ?? user?.email ?? "signed-in-user";
 
-  const [selectedId, setSelectedId] = useState("notebook-01");
+  const [selectedId, setSelectedId] = useState(null);
   const [materialsCollapsed, setMaterialsCollapsed] = useState(true);
   const [uploadTarget, setUploadTarget] = useState(null); // null | "materials" | "assistant"
-  // The PDF shown inline in the centre panel, plus the URL it was opened on:
+  // The file shown in the centre panel, plus the URL it was opened on:
   // { material, path } or null. It only shows while the URL is unchanged, so using the
-  // Exam button or "Back to notebook" leaves the PDF view automatically.
-  const [openPdf, setOpenPdf] = useState(null);
-  const [sessionFiles, setSessionFiles] = useState([]); // files picked in the upload dialog
+  // Exam button or "Back to notebook" leaves the viewer automatically.
+  const [openFile, setOpenFile] = useState(null);
+  const [pendingRemoval, setPendingRemoval] = useState(null); // material waiting for confirmation
   const [attachments, setAttachments] = useState([]); // files attached to the next assistant message
-  const [cells, setCells] = useState(STARTING_CELLS);
+  const courseMaterials = useCourseMaterials(userKey);
+  const { kernel, kernelState } = usePythonKernel();
+  const notebookState = useNotebook(kernel, userKey);
 
-  // Free the temporary browser URLs of picked files when leaving the workspace.
-  const sessionFilesRef = useRef(sessionFiles);
-  useEffect(() => {
-    sessionFilesRef.current = sessionFiles;
-  }, [sessionFiles]);
-  useEffect(() => () => sessionFilesRef.current.forEach((item) => URL.revokeObjectURL(item.url)), []);
-
-  const materials = [...SAMPLE_MATERIALS, ...sessionFiles];
-
-  const pdfIsOpen = openPdf !== null && openPdf.path === location.pathname;
+  const viewerIsOpen = openFile !== null && openFile.path === location.pathname;
 
   function handleSelectMaterial(material) {
     setSelectedId(material.id);
-    if (material.type === "pdf") {
-      // Show (or switch to) this PDF in the centre panel.
-      setOpenPdf({ material, path: location.pathname });
-    } else if (material.type === "notebook") {
-      setOpenPdf(null);
+    if (material.type === "notebook") {
+      setOpenFile(null);
       if (location.pathname !== "/workspace") navigate("/workspace");
+      notebookState.actions.openFile(material.file);
+    } else {
+      // Show (or switch to) this PDF, notes or slides file in the centre panel.
+      setOpenFile({ material, path: location.pathname });
     }
   }
 
-  function handleUpload(files) {
-    const picked = files.map((file) => ({
-      id: crypto.randomUUID(),
-      name: file.name,
-      file,
-    }));
-
-    if (uploadTarget === "assistant") {
-      setAttachments((list) => [...list, ...picked]);
-    } else {
-      const newMaterials = picked.map((item) => ({
-        ...item,
-        type: typeFromFileName(item.name),
-        meta: "Added this session · not saved",
-        url: URL.createObjectURL(item.file), // lets the PDF viewer show the real file
-      }));
-      setSessionFiles((list) => [...list, ...newMaterials]);
-    }
+  async function handleUpload(files) {
+    const target = uploadTarget;
     setUploadTarget(null);
+    if (target === "assistant") {
+      setAttachments((list) => [...list, ...files.map((file) => ({ id: crypto.randomUUID(), name: file.name, file }))]);
+    } else {
+      await courseMaterials.addFiles(files);
+    }
+  }
+
+  async function confirmRemoval() {
+    const material = pendingRemoval;
+    setPendingRemoval(null);
+    const removed = await courseMaterials.removeMaterial(material);
+    if (!removed) return;
+    if (openFile?.material.id === material.id) setOpenFile(null);
+    if (selectedId === material.id) setSelectedId(null);
   }
 
   return (
@@ -102,26 +90,34 @@ export default function WorkspaceLayout() {
 
       <div className={`workspace__body ${materialsCollapsed ? "workspace__body--materials-collapsed" : ""}`}>
         <CourseMaterialsPanel
-          materials={materials}
+          materials={courseMaterials.materials}
+          status={courseMaterials.status}
+          persistent={courseMaterials.persistent}
+          error={courseMaterials.error}
           selectedId={selectedId}
           collapsed={materialsCollapsed}
           onToggleCollapsed={() => setMaterialsCollapsed((collapsed) => !collapsed)}
           onSelect={handleSelectMaterial}
+          onRemove={setPendingRemoval}
           onUploadClick={() => setUploadTarget("materials")}
+          onDismissError={courseMaterials.dismissError}
         />
 
         {/*
           Centre panel: NotebookPage or ExamPage, depending on the URL (see router.jsx).
-          While a PDF is open it is only hidden, not removed, so collapsing the PDF brings
+          While a file is open it is only hidden, not removed, so closing the file brings
           back the notebook or exam exactly as it was (e.g. the chosen exam answer).
         */}
-        <div className="center-slot" hidden={pdfIsOpen}>
-          <Outlet context={{ cells, setCells }} />
+        <div className="center-slot" hidden={viewerIsOpen}>
+          <Outlet context={{ notebookState, kernel, kernelState }} />
         </div>
-        {pdfIsOpen && (
-          // `key` resets page and zoom when another PDF is selected.
-          <PdfViewerPanel key={openPdf.material.id} material={openPdf.material} onCollapse={() => setOpenPdf(null)} />
-        )}
+        {/* `key` resets page and zoom when another file is selected. */}
+        {viewerIsOpen &&
+          (openFile.material.type === "pdf" ? (
+            <PdfViewerPanel key={openFile.material.id} material={openFile.material} onCollapse={() => setOpenFile(null)} />
+          ) : (
+            <MaterialViewerPanel key={openFile.material.id} material={openFile.material} onCollapse={() => setOpenFile(null)} />
+          ))}
 
         <StudyAssistantPanel
           attachments={attachments}
@@ -131,7 +127,20 @@ export default function WorkspaceLayout() {
         />
       </div>
 
-      {uploadTarget && <UploadDialog onCancel={() => setUploadTarget(null)} onUpload={handleUpload} />}
+      {uploadTarget && (
+        <UploadDialog note={UPLOAD_NOTES[uploadTarget]} onCancel={() => setUploadTarget(null)} onUpload={handleUpload} />
+      )}
+      {pendingRemoval && (
+        <ConfirmDialog
+          title={`Remove “${pendingRemoval.name}”?`}
+          confirmLabel="Remove"
+          danger
+          onConfirm={confirmRemoval}
+          onCancel={() => setPendingRemoval(null)}
+        >
+          <p>The file will be deleted from your course materials in this browser. This can’t be undone.</p>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

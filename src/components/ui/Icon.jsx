@@ -93,6 +93,55 @@ const PATHS = {
   chevronRight: <path d="m8 5 5 5-5 5" />,
   chevronDown: <path d="m5 8 5 5 5-5" />,
   arrowLeft: <path d="M16 10H4M9 5l-5 5 5 5" />,
+  arrowUp: <path d="M10 16V4M5 9l5-5 5 5" />,
+  arrowDown: <path d="M10 4v12M5 11l5 5 5-5" />,
+  trash: (
+    <>
+      <path d="M3.5 5.5h13M8 5.5V3.5h4v2M5 5.5l.8 11a1 1 0 0 0 1 .9h6.4a1 1 0 0 0 1-.9l.8-11" />
+      <path d="M8.5 8.5v6M11.5 8.5v6" />
+    </>
+  ),
+  more: (
+    <>
+      <circle cx="4.5" cy="10" r="0.8" />
+      <circle cx="10" cy="10" r="0.8" />
+      <circle cx="15.5" cy="10" r="0.8" />
+    </>
+  ),
+  stop: <rect x="5" y="5" width="10" height="10" rx="1" />,
+  restart: (
+    <>
+      <path d="M16 10a6 6 0 1 1-1.8-4.3" />
+      <path d="M16 3.5v3.5h-3.5" />
+    </>
+  ),
+  save: (
+    <>
+      <path d="M4.5 3.5h9l3 3v9a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z" />
+      <path d="M7 3.5v4h6v-4M6.5 16.5v-5h7v5" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M10 3.5V13M6 9l4 4 4-4" />
+      <path d="M3.5 13.5v2a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-2" />
+    </>
+  ),
+  copy: (
+    <>
+      <rect x="7" y="7" width="9.5" height="9.5" rx="1" />
+      <path d="M13 7V4.5a1 1 0 0 0-1-1H4.5a1 1 0 0 0-1 1V12a1 1 0 0 0 1 1H7" />
+    </>
+  ),
+  code: <path d="m7 6-4 4 4 4M13 6l4 4-4 4" />,
+  text: <path d="M4 5h12M10 5v11M7 16h6" />,
+  eraser: (
+    <>
+      <path d="m8 16.5-4.3-4.3a1 1 0 0 1 0-1.4l7-7a1 1 0 0 1 1.4 0l4.3 4.3a1 1 0 0 1 0 1.4l-7 7z" />
+      <path d="M8 16.5h8.5M6.5 8l5.5 5.5" />
+    </>
+  ),
+  folder: <path d="M2.5 5.5a1 1 0 0 1 1-1h4l2 2h7a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z" />,
   zoomIn: (
     <>
       <circle cx="9" cy="9" r="5.5" />
