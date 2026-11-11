@@ -396,14 +396,14 @@ describe("session", () => {
 
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(sidebar).toHaveClass("materials--collapsed");
-    expect(screen.queryByText("Lecture 01 — Notes")).not.toBeVisible();
+    expect(screen.queryByText("No course materials yet")).not.toBeVisible();
     expect(container.querySelector(".center-panel")).toBeInTheDocument();
 
     await user.click(toggle);
 
     expect(screen.getByRole("button", { name: "Hide course materials" })).toHaveAttribute("aria-expanded", "true");
     expect(sidebar).not.toHaveClass("materials--collapsed");
-    expect(screen.getByText("Lecture 01 — Notes")).toBeVisible();
+    expect(screen.getByText("No course materials yet")).toBeVisible();
     expect(container.querySelector(".workspace__body")).not.toHaveClass("workspace__body--materials-collapsed");
   });
 

@@ -214,12 +214,92 @@
   font-size: var(--text-sm);
   color: var(--text-tertiary);
 }
+.materials__empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-3);
+  text-align: center;
+}
+.materials__empty-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-2);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.materials__empty-title {
+  font-weight: 600;
+}
+.materials__empty-text {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.materials__error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+.materials__error span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
 .materials__bottom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   padding: var(--space-4);
+}
+.materials__storage-note {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* One uploaded file: the row opens it; download/remove appear on hover or keyboard focus. */
+.material-item {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-md);
+}
+.material-item:hover {
+  background: var(--bg-subtle);
+}
+.material-item:has(.material-row--selected) {
+  background: var(--accent-soft);
+}
+.material-item__actions {
+  display: none;
+  flex-shrink: 0;
+  padding-right: var(--space-1);
+}
+.material-item:hover .material-item__actions,
+.material-item:focus-within .material-item__actions {
+  display: flex;
+}
+@media (hover: none) {
+  .material-item__actions {
+    display: flex;
+  }
+}
+.material-item__actions .icon-btn {
+  width: 28px;
+  height: 28px;
 }
 
 .material-row {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
@@ -233,13 +313,6 @@
   flex-shrink: 0;
   margin-top: 3px;
   color: var(--text-secondary);
-}
-.material-row:hover {
-  background: var(--bg-subtle);
-}
-.material-row--selected,
-.material-row--selected:hover {
-  background: var(--accent-soft);
 }
 .material-row--selected .material-row__name,
 .material-row--selected svg {
@@ -258,86 +331,7 @@
   color: var(--text-tertiary);
 }
 
-/* ---------- Notebook ---------- */
-.notebook-toolbar__file {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
-}
-.notebook-toolbar__file svg {
-  color: var(--text-secondary);
-}
-.notebook-toolbar__actions {
-  display: flex;
-  gap: var(--space-1);
-}
-.notebook__body {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: var(--space-6) var(--space-8) var(--space-6) var(--space-6);
-}
-.notebook__notice {
-  margin-left: 54px;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-size: var(--text-sm);
-}
-.nb-cell-row {
-  display: flex;
-  gap: var(--space-3);
-  max-width: 720px;
-}
-.nb-cell__prompt {
-  white-space: nowrap;
-  width: 42px;
-  flex-shrink: 0;
-  padding-top: 26px;
-  text-align: right;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-.nb-cell {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
-}
-.nb-cell--active {
-  border: 1.5px solid var(--accent);
-}
-.nb-cell__label {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-}
-.nb-cell__input {
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  resize: none;
-  line-height: 1.5;
-}
-.nb-cell__input:focus-visible {
-  box-shadow: none;
-}
-.nb-cell__input::placeholder {
-  color: var(--text-tertiary);
-}
-.nb-cell__input--code {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-}
+/* Notebook styles live in features/notebook/notebook.css */
 
 /* ---------- Exam ---------- */
 .exam__head {
@@ -619,9 +613,6 @@
   .workspace__body--materials-collapsed {
     grid-template-columns: 48px minmax(0, 1fr) 290px;
   }
-  .notebook__body {
-    padding: var(--space-4);
-  }
 }
 
 @media (max-width: 880px) {
@@ -661,12 +652,6 @@
 }
 
 @media (max-width: 520px) {
-  .notebook-toolbar .pill {
-    display: none;
-  }
-  .nb-cell__prompt {
-    width: 28px;
-  }
   .exam__footer {
     flex-wrap: wrap;
   }

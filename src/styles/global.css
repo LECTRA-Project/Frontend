@@ -120,6 +120,13 @@ button {
   background: var(--bg-subtle);
   color: var(--text-primary);
 }
+.btn--danger {
+  background: var(--danger);
+  color: var(--text-on-accent);
+}
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger-strong);
+}
 .btn--active,
 .btn--active:hover:not(:disabled) {
   background: var(--accent-soft);
@@ -307,6 +314,83 @@ button {
   flex: 1;
   font-size: var(--text-lg);
   font-weight: 600;
+}
+
+/* ---------- Confirm dialog ---------- */
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: 0 var(--space-5) var(--space-5);
+}
+.confirm__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+}
+.confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ---------- Dropdown menu ---------- */
+.menu {
+  position: relative;
+  display: inline-flex;
+}
+.menu__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  z-index: 30;
+  min-width: 200px;
+  padding: var(--space-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-pop);
+}
+.menu__list--end {
+  right: 0;
+}
+.menu__list--start {
+  left: 0;
+}
+.menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 34px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--text-sm);
+  text-align: left;
+  white-space: nowrap;
+}
+.menu__item svg {
+  color: var(--text-secondary);
+}
+.menu__item:hover:not(:disabled),
+.menu__item:focus-visible {
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+.menu__item:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.menu__item--danger,
+.menu__item--danger svg {
+  color: var(--danger);
+}
+.menu__separator {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--border-default);
 }
 
 /* ---------- Small helper text ---------- */
