@@ -109,6 +109,16 @@ const PATHS = {
     </>
   ),
   stop: <rect x="5" y="5" width="10" height="10" rx="1" />,
+  grip: (
+    <>
+      <circle cx="7.5" cy="5" r="1.1" />
+      <circle cx="12.5" cy="5" r="1.1" />
+      <circle cx="7.5" cy="10" r="1.1" />
+      <circle cx="12.5" cy="10" r="1.1" />
+      <circle cx="7.5" cy="15" r="1.1" />
+      <circle cx="12.5" cy="15" r="1.1" />
+    </>
+  ),
   restart: (
     <>
       <path d="M16 10a6 6 0 1 1-1.8-4.3" />

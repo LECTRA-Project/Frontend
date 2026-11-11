@@ -1,4 +1,6 @@
 import RUNTIME_SOURCE from "./kernelRuntime.py?raw";
+import { CellCommandError, prepareCell } from "./cellCommands.js";
+import { createPackageInstaller } from "./packageInstaller.js";
 
 /*
   Python kernel worker (one worker = one kernel).
@@ -10,12 +12,16 @@ import RUNTIME_SOURCE from "./kernelRuntime.py?raw";
   The worker has no access to the page, its DOM, localStorage or the sign-in token;
   it only receives the code of the cell being run.
 
+  Packages: before a cell runs, the Pyodide packages it imports are loaded (and checked).
+  `%pip install …` lines are turned into calls to packageInstaller.js (see cellCommands.js);
+  there is no shell, and installed packages stay available until the kernel restarts.
+
   Messages in (from pythonKernel.js):
     { type: "init", indexURL, interruptBuffer }   interruptBuffer: Int32Array on a SharedArrayBuffer, or null
     { type: "execute", id, code, executionCount }
 
   Messages out:
-    { type: "progress", message }                       loading Python or packages
+    { type: "progress", message }                       loading Python or packages ("" when done)
     { type: "ready", pythonVersion, pyodideVersion }
     { type: "init-error", message }
     { type: "started", id }                             packages loaded, the code itself starts
@@ -30,6 +36,9 @@ const STREAM_FLUSH_MS = 50;
 
 let pyodide = null;
 let runCell = null;
+let installer = null;
+// While a `%pip install -q` line runs, the loader's "Loading …" lines are not printed.
+let quietInstall = false;
 let interruptBuffer = null;
 
 // The execution in progress: { id, streamedChars, truncated }
@@ -59,7 +68,24 @@ async function init({ indexURL, interruptBuffer: buffer }) {
 
     pyodide.setStdout({ write: (bytes) => writeStream("stdout", bytes) });
     pyodide.setStderr({ write: (bytes) => writeStream("stderr", bytes) });
-    pyodide.registerJsModule("_lectra_bridge", { emit: (json) => emitOutput(JSON.parse(json)) });
+    installer = createPackageInstaller({
+      pyodide,
+      indexURL,
+      onProgress: (message) => post({ type: "progress", message }),
+    });
+    pyodide.registerJsModule("_lectra_bridge", {
+      emit: (json) => emitOutput(JSON.parse(json)),
+      // Called by `%pip install` lines; resolves a JSON result string.
+      install: async (json) => {
+        const request = JSON.parse(json);
+        quietInstall = request.quiet;
+        try {
+          return JSON.stringify(await installer.install(request));
+        } finally {
+          quietInstall = false;
+        }
+      },
+    });
 
     if (buffer) {
       interruptBuffer = buffer;
@@ -81,21 +107,35 @@ async function execute({ id, code, executionCount }) {
   current = { id, streamedChars: 0, truncated: false };
   if (interruptBuffer) interruptBuffer[0] = 0;
 
+  let prepared;
   try {
-    // Fetch packages from the Pyodide distribution that the cell imports (numpy, pandas, …).
-    await pyodide.loadPackagesFromImports(code, {
-      messageCallback: (message) => post({ type: "progress", message }),
-      errorCallback: (message) => post({ type: "progress", message }),
-    });
+    prepared = prepareCell(code);
+    // Load the packages from the Pyodide distribution that the cell imports (numpy, pandas, …).
+    // If one cannot be loaded, say so instead of running into a bare ModuleNotFoundError.
+    const loadError = await installer.loadImports(prepared.code);
+    if (loadError) {
+      finishEarly(id, { ename: "PackageLoadError", evalue: loadError, traceback: [] });
+      return;
+    }
   } catch (error) {
-    // The import itself will then fail inside Python with a normal ImportError.
-    post({ type: "progress", message: `Could not load packages: ${describe(error)}` });
+    if (error instanceof CellCommandError) {
+      const line = code.split("\n")[error.line - 1].trim();
+      finishEarly(id, {
+        ename: "UsageError",
+        evalue: error.message,
+        traceback: [`Cell In[${executionCount}], line ${error.line}:`, `    ${line}`],
+      });
+    } else {
+      finishEarly(id, { ename: "KernelError", evalue: describe(error), traceback: [] });
+    }
+    return;
   }
 
   post({ type: "started", id });
   let result;
   try {
-    result = JSON.parse(await runCell(code, executionCount));
+    // The original code is passed too, so tracebacks show what the student wrote.
+    result = JSON.parse(await runCell(prepared.code, executionCount, code));
   } catch (error) {
     // run_cell catches every Python exception, so reaching this means Pyodide itself broke.
     result = {
@@ -109,8 +149,15 @@ async function execute({ id, code, executionCount }) {
   post({ type: "result", id, ...result });
 }
 
+/* Ends an execution that never started running Python. */
+function finishEarly(id, error) {
+  current = null;
+  post({ type: "result", id, status: "error", error });
+}
+
 function writeStream(name, bytes) {
-  queueStream(name, decoders[name].decode(bytes, { stream: true }));
+  const text = decoders[name].decode(bytes, { stream: true });
+  if (!(quietInstall && name === "stdout")) queueStream(name, text);
   return bytes.length;
 }
 

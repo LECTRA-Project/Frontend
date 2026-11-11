@@ -9,6 +9,7 @@ Jupyter-style output dicts through the `_lectra_bridge` module.
 
 import base64
 import builtins
+import importlib.util
 import io
 import json
 import linecache
@@ -18,6 +19,7 @@ import traceback
 import types
 
 from _lectra_bridge import emit as _emit_json
+from _lectra_bridge import install as _install_packages
 from pyodide.code import eval_code_async
 
 # The students' global namespace. It is separate from this module's globals, so
@@ -130,6 +132,24 @@ def _input_unavailable(prompt=""):
 builtins.display = display
 builtins.input = _input_unavailable
 
+
+class PackageInstallError(Exception):
+    """A %pip install line failed; the message explains why."""
+
+
+async def _pip_install(request_json):
+    """Runs one `%pip install …` line (rewritten by cellCommands.js) through the worker's installer."""
+    result = json.loads(await _install_packages(request_json))
+    if result["status"] != "ok":
+        raise PackageInstallError(result["message"])
+    importlib.invalidate_caches()
+    if result["text"]:
+        print(result["text"], end="")
+
+
+# Called by the rewritten %pip lines. The dunder name keeps it out of the students' way.
+builtins.__lectra_pip_install__ = _pip_install
+
 # matplotlib backend selected through MPLBACKEND=module://lectra_mpl_backend.
 # It renders with Agg (no browser DOM exists inside the worker) and plt.show()
 # sends the figures to the cell output immediately. It is a real module file
@@ -166,7 +186,29 @@ def _hide_runtime_frames(exception):
         exception = exception.__cause__ or exception.__context__
 
 
+def _missing_module_hint(error):
+    """Extra advice for `import x` when x is not installed in this browser kernel."""
+    top = (error.name or "").split(".")[0]
+    if not top:
+        return None
+    try:
+        if importlib.util.find_spec(top) is not None:
+            return None  # the package exists; a submodule or dependency is missing
+    except (ImportError, ValueError):
+        pass
+    return (
+        f"No module named '{error.name}'. “{top}” isn't installed in this browser kernel. "
+        f"If it is included with Pyodide or is a pure-Python package on PyPI, run %pip install {top} "
+        "in a cell (the install name can differ from the module name), then run this cell again. "
+        "Packages installed with %pip are cleared when the kernel restarts. Packages that need native "
+        "code not built for Pyodide (for example torch) can't run in the browser."
+    )
+
+
 def _format_error(error, filename):
+    if isinstance(error, PackageInstallError):
+        # The failing line is the student's own %pip line; no Python frames are useful.
+        return {"ename": "PackageInstallError", "evalue": str(error), "traceback": []}
     # Drop the frames of Pyodide's own runner; start at the student's cell.
     tb = error.__traceback__
     while tb is not None and tb.tb_frame.f_code.co_filename != filename:
@@ -174,18 +216,26 @@ def _format_error(error, filename):
     summary = traceback.TracebackException(type(error), error, tb)
     _hide_runtime_frames(summary)
     text = "".join(summary.format())
+    evalue = str(error)
+    if isinstance(error, ModuleNotFoundError):
+        evalue = _missing_module_hint(error) or evalue
     return {
         "ename": type(error).__name__,
-        "evalue": str(error),
+        "evalue": evalue,
         "traceback": text.rstrip("\n").split("\n"),
     }
 
 
-async def run_cell(code, execution_count):
-    """Run one cell in the shared namespace. Returns a JSON status string."""
+async def run_cell(code, execution_count, source=None):
+    """Run one cell in the shared namespace. Returns a JSON status string.
+
+    `code` is what runs (%pip lines already rewritten); `source` is what the student
+    wrote, line for line, and is what tracebacks show.
+    """
     filename = f"<cell In[{execution_count}]>"
+    shown = code if source is None else source
     # Lets tracebacks show the source lines, also for functions defined in earlier cells.
-    linecache.cache[filename] = (len(code), None, code.splitlines(True), filename)
+    linecache.cache[filename] = (len(shown), None, shown.splitlines(True), filename)
     try:
         result = await eval_code_async(
             code,

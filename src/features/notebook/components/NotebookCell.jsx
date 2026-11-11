@@ -1,6 +1,9 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import "katex/dist/katex.min.css";
 
+import { isOverCellDropZone } from "../../../services/notebook/cellContext.js";
+import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
 import Menu from "../../../components/ui/Menu.jsx";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
@@ -25,15 +28,21 @@ function promptText(cell, runStatus) {
 
   Markdown cells show their rendered text until edited (double-click or Enter).
 
+  The grip in the header drags the cell into the Study Assistant as context: native drag
+  and drop with a mouse, a pointer-tracked drag on touch/pen, and Enter or Space on the
+  focused grip for the keyboard. Only the grip is draggable, so selecting text, editing
+  and the cell's buttons work as usual. Dragging never runs or changes the cell.
+
   Props:
     cell, index, cellCount
     runStatus       "queued" | "running" | undefined
+    progress        while running: what the kernel is doing (e.g. "Installing seaborn…"), or ""
     selected        whether this is the selected cell
     editing         Markdown cells: whether the source editor is shown
     focusRequest    { target: "editor" | "cell" } when the notebook wants this cell focused
     actions         notebook-level cell actions, all taking the cell id first
 */
-function NotebookCell({ cell, index, cellCount, runStatus, selected, editing, focusRequest, actions }) {
+function NotebookCell({ cell, index, cellCount, runStatus, progress, selected, editing, focusRequest, actions }) {
   const boxRef = useRef(null);
   const editorRef = useRef(null);
 
@@ -44,6 +53,7 @@ function NotebookCell({ cell, index, cellCount, runStatus, selected, editing, fo
   const busy = Boolean(runStatus);
   const hasOutputs = isCode && cell.outputs.length > 0;
   const position = `cell ${index + 1}`;
+  const cellName = `${TYPE_LABELS[cell.cell_type]} ${position}`;
 
   // Focus on the next frame, once a newly shown editor exists (it may be re-created right after mounting).
   useEffect(() => {
@@ -55,6 +65,43 @@ function NotebookCell({ cell, index, cellCount, runStatus, selected, editing, fo
     });
     return () => cancelAnimationFrame(frame);
   }, [focusRequest]);
+
+  /*
+    Touch and pen drag. Mobile browsers don't reliably support native drag and drop,
+    so the grip follows the pointer itself: past a small threshold it becomes a drag,
+    and lifting over the Study Assistant adds the cell. Mouse drags use native DnD.
+  */
+  const touchDrag = useRef(null); // { pointerId, x, y, dragging }
+  const [touchGhost, setTouchGhost] = useState(null); // { x, y } while dragging
+
+  function handleGripPointerDown(event) {
+    if (event.pointerType === "mouse") return;
+    touchDrag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, dragging: false };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function handleGripPointerMove(event) {
+    const drag = touchDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag.dragging) {
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 6) return;
+      drag.dragging = true;
+      actions.startPointerDrag();
+    }
+    event.preventDefault();
+    setTouchGhost({ x: event.clientX, y: event.clientY });
+    actions.pointerDragOver(isOverCellDropZone(event.clientX, event.clientY));
+  }
+
+  function finishTouchDrag(event, drop) {
+    const drag = touchDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    touchDrag.current = null;
+    setTouchGhost(null);
+    if (!drag.dragging) return;
+    if (drop && isOverCellDropZone(event.clientX, event.clientY)) actions.addToAssistant(id);
+    actions.endDrag();
+  }
 
   function handleCommandKeys(event) {
     if (event.target !== boxRef.current) return; // keys typed in the editor or on buttons
@@ -112,11 +159,46 @@ function NotebookCell({ cell, index, cellCount, runStatus, selected, editing, fo
           onKeyDown={handleCommandKeys}
         >
           <div className="nb-cell__header">
+            <button
+              type="button"
+              className="nb-cell__drag"
+              draggable="true"
+              aria-label={`Drag ${cellName} to the Study Assistant`}
+              aria-describedby={`${id}-drag-hint`}
+              title="Drag into the Study Assistant to ask about this cell"
+              onDragStart={(event) => {
+                if (boxRef.current) event.dataTransfer.setDragImage(boxRef.current, 16, 16);
+                actions.startDrag(id, event.dataTransfer);
+              }}
+              onDragEnd={() => actions.endDrag()}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                actions.addToAssistant(id, { focusComposer: true });
+              }}
+              onPointerDown={handleGripPointerDown}
+              onPointerMove={handleGripPointerMove}
+              onPointerUp={(event) => finishTouchDrag(event, true)}
+              onPointerCancel={(event) => finishTouchDrag(event, false)}
+            >
+              <Icon name="grip" size={14} />
+            </button>
+            <span id={`${id}-drag-hint`} hidden>
+              Press Enter to add this cell to your Study Assistant message.
+            </span>
+            {touchGhost &&
+              createPortal(
+                <div className="nb-cell__drag-ghost" style={{ left: touchGhost.x, top: touchGhost.y }} aria-hidden="true">
+                  <Icon name="grip" size={12} />
+                  {cellName}
+                </div>,
+                document.body
+              )}
             <span className="nb-cell__type">{TYPE_LABELS[cell.cell_type]}</span>
             {runStatus && (
               <span className="nb-cell__status" role="status">
                 {runStatus === "running" ? <span className="spinner" aria-hidden="true" /> : null}
-                {runStatus === "running" ? "Running…" : "Queued"}
+                {runStatus === "running" ? progress || "Running…" : "Queued"}
               </span>
             )}
             <div className="nb-cell__actions">

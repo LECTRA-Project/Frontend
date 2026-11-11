@@ -121,6 +121,7 @@ Vite only exposes variables prefixed with `VITE_` to browser code. Do not put se
 | `/reset-password?token=...` | Choose a new password | Public reset link; the page captures the token and immediately removes it from the visible URL |
 | `/workspace` | Python notebook workspace | Signed in |
 | `/workspace/exam` | Exam workspace | Signed in |
+| `/workspace/home` | Home / Welcome screen (where a new account lands after sign-up) | Signed in |
 | `/profile` | Profile and password fields | Signed in |
 | `/settings` | Account preferences | Signed in |
 | `/statistics` | Sample performance statistics | Signed in |
@@ -130,6 +131,10 @@ Unknown routes redirect to sign-in. Reset links remain accessible when a browser
 The course-materials panel starts collapsed and contains no sample files: it lists only materials the student uploads (PDF, PPTX, IPYNB and MD; other types are rejected in the upload dialog), grouped into PDFs, Slides, Notebook and Lecture notes, with a "No course materials yet" empty state. Each file can be opened, downloaded or removed (with confirmation), and the filter box searches by file name. Uploads are stored per signed-in user in the browser's IndexedDB (`lectra-materials` database), so they survive reloads but are **not uploaded to the backend** and are lost if site data is cleared; if the browser blocks IndexedDB, files are kept for the current tab only and the panel says so. PDFs open in the inline PDF viewer, `.md` notes are rendered (sanitised) in the centre panel, `.ipynb` files open in the notebook, and `.pptx` files show a download button because browsers cannot preview them.
 
 The course-materials panel starts collapsed. Its menu button expands or hides the materials list; on desktop the notebook/PDF viewer column resizes to use the available width, and on smaller screens the panel stacks above the workspace content. Uploaded PDFs automatically fit their viewer width when the panel resizes; manual zoom overrides auto-fit.
+
+Opening a PDF from the notebook (or from Home) shows it in a split view: the PDF above, the notebook below, with a divider that can be dragged (or moved with the arrow keys, Home and End) to give either pane more room. The notebook stays mounted the whole time, so opening, switching or closing a PDF never resets its cells, outputs, variables or kernel; closing the PDF returns to the notebook alone. On narrow screens the two panes stack and the page scrolls. Over the Exam view, and for slides and notes, files still open in place of the centre view as before.
+
+After creating an account, the student lands on the Home / Welcome screen (`/workspace/home`). It offers *Upload materials* and *Browse course materials*, and its *Recent study materials* list shows only the student's real uploads, newest first, with an empty state when there are none. Signing in still opens `/workspace` (or the page the student was sent away from).
 
 ## 6. Password and form behavior
 
@@ -197,13 +202,34 @@ The centre panel at `/workspace` is a Jupyter-style notebook that runs real Pyth
 - **Engine:** [Pyodide](https://pyodide.org) 314.0.7 (CPython 3.14 compiled to WebAssembly) runs in a Web Worker (`src/services/python/pyodideWorker.js`), so long-running code never freezes the page. Student code is never run with JavaScript `eval()` and never runs on the LECTRA backend.
 - **Kernel:** `PythonKernel` (`src/services/python/pythonKernel.js`) owns the worker. All cells share one Python namespace until **Restart**, which replaces the worker. The kernel lives in `WorkspaceLayout`, so variables and outputs survive switching to the Exam view and back; leaving the workspace shuts it down.
 - **Runtime:** `kernelRuntime.py` runs each cell, captures `print` output as it happens, shows the value of the last expression (`Out[n]`), supports `display()`, renders pandas tables as HTML and matplotlib figures as PNG (`plt.show()` or automatically at the end of the cell), and formats exceptions as Python tracebacks.
-- **Packages:** imports of packages in the Pyodide distribution (NumPy, pandas, matplotlib, SciPy, SymPy, …) are downloaded automatically on first import. `micropip` can install pure-Python wheels.
+- **Packages:** see [Installing and importing packages](#installing-and-importing-packages) below.
 - **Loading:** Python (~10 MB) is downloaded from `cdn.jsdelivr.net` the first time the notebook opens and then cached by the browser. If loading fails (offline, blocked CDN), the kernel shows **Unavailable** with the reason and a **Retry** button. To self-host, serve a Pyodide `full` distribution and set `VITE_PYODIDE_INDEX_URL`.
+
+### Installing and importing packages
+
+The notebook has no operating-system shell and no desktop `pip`: Python runs in the browser on Pyodide. Package loading goes through Pyodide's own loaders (`src/services/python/packageInstaller.js`, called from the worker), using the configured `VITE_PYODIDE_INDEX_URL` / pinned Pyodide version.
+
+- **Imports load automatically.** Before a cell runs, packages it imports that are part of the Pyodide 314.0.7 distribution (about 350, including NumPy, pandas, SciPy, scikit-learn, matplotlib, SymPy, networkx) are downloaded with `pyodide.loadPackage`, with progress shown in the running cell. If a download fails, the cell is not run and shows a `PackageLoadError` naming the package and the reason; run the cell again to retry.
+- **Installing other packages.** These LECTRA notebook commands are recognised in code cells (`src/services/python/cellCommands.js`):
+
+  | Command | Meaning |
+  | --- | --- |
+  | `%pip install name …` | Install packages (preferred spelling) |
+  | `!pip install name …`, `!pip3 …`, `%pip3 …`, `!python -m pip install …` | The same |
+  | Options `-q`/`--quiet`, `-U`/`--upgrade`, `--pre`, `--no-deps` | Quiet output, reinstall, allow pre-releases, skip dependencies |
+  | `%matplotlib inline` | Accepted and ignored (figures are always inline) |
+
+  Names may carry versions and extras (`"pandas>=2"`, `requests[socks]`) or be an `https://….whl` URL. A plain name of a Pyodide package loads that build; anything else is installed from PyPI with `micropip`, which can only install **pure-Python wheels or wheels built for this Pyodide version**. The line runs in order with the rest of the cell, shows `Successfully installed …` (or `Requirement already satisfied: …`) only after the install really finished, and the package can be imported in that cell or any later one.
+- **Not supported:** other shell commands (`!ls`, `!python …`), other magics, `pip uninstall`/`list`, requirements files (`-r`), custom indexes and shell syntax (`;`, `&&`, `|`, `$var`). These stop the cell with a `UsageError` explaining what is supported. Nothing is ever passed to a shell, to JavaScript `eval()` or to the backend.
+- **Errors are specific** (`PackageInstallError`): no browser build exists (e.g. `torch`, which is not in the Pyodide distribution and has no pure-Python wheel — the message suggests packages that do run here or a native Python environment), the name is not on PyPI, PyPI/the CDN could not be reached (retry by running the cell again), or another failure, always with the underlying error under *Details*.
+- **Missing imports:** importing a module that is not installed gives a `ModuleNotFoundError` that names the module and explains how to install it with `%pip install` if it is compatible.
+- **Restart** clears installed packages along with variables; run the `%pip install` cell again afterwards. Packages bundled with Pyodide load again automatically on import.
 
 ### Features
 
 - Code cells (CodeMirror 6: Python highlighting, line numbers, auto-indent, bracket matching, keyword/name autocomplete) and Markdown cells (headings, emphasis, lists, links, tables, `$math$` via KaTeX). Raw cells from imported files are kept.
 - Per cell: Run, move up/down, delete, and a menu with insert above/below, duplicate, convert code↔Markdown and clear output.
+- **Cells as Study Assistant context:** drag a cell by the grip (⠿) at the left of its header and drop it anywhere on the Study Assistant panel; the panel and message box are highlighted while you drag. Touch and pen drags work on the grip too, and with the keyboard, focus the grip and press Enter or Space to add the cell and move to the message box. There is no menu action or dialog for this. The cell — code, Markdown or raw — appears above the message box as a removable card labelled by type and position (e.g. *Python cell 3*), with its complete source; each added cell is a separate item, listed apart from attached files. Adding a cell never runs or changes it and never sends anything — the message is only sent when you press Send. On send, the cells are passed to `sendStudyMessage()` as structured `notebookCells` (see `src/services/studyAssistant.js`) and cleared from the draft once the send has been handled. While the assistant is not connected, the draft can still be prepared, and sending shows that the message was not answered.
 - Toolbar: editable title, save state, kernel status (Loading / Idle / Busy / Error / Unavailable), add code/Markdown cell, Run all, Stop, Restart (with confirmation), Clear outputs, **Download .ipynb** (disabled while the notebook is empty), and File → New notebook / Import .ipynb. There is no Save button: saving is automatic (Ctrl/⌘ + S saves immediately).
 - **Run all** runs code cells in order on the same kernel and stops at the first error, like Jupyter.
 - Opening a `.ipynb` (File → Import, or a notebook added through *Upload materials* and selected in the materials list) replaces the current notebook after confirmation and starts a fresh kernel. Import/export follow nbformat 4 (exported as 4.5), preserving cell order, types, ids, metadata and outputs.
@@ -230,7 +256,7 @@ The notebook is saved automatically one second after each change (code or Markdo
 - `input()` is not supported (cells have no interactive console); it raises a `RuntimeError` explaining this.
 - Printed output is capped at 500,000 characters per cell run; the cell keeps running and the output notes the truncation.
 - The worker cannot read the page, its DOM, local storage or the sign-in token. Python can make network requests from the browser (e.g. `pyodide.http`), like any web page; it cannot access the backend with the student's credentials.
-- Browser-based Python covers teaching use well but is slower than native Python, and packages with native code are limited to those built for Pyodide.
+- Browser-based Python covers teaching use well but is slower than native Python, and packages with native code are limited to those built for Pyodide (see *Installing and importing packages*). Package installs count towards a cell's 2-minute limit.
 
 ## 10. Demo behavior and current boundaries
 

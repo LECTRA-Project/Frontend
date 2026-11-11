@@ -3,6 +3,13 @@ import { useState } from "react";
 import Icon from "../../../components/ui/Icon.jsx";
 import ChatComposer from "./ChatComposer.jsx";
 import { ASSISTANT_CONNECTED, sendStudyMessage } from "../../../services/studyAssistant.js";
+import {
+  CELL_DROP_ZONE_ATTR,
+  cellContextLabel,
+  isCellDrag,
+  readCellDrag,
+  toAssistantContext,
+} from "../../../services/notebook/cellContext.js";
 
 /*
   Right panel: the Study Assistant.
@@ -14,19 +21,77 @@ import { ASSISTANT_CONNECTED, sendStudyMessage } from "../../../services/studyAs
 
   Props:
     attachments         files picked with the + button (from the shared upload dialog)
+    cellContext         notebook cells added to the message (see services/notebook/cellContext.js)
+    cellDragActive      a notebook cell is being dragged, so the composer shows its drop target
+    cellDragOver        a touch/pen cell drag is over this panel (mouse drags are tracked here)
+    announcement        { text, seq } screen-reader feedback about the draft
     onAttachClick       opens the shared upload dialog
-    onClearAttachments  empties the attachment list after sending
     onRemoveAttachment  removes one attachment
+    onAddCell           adds a dropped cell to the draft (the whole panel accepts the drop)
+    onRemoveCell        removes one cell from the draft
+    onSent              called with { attachmentIds, cellIds } once a message has been handled
 */
-export default function StudyAssistantPanel({ attachments, onAttachClick, onClearAttachments, onRemoveAttachment }) {
+export default function StudyAssistantPanel({
+  attachments,
+  cellContext,
+  cellDragActive,
+  cellDragOver = false,
+  announcement,
+  onAttachClick,
+  onRemoveAttachment,
+  onAddCell,
+  onRemoveCell,
+  onSent,
+}) {
   const [messages, setMessages] = useState([]);
+  const [nativeDragOver, setNativeDragOver] = useState(false);
+  const dropOver = nativeDragOver || cellDragOver;
+
+  function handleDragOver(event) {
+    if (!isCellDrag(event.dataTransfer)) return;
+    event.preventDefault(); // allows the drop
+    event.dataTransfer.dropEffect = "copy";
+    setNativeDragOver(true);
+  }
+
+  function handleDragLeave(event) {
+    if (!event.currentTarget.contains(event.relatedTarget)) setNativeDragOver(false);
+  }
+
+  function handleDrop(event) {
+    if (!isCellDrag(event.dataTransfer)) return;
+    event.preventDefault();
+    setNativeDragOver(false);
+    const item = readCellDrag(event.dataTransfer);
+    if (item) onAddCell(item);
+  }
 
   async function handleSend(text) {
     const files = attachments;
-    setMessages((list) => [...list, { id: crypto.randomUUID(), role: "student", text, files: files.map((f) => f.name) }]);
-    onClearAttachments();
+    const cells = cellContext;
+    setMessages((list) => [
+      ...list,
+      {
+        id: crypto.randomUUID(),
+        role: "student",
+        text,
+        files: files.map((f) => f.name),
+        cells: cells.map(cellContextLabel),
+      },
+    ]);
 
-    const result = await sendStudyMessage({ text, attachments: files });
+    let result;
+    try {
+      result = await sendStudyMessage({ text, attachments: files, notebookCells: cells.map(toAssistantContext) });
+    } catch (error) {
+      // Keep the draft context so the student can try again.
+      setMessages((list) => [
+        ...list,
+        { id: crypto.randomUUID(), role: "system", text: `The message couldn’t be sent (${error.message}).` },
+      ]);
+      return;
+    }
+    onSent({ attachmentIds: files.map((f) => f.id), cellIds: cells.map((cell) => cell.id) });
 
     const nextMessage = result.connected
       ? { id: crypto.randomUUID(), role: "assistant", text: result.reply }
@@ -35,7 +100,15 @@ export default function StudyAssistantPanel({ attachments, onAttachClick, onClea
   }
 
   return (
-    <section className="panel assistant" aria-labelledby="assistant-title">
+    <section
+      className={`panel assistant ${dropOver ? "assistant--drop-over" : ""}`}
+      aria-labelledby="assistant-title"
+      {...{ [CELL_DROP_ZONE_ATTR]: "" }}
+      onDragEnter={handleDragOver}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <div className="panel__header">
         <h2 id="assistant-title" className="panel__title">
           Study assistant
@@ -63,6 +136,7 @@ export default function StudyAssistantPanel({ attachments, onAttachClick, onClea
             {messages.map((message) => (
               <li key={message.id} className={`chat-msg chat-msg--${message.role}`}>
                 {message.text}
+                {message.cells?.length > 0 && <span className="chat-msg__files">Notebook context: {message.cells.join(", ")}</span>}
                 {message.files?.length > 0 && <span className="chat-msg__files">Attached: {message.files.join(", ")}</span>}
               </li>
             ))}
@@ -70,11 +144,20 @@ export default function StudyAssistantPanel({ attachments, onAttachClick, onClea
         )}
       </div>
 
+      <p className="visually-hidden" role="status">
+        <span key={announcement.seq}>{announcement.text}</span>
+      </p>
+
       <ChatComposer
         attachments={attachments}
+        cellContext={cellContext}
+        cellDragActive={cellDragActive}
+        dropOver={dropOver}
+        connected={ASSISTANT_CONNECTED}
         onSend={handleSend}
         onAttachClick={onAttachClick}
         onRemoveAttachment={onRemoveAttachment}
+        onRemoveCell={onRemoveCell}
       />
     </section>
   );

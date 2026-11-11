@@ -47,7 +47,7 @@ export async function resetPassword({ token, newPassword }) {
 
 /* GET /auth/user → the signed-in user (needs the token) */
 export async function getCurrentUser({ signal } = {}) {
-  const response = await get("/auth/user", { signal });
+  const response = await get("/users/me", { signal });
   return response.data;
 }
 

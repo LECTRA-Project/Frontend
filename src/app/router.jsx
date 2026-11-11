@@ -8,6 +8,7 @@ import { GuestOnly, RequireAuth } from "../features/auth/RouteGuards.jsx";
 import WorkspaceLayout from "../features/workspace/WorkspaceLayout.jsx";
 import NotebookPage from "../features/workspace/pages/NotebookPage.jsx";
 import ExamPage from "../features/workspace/pages/ExamPage.jsx";
+import HomePage from "../features/workspace/pages/HomePage.jsx";
 import MyProfilePage from "../features/profile/MyProfilePage.jsx";
 import AccountSettingsPage from "../features/profile/AccountSettingsPage.jsx";
 import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
@@ -15,7 +16,7 @@ import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
 /*
   All screens of the app and their URLs.
 
-  Guests only (signed-in users are sent on to the workspace):
+  Guests only (signed-in users are sent on to the workspace; a new account lands on Home):
   /                    Sign in
   /create-account      Create account
   /forget-password     Request a password reset link
@@ -24,6 +25,7 @@ import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
   Signed-in users only (guests are sent to sign-in):
   /workspace           Study workspace with the Notebook in the centre
   /workspace/exam      Study workspace with the Exam view in the centre
+  /workspace/home      Study workspace with the Home / Welcome screen in the centre
   /profile             My profile
   /settings            Account settings
   /statistics          Statistics
@@ -49,6 +51,7 @@ export const routes = [
         children: [
           { index: true, element: <NotebookPage /> },
           { path: "exam", element: <ExamPage /> },
+          { path: "home", element: <HomePage /> },
         ],
       },
       { path: "/profile", element: <MyProfilePage /> },

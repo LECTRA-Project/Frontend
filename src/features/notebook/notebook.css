@@ -253,7 +253,7 @@
   align-items: center;
   gap: var(--space-2);
   min-height: 36px;
-  padding: 2px var(--space-1) 2px var(--space-3);
+  padding: 2px var(--space-1) 2px var(--space-1);
   border-bottom: 1px solid var(--border-default);
 }
 .nb-cell__type {
@@ -267,8 +267,63 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 12px;
   color: var(--warning);
+}
+/* Drag handle: drags the cell into the Study Assistant composer. */
+.nb-cell__drag {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  opacity: 0.55;
+  cursor: grab;
+  touch-action: none; /* a touch drag on the grip moves the cell, not the page */
+  -webkit-user-select: none;
+  user-select: none;
+}
+.nb-cell:hover .nb-cell__drag,
+.nb-cell:focus-within .nb-cell__drag {
+  opacity: 1;
+}
+.nb-cell__drag:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.nb-cell__drag:hover {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+.nb-cell__drag:active {
+  cursor: grabbing;
+}
+/* Follows the finger during a touch/pen drag (native drags use the browser's drag image). */
+.nb-cell__drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  pointer-events: none;
+  transform: translate(12px, -50%);
 }
 .nb-cell__actions {
   display: flex;
@@ -441,6 +496,7 @@
   font-size: var(--text-sm);
   color: var(--danger);
   overflow-wrap: anywhere;
+  white-space: pre-wrap; /* package errors explain the cause, then show the details on their own line */
 }
 .nb-output__traceback {
   margin: var(--space-2) 0 0;

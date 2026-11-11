@@ -243,7 +243,7 @@ describe("create account", () => {
     await user.click(screen.getByRole("button", { name: "Create account" }));
   }
 
-  it("registers, signs in automatically and opens the workspace", async () => {
+  it("registers, signs in automatically and opens the Home / Welcome screen", async () => {
     backendWithUser({ password: "StrongerPass1!" });
     api.onPost("/auth/register").reply(201, ok(TEST_USER, "User registered successfully"));
     const user = userEvent.setup();
@@ -251,7 +251,9 @@ describe("create account", () => {
 
     await fillRegister(user);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace/home"));
+    expect(await screen.findByRole("heading", { name: "Welcome to LECTRA" })).toBeInTheDocument();
+    expect(screen.getByText("No recent study materials")).toBeInTheDocument();
     expect(JSON.parse(api.history.post[0].data)).toEqual({
       email: TEST_USER.email,
       password: "StrongerPass1!",

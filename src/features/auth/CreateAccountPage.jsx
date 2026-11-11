@@ -14,7 +14,7 @@ import "./auth.css";
   Create-account screen.
   Sends the form to POST /api/auth/register. The backend returns no token on register,
   so on success we sign in with the same credentials; GuestOnly (RouteGuards.jsx) then
-  opens the workspace.
+  opens the workspace's Home / Welcome screen.
 */
 export default function CreateAccountPage() {
   const navigate = useNavigate();

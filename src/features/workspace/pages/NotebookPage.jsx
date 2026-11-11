@@ -8,6 +8,7 @@ import IconButton from "../../../components/ui/IconButton.jsx";
 import NotebookCell from "../../notebook/components/NotebookCell.jsx";
 import NotebookToolbar from "../../notebook/components/NotebookToolbar.jsx";
 import { createCell, fileNameForTitle, newCellId, serializeNotebook } from "../../../services/notebook/ipynb.js";
+import { createCellContext, writeCellDrag } from "../../../services/notebook/cellContext.js";
 import "../../notebook/notebook.css";
 
 /*
@@ -19,7 +20,7 @@ import "../../notebook/notebook.css";
   (services/python/), and the notebook is saved in this browser only.
 */
 export default function NotebookPage() {
-  const { notebookState, kernel, kernelState } = useOutletContext();
+  const { notebookState, kernel, kernelState, assistantDraft } = useOutletContext();
   const { notebook, runState, saveInfo, notice, lastRunFailed, pendingOpen, actions } = notebookState;
   const { cells } = notebook;
 
@@ -87,8 +88,37 @@ export default function NotebookPage() {
     [actions, focusCell, setEditing]
   );
 
+  /* A snapshot of a cell for the Study Assistant draft (never runs it). */
+  const cellSnapshot = useCallback(
+    (id) => {
+      const list = actions.getCells();
+      const index = list.findIndex((cell) => cell.id === id);
+      return index < 0 ? null : createCellContext(list[index], index, notebook.title);
+    },
+    [actions, notebook.title]
+  );
+
   const cellActions = useMemo(
     () => ({
+      // Drag-and-drop into the Study Assistant (see NotebookCell's grip). Never runs the cell.
+      addToAssistant(id, { focusComposer = false } = {}) {
+        const item = cellSnapshot(id);
+        if (!item) return;
+        assistantDraft.addCell(item);
+        if (focusComposer) assistantDraft.focusComposer();
+      },
+      startDrag(id, dataTransfer) {
+        const item = cellSnapshot(id);
+        if (!item) return;
+        writeCellDrag(dataTransfer, item);
+        assistantDraft.setDragActive(true);
+      },
+      startPointerDrag: () => assistantDraft.setDragActive(true),
+      pointerDragOver: (over) => assistantDraft.setDragOver(over),
+      endDrag() {
+        assistantDraft.setDragActive(false);
+        assistantDraft.setDragOver(false);
+      },
       select: (id) => setSelectedId(id),
       change: (id, source) => actions.dispatch({ type: "edit", id, source }),
       run: runCell,
@@ -138,7 +168,7 @@ export default function NotebookPage() {
         else setConfirm({ kind: "delete", id });
       },
     }),
-    [actions, runCell, insertCell, focusCell, setEditing, deleteCell, editingIds]
+    [actions, runCell, insertCell, focusCell, setEditing, deleteCell, editingIds, cellSnapshot, assistantDraft]
   );
 
   // Ctrl/Cmd + S saves the notebook instead of opening the browser's "Save page" dialog.
@@ -266,6 +296,7 @@ export default function NotebookPage() {
                 index={index}
                 cellCount={cells.length}
                 runStatus={runState[cell.id]}
+                progress={runState[cell.id] === "running" ? kernelState.message : ""}
                 selected={cell.id === selectedId}
                 editing={editingIds.has(cell.id)}
                 focusRequest={focusRequest?.id === cell.id ? focusRequest : null}
