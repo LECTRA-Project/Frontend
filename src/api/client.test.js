@@ -70,9 +70,9 @@ describe("apiClient", () => {
     setAuthToken("stale");
     const onExpired = vi.fn();
     window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
-    api.onGet("/auth/user").reply(401, { detail: "Invalid or expired token" });
+    api.onGet("/users/me").reply(401, { detail: "Invalid or expired token" });
 
-    await apiClient.get("/auth/user").catch(() => {});
+    await apiClient.get("/users/me").catch(() => {});
     window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
 
     expect(getAuthToken()).toBeNull();

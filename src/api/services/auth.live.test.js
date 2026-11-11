@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { apiClient, getAuthToken, setAuthToken } from "../client.js";
-import { getCurrentUser, login, register } from "./auth.js";
+import { login, register } from "./auth.js";
+import { getCurrentUser } from "./users.js";
 
 /*
   LIVE test against the real FastAPI backend — skipped unless API_LIVE_URL is set.

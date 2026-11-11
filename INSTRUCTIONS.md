@@ -22,7 +22,7 @@ Frontend files that are useful starting points:
 - `src/app/App.jsx` provides the auth context and router.
 - `src/app/router.jsx` defines routes.
 - `src/api/client.js` configures Axios, auth tokens, and normalized API errors.
-- `src/api/services/auth.js` contains auth-related API calls.
+- `src/api/services/auth.js` and `src/api/services/users.js` contain auth and signed-in user API calls.
 - `src/features/auth/` contains auth pages, route guards, password validation, and session state.
 - `src/features/workspace/` contains the main study workspace.
 - `src/components/ui/` contains reusable controls, including Formik bindings.
@@ -156,11 +156,18 @@ The backend uses JSON responses in the `{ "status": true, "message": "...", "dat
 | --- | --- | --- |
 | `POST` | `/api/auth/register` | Register with `email`, `password`, and `full_name` |
 | `POST` | `/api/auth/login` | Sign in and receive `data.token` |
-| `GET` | `/api/auth/user` | Load the signed-in user; requires the bearer token |
 | `POST` | `/api/auth/forgot-password` | Request a reset email with `email` |
 | `POST` | `/api/auth/reset-password` | Reset using `token` and `new_password` |
 
-The Axios client stores the access token in browser local storage and attaches it to authenticated requests. API failures are normalized to an `ApiError` with a user-facing message and any field errors.
+Signed-in user endpoints (all require the bearer token):
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/users/me` | Load the current profile |
+| `PATCH` | `/api/users/me` | Update `full_name` and/or `email` |
+| `PUT` | `/api/users/me/password` | Change password using `current_password` and `new_password` |
+
+Changing the password from the profile page signs the user out and returns them to sign-in. The Axios client stores the access token in browser local storage and attaches it to authenticated requests. API failures are normalized to an `ApiError` with a user-facing message and any field errors.
 
 ## 8. Test, lint, and build
 
@@ -237,7 +244,7 @@ The notebook is saved automatically one second after each change (code or Markdo
 - Statistics are illustrative data. There are no sample course materials.
 - Uploaded course materials are stored in this browser (IndexedDB) and are not uploaded to the backend; files attached to an assistant message are kept in the browser tab only.
 - Notebooks are saved in browser local storage only (see section 9), not on the backend.
-- Profile and settings forms currently show demo/local behavior and do not persist changes.
+- Profile details and password changes persist through the user API; a successful password change signs the user out. Account preferences are local-only because no preferences endpoint is currently implemented.
 - The study assistant UI is present, but its service may report that it is not connected.
 - The task-generator router is currently scaffolded without endpoint implementations.
 

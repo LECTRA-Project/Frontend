@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { getCurrentUser, login, logout, register, requestPasswordReset, resetPassword } from "./auth.js";
+import { login, logout, register, requestPasswordReset, resetPassword } from "./auth.js";
+import { getCurrentUser } from "./users.js";
 import { ApiError, getAuthToken } from "../client.js";
 import { mockApi, ok, TEST_USER } from "../../test/helpers.jsx";
 
@@ -79,7 +80,7 @@ describe("auth service", () => {
 
   it("getCurrentUser sends the token and returns the user", async () => {
     api.onPost("/auth/login").reply(200, ok({ token: "jwt-123" }));
-    api.onGet("/auth/user").reply((config) =>
+    api.onGet("/users/me").reply((config) =>
       config.headers.Authorization === "Bearer jwt-123" ? [200, ok(TEST_USER)] : [403, { detail: "Not authenticated" }]
     );
 
