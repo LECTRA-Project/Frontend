@@ -3,7 +3,8 @@ import { useState } from "react";
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
-import { MATERIAL_GROUPS, STATUS_LABEL } from "../../lectures/materialTypes.js";
+import { MATERIAL_GROUPS } from "../../../services/materials/materialTypes.js";
+import { STATUS_LABEL } from "../../lectures/materialTypes.js";
 
 /*
   Left panel: the student's lecture materials from the backend, grouped by type,
@@ -60,7 +61,7 @@ export default function CourseMaterialsPanel({
           onClick={onToggleCollapsed}
         />
 
-        <label className="materials__filter" hidden={collapsed}>
+        <label className="materials__filter" hidden={collapsed || materials.length === 0}>
           <span className="visually-hidden">Filter materials</span>
           <Icon name="search" size={16} />
           <input
@@ -113,7 +114,15 @@ export default function CourseMaterialsPanel({
         )}
 
         {!loading && !error && materials.length === 0 && uploads.length === 0 && (
-          <p className="materials__empty">No materials yet. Upload PDFs, slides or notebooks to study with them.</p>
+          <div className="materials__empty-state">
+            <span className="materials__empty-icon">
+              <Icon name="uploadCloud" />
+            </span>
+            <p className="materials__empty-title">No course materials yet</p>
+            <p className="materials__empty-text">
+              Upload your lecture notes, PDFs, slides or notebooks to get started. The study assistant answers from them.
+            </p>
+          </div>
         )}
 
         {MATERIAL_GROUPS.map((group) => {

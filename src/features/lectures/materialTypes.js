@@ -1,26 +1,23 @@
 /*
-  How backend lectures are shown in the Course Materials panel.
+  How backend lectures are shown in the workspace.
 
-  type: "pdf" | "slides" | "notebook" | "image" — picks the group, icon and viewer.
+  Groups, accepted extensions and file-size formatting come from
+  services/materials/materialTypes.js (one source of truth for the whole app).
+
+  type:   "pdf" | "slides" | "notebook" | "notes" | "image" — picks the group, icon and viewer.
   status: the student-facing processing state:
     "uploading" (only in the browser, while the file is sent)
     "processing" (backend: pending or processing)
     "completed" | "failed" | "skipped" (images are stored but not searchable)
 */
-export const MATERIAL_GROUPS = [
-  { type: "pdf", label: "PDFs", icon: "fileText" },
-  { type: "slides", label: "Slides", icon: "slides" },
-  { type: "notebook", label: "Notebooks", icon: "notebook" },
-  { type: "image", label: "Images", icon: "book" },
-];
-
-export const ACCEPTED_EXTENSIONS = [".pdf", ".ppt", ".pptx", ".ipynb"];
+import { materialTypeOf } from "../../services/materials/materialTypes.js";
 
 const TYPE_BY_MIME = {
   "application/pdf": "pdf",
   "application/vnd.ms-powerpoint": "slides",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation": "slides",
   "application/x-ipynb+json": "notebook",
+  "text/markdown": "notes",
 };
 
 const FORMAT_LABEL = {
@@ -28,9 +25,10 @@ const FORMAT_LABEL = {
   "application/vnd.ms-powerpoint": "PPT",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
   "application/x-ipynb+json": "Notebook",
+  "text/markdown": "Notes",
 };
 
-const UNIT = { page: ["page", "pages"], slide: ["slide", "slides"], cell: ["cell", "cells"] };
+const UNIT = { page: ["page", "pages"], slide: ["slide", "slides"], cell: ["cell", "cells"], section: ["section", "sections"] };
 
 export const STATUS_LABEL = {
   uploading: "Uploading",
@@ -58,8 +56,7 @@ export function titleFromFileName(name) {
 }
 
 export function hasAcceptedExtension(name) {
-  const lower = name.toLowerCase();
-  return ACCEPTED_EXTENSIONS.some((extension) => lower.endsWith(extension));
+  return materialTypeOf(name) !== null;
 }
 
 /* "PDF · 12 pages · AI Basics" */
@@ -81,6 +78,7 @@ export function toMaterial(lecture) {
     status: displayStatus(lecture.processing_status),
     error: lecture.processing_error,
     pages: lecture.source_type === "page" ? lecture.source_count : undefined,
+    size: lecture.file_size,
     lecture,
   };
 }

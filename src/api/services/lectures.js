@@ -98,6 +98,24 @@ export async function deleteLecture(id) {
   return unwrap(await del(`${BASE}/lectures/${id}`), "delete the lecture");
 }
 
+/*
+  Which backend version are we talking to? One read-only request for a lecture id that
+  cannot exist: the AI-enabled backend answers 404 ("Lecture not found"); a backend
+  without AI processing has no GET route there and answers 405 (Method Not Allowed).
+  Returns { ai: true | false }; ai is false only for that clear 405.
+*/
+const PROBE_ID = "00000000-0000-0000-0000-000000000000";
+
+export async function detectServerFeatures({ signal } = {}) {
+  try {
+    await get(`${BASE}/lectures/${PROBE_ID}`, { signal });
+    return { ai: true };
+  } catch (err) {
+    if (err?.name === "CanceledError") throw err;
+    return { ai: err?.status !== 405 };
+  }
+}
+
 export async function getLecture(id, { signal } = {}) {
   return unwrap(await get(`${BASE}/lectures/${id}`, { signal }), "load the lecture");
 }

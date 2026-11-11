@@ -2,34 +2,34 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import IconButton from "../../components/ui/IconButton.jsx";
 import Icon from "../../components/ui/Icon.jsx";
+import { formatFileSize } from "../../services/materials/materialTypes.js";
 import { getFitZoomIndex, ZOOM_STEPS } from "./pdfZoom.js";
 import "./files.css";
 
 /*
   Inline PDF viewer — shown in the workspace's centre panel (not in a popup).
 
-  - If the material has a real file (`material.url`, from a PDF picked in the upload
-    dialog), the browser's own PDF viewer shows it. Our page and zoom controls are passed
-    to it in the URL (#page=…&zoom=…), which Chrome, Edge and Firefox understand.
-  - The demo items have no file behind them, so a neutral blank page with grey
-    placeholder lines is shown instead. No document text is invented.
+  The browser's own PDF viewer shows the file (`material.url`). Our page and zoom
+  controls are passed to it in the URL (#page=…&zoom=…), which Chrome, Edge and
+  Firefox understand.
 
   Props:
-    material    the PDF to show: { name, meta, pages?, url?, loading?, loadError? }
-                (lecture PDFs are fetched by the workspace; `loading` is true meanwhile)
+    material    the PDF: { name, url, meta?, size?, pages?, loading?, loadError? }
+                Lecture PDFs are fetched from the backend by the workspace; `loading`
+                is true meanwhile. `pages` is the page count when known.
     initialPage page to open first (e.g. the page an assistant answer cited)
     onCollapse  called by the close button; the workspace then shows the
                 notebook or exam view again
 */
 export default function PdfViewerPanel({ material, initialPage = 1, onCollapse }) {
-  const hasRealFile = Boolean(material.url);
-  const pageCount = material.pages ?? null; // unknown for real files
+  const pageCount = material.pages ?? null;
   const panelRef = useRef(null);
-  const [page, setPage] = useState(() => Math.max(1, Math.min(initialPage, material.pages ?? initialPage)));
+  const [page, setPage] = useState(() => Math.max(1, Math.min(initialPage, pageCount ?? initialPage)));
   const [panelWidth, setPanelWidth] = useState(0);
   const [manualZoomIndex, setManualZoomIndex] = useState(null);
   const zoomIndex = manualZoomIndex ?? (panelWidth > 0 ? getFitZoomIndex(panelWidth) : 2);
   const zoom = ZOOM_STEPS[zoomIndex];
+  const meta = material.meta ?? `PDF · ${formatFileSize(material.size ?? 0)}`;
 
   const canGoBack = page > 1;
   const canGoForward = pageCount === null || page < pageCount;
@@ -54,7 +54,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, onCollapse }
   // On narrow screens the panels are stacked, so bring the viewer into view when it opens.
   // On desktop it is already visible and nothing moves.
   useEffect(() => {
-    if (window.matchMedia("(max-width: 880px)").matches) {
+    if (window.matchMedia?.("(max-width: 880px)").matches) {
       panelRef.current?.scrollIntoView({ block: "start" });
     }
   }, []);
@@ -71,7 +71,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, onCollapse }
         <div className="pdf__file">
           <Icon name="fileText" className="pdf__title-icon" />
           <h2 className="pdf__title">{material.name}</h2>
-          <span className="pdf__title-meta">{material.meta}</span>
+          <span className="pdf__title-meta">{meta}</span>
         </div>
 
         <IconButton
@@ -114,11 +114,11 @@ export default function PdfViewerPanel({ material, initialPage = 1, onCollapse }
         </div>
       </div>
 
-      {material.loading || material.loadError ? (
-        <div className="pdf__stage" role={material.loadError ? "alert" : "status"}>
+      {material.loading || material.loadError || !material.url ? (
+        <div className="pdf__frame-wrap viewer__message-wrap" role={material.loadError ? "alert" : "status"}>
           <p className="notice">{material.loadError || "Loading PDF…"}</p>
         </div>
-      ) : hasRealFile ? (
+      ) : (
         <div className="pdf__frame-wrap">
           {/* `key` reloads the frame when the page or zoom changes so the browser jumps there. */}
           <iframe
@@ -128,51 +128,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, onCollapse }
             src={`${material.url}#page=${page}&zoom=${zoom}`}
           />
         </div>
-      ) : (
-        <div className="pdf__content">
-          <ol className="pdf__thumbs" aria-label="Pages">
-            {Array.from({ length: pageCount ?? 1 }, (_, index) => (
-              <li key={index}>
-                <button
-                  type="button"
-                  className={`pdf__thumb ${page === index + 1 ? "pdf__thumb--active" : ""}`}
-                  aria-label={`Page ${index + 1}`}
-                  aria-current={page === index + 1 ? "page" : undefined}
-                  onClick={() => setPage(index + 1)}
-                >
-                  <PlaceholderLines compact />
-                </button>
-                <span className="pdf__thumb-number">{index + 1}</span>
-              </li>
-            ))}
-          </ol>
-
-          <div className="pdf__stage">
-            <div className="pdf__page" style={{ width: `${(382 * zoom) / 100}px` }} aria-label={`Blank preview of page ${page}`}>
-              <PlaceholderLines />
-              <span className="pdf__page-number">{page}</span>
-            </div>
-          </div>
-        </div>
       )}
     </section>
-  );
-}
-
-/* Grey bars that stand in for text on the blank demo page. */
-function PlaceholderLines({ compact = false }) {
-  const paragraphs = [6, 4, 5, 3];
-  return (
-    <div className={`placeholder-lines ${compact ? "placeholder-lines--compact" : ""}`} aria-hidden="true">
-      <span className="placeholder-lines__heading" />
-      <span className="placeholder-lines__sub" />
-      {paragraphs.map((lines, p) => (
-        <div key={p} className="placeholder-lines__para">
-          {Array.from({ length: lines }, (_, l) => (
-            <span key={l} style={{ width: l === lines - 1 ? "62%" : `${96 - ((l * 7) % 9)}%` }} />
-          ))}
-        </div>
-      ))}
-    </div>
   );
 }

@@ -4,7 +4,7 @@ import Modal from "../../components/ui/Modal.jsx";
 import Button from "../../components/ui/Button.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import TextField from "../../components/ui/TextField.jsx";
-import { ACCEPTED_EXTENSIONS, hasAcceptedExtension } from "../lectures/materialTypes.js";
+import { ACCEPTED_EXTENSIONS, materialTypeOf, SUPPORTED_LABEL } from "../../services/materials/materialTypes.js";
 import "./files.css";
 
 /*
@@ -13,12 +13,26 @@ import "./files.css";
   The picked files are handed to `onUpload(files, { course })`; the workspace uploads
   them to the backend (POST /student_profile/upload-lecture). Each file becomes a
   lecture titled after its file name; AI processing starts automatically and the
-  progress shows in the Course materials list.
-*/
-const ACCEPTED = ACCEPTED_EXTENSIONS.join(",");
-const MAX_BYTES = 100 * 1024 * 1024;
+  progress shows in the Course materials list. Unsupported, empty or oversized files
+  are listed with a warning and left out.
 
-export default function UploadDialog({ onCancel, onUpload }) {
+  Props:
+    basic      true when the backend has no AI processing: only the file types it
+               accepts (PDF, PPTX, IPYNB) and no course field, which it would ignore
+    note       optional text under the list (defaults to where the files are saved)
+    onCancel   closes the dialog
+    onUpload   called with the accepted files and { course }
+*/
+const MAX_BYTES = 100 * 1024 * 1024;
+const DEFAULT_NOTE =
+  "Files are saved to your account. Lectra then reads them so the study assistant can answer questions about them.";
+const BASIC_NOTE = "Files are saved to your account.";
+const BASIC_EXTENSIONS = [".pdf", ".pptx", ".ipynb"];
+
+export default function UploadDialog({ basic = false, note, onCancel, onUpload }) {
+  const accepted = basic ? BASIC_EXTENSIONS.join(",") : ACCEPTED_EXTENSIONS;
+  const isAccepted = (name) =>
+    basic ? BASIC_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext)) : Boolean(materialTypeOf(name));
   const inputRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [course, setCourse] = useState("");
@@ -27,7 +41,7 @@ export default function UploadDialog({ onCancel, onUpload }) {
 
   function addFiles(fileList) {
     const picked = Array.from(fileList);
-    const ok = picked.filter((file) => hasAcceptedExtension(file.name) && file.size > 0 && file.size <= MAX_BYTES);
+    const ok = picked.filter((file) => isAccepted(file.name) && file.size > 0 && file.size <= MAX_BYTES);
     setRejected(picked.filter((file) => !ok.includes(file)).map((file) => file.name));
     setFiles((current) => [...current, ...ok]);
   }
@@ -59,7 +73,7 @@ export default function UploadDialog({ onCancel, onUpload }) {
           <input
             ref={inputRef}
             type="file"
-            accept={ACCEPTED}
+            accept={accepted}
             multiple
             hidden
             data-testid="upload-input"
@@ -70,7 +84,11 @@ export default function UploadDialog({ onCancel, onUpload }) {
           />
         </div>
 
-        <p className="upload__help">Supported: PDF, slides (PPT, PPTX) and notebooks (IPYNB), up to 100 MB each.</p>
+        <p className="upload__help">
+          {basic
+            ? "Supported: PDF, PPTX and IPYNB, up to 100 MB each."
+            : `Supported: ${SUPPORTED_LABEL} (PDFs, slides, notebooks and Markdown notes), up to 100 MB each.`}
+        </p>
 
         {rejected.length > 0 && (
           <p className="field__error" role="alert">
@@ -97,17 +115,17 @@ export default function UploadDialog({ onCancel, onUpload }) {
           </ul>
         )}
 
-        <TextField
-          label="Course (optional)"
-          value={course}
-          maxLength={255}
-          placeholder="e.g. Grundlagen der KI"
-          onChange={(event) => setCourse(event.target.value)}
-        />
+        {!basic && (
+          <TextField
+            label="Course (optional)"
+            value={course}
+            maxLength={255}
+            placeholder="e.g. Grundlagen der KI"
+            onChange={(event) => setCourse(event.target.value)}
+          />
+        )}
 
-        <p className="upload__local-note">
-          Files are saved to your account. Lectra then reads them so the study assistant can answer questions about them.
-        </p>
+        <p className="upload__local-note">{note ?? (basic ? BASIC_NOTE : DEFAULT_NOTE)}</p>
 
         <div className="upload__actions">
           <Button onClick={onCancel}>Cancel</Button>

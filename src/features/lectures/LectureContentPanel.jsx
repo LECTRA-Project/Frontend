@@ -27,7 +27,10 @@ export default function LectureContentPanel({ lecture, focus, onRetry, onClose }
   const [imageUrl, setImageUrl] = useState(null);
   const bodyRef = useRef(null);
   const status = displayStatus(lecture.processing_status);
-  const isImage = lecture.source_type == null;
+  // A backend without AI processing sends no processing fields and has no file/content
+  // endpoints; the stored file is then opened from its S3 URL.
+  const basic = lecture.processing_status === undefined;
+  const isImage = basic ? !/(pdf|powerpoint|presentation|ipynb|markdown)/.test(lecture.file_type) : lecture.source_type == null;
 
   useEffect(() => {
     if (status !== "completed") return undefined;
@@ -39,7 +42,7 @@ export default function LectureContentPanel({ lecture, focus, onRetry, onClose }
   }, [lecture.id, lecture.content_version, status]);
 
   useEffect(() => {
-    if (!isImage) return undefined;
+    if (!isImage || basic) return undefined;
     let url = null;
     const controller = new AbortController();
     fetchLectureFile(lecture.id, { signal: controller.signal }).then(
@@ -53,7 +56,7 @@ export default function LectureContentPanel({ lecture, focus, onRetry, onClose }
       controller.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [isImage, lecture.id]);
+  }, [isImage, basic, lecture.id]);
 
   useEffect(() => {
     if (!focus || !content) return;
@@ -98,16 +101,31 @@ export default function LectureContentPanel({ lecture, focus, onRetry, onClose }
             </span>
           </div>
         </div>
-        <Button size="sm" icon="download" onClick={download} disabled={downloading}>
-          {downloading ? "Downloading…" : "Download"}
-        </Button>
+        {basic ? (
+          <a className="btn btn--secondary btn--sm" href={lecture.s3_url} target="_blank" rel="noopener noreferrer" download>
+            <Icon name="download" />
+            Download
+          </a>
+        ) : (
+          <Button size="sm" icon="download" onClick={download} disabled={downloading}>
+            {downloading ? "Downloading…" : "Download"}
+          </Button>
+        )}
         <IconButton icon="close" label="Close lecture" outlined onClick={onClose} />
       </div>
 
       <div className="lecture-view__body" ref={bodyRef}>
         {lecture.description && <p className="lecture-view__description">{lecture.description}</p>}
 
-        {isImage && imageUrl && <img className="lecture-view__image" src={imageUrl} alt={lecture.title} />}
+        {isImage && (basic ? lecture.s3_url : imageUrl) && (
+          <img className="lecture-view__image" src={basic ? lecture.s3_url : imageUrl} alt={lecture.title} />
+        )}
+        {basic && !isImage && (
+          <p className="lecture-view__notice" role="status">
+            This file can’t be previewed in the browser — use Download to open it. Reading slides and notebook
+            text for the study assistant needs the AI-enabled backend, which this server doesn’t run yet.
+          </p>
+        )}
 
         {status === "processing" && (
           <p className="lecture-view__notice" role="status">

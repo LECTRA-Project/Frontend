@@ -1,6 +1,6 @@
 # LECTRA Frontend
 
-LECTRA is a React study-workspace frontend. It provides account flows, a course-materials panel, a notebook and exam workspace, file previews, profile settings, and sample statistics. The frontend is built with React, React Router, Vite, Axios, Formik, and Yup.
+LECTRA is a React study-workspace frontend. It provides account flows, a course-materials panel, a Jupyter-style Python notebook and exam workspace, file previews, profile settings, and sample statistics. The frontend is built with React, React Router, Vite, Axios, Formik, and Yup; the notebook uses CodeMirror 6, Pyodide (Python in WebAssembly, run in a Web Worker), marked, DOMPurify and KaTeX.
 
 ## Quick start
 
@@ -35,25 +35,34 @@ src/
 ├── api/                 Axios client, error handling, and API services
 ├── app/                 App shell and React Router routes
 ├── components/          Shared layout and UI components
-├── data/                Illustrative materials and statistics
+├── data/                Illustrative statistics
 ├── features/
 │   ├── auth/            Sign-in, registration, reset-password, auth state and schemas
-│   ├── files/           Upload dialog and local file previews
+│   ├── files/           Upload dialog and the PDF / notes viewers
+│   ├── notebook/        Notebook cells, editor, outputs, toolbar, notebook state and kernel hooks
 │   ├── profile/         Profile and account settings
 │   ├── statistics/      Sample performance display
 │   └── workspace/       Study workspace, notebook, exam and assistant panel
-├── services/            Study-assistant integration boundary
+├── services/
+│   ├── materials/       Supported material types (one list for the whole app)
+│   ├── notebook/        .ipynb import/export, browser storage, Markdown rendering
+│   ├── python/          Python kernel: Pyodide Web Worker and its main-thread client
+│   └── studyAssistant.js  Study-assistant integration boundary
 ├── styles/              Global styles and design tokens
 └── test/                Shared test setup and helpers
 ```
 
 The app entry point is `src/main.jsx`. Routes and access guards live in `src/app/router.jsx` and `src/features/auth/RouteGuards.jsx`. Forms use Formik with Yup schemas; shared form bindings are in `src/components/ui/FormikTextField.jsx`. New passwords must be 8–14 characters and include uppercase and lowercase letters, a number, and a special character. The password checklist updates as the user types.
 
-The workspace includes demo/sample-only behavior in some areas: picked files are local to the browser session, account preferences are local-only because the backend has no preferences endpoint, statistics are illustrative, and the study assistant is not connected unless its service reports otherwise. Profile details and password changes use the backend user endpoints; changing a password signs the user out and returns them to sign-in. The course-materials panel starts collapsed and can be expanded from its menu button; the notebook/PDF center column automatically uses the available space, and uploaded PDFs auto-fit to the viewer width until the user manually changes zoom. Success and action-confirmation messages dismiss after three seconds; validation and error messages remain visible.
+The notebook in the centre panel runs real Python 3.14 in the browser through Pyodide, inside a Web Worker, with one shared namespace per kernel (variables persist across cells until Restart). It supports code and Markdown cells, Run / Run all / Stop / Restart, rich outputs (text, errors with tracebacks, pandas tables, matplotlib figures), and .ipynb import and download. Python is downloaded from the jsDelivr CDN the first time the notebook opens, so it needs internet access (or a self-hosted copy via `VITE_PYODIDE_INDEX_URL`). **Notebooks are saved in the browser's local storage only, per signed-in user — not on the server.** See [`INSTRUCTIONS.md`](INSTRUCTIONS.md#9-python-notebook) for details and limitations.
+
+The Course Materials panel lists the student's lectures from the backend (`/student_profile` lecture APIs): upload, list, rename/edit and delete, grouped by type with filtering. PDFs open in the centre panel, notebooks open in the runnable notebook, and slides can be downloaded. When the backend runs AI lecture processing, the panel also shows processing status (Processing / Completed / Failed with retry), slides and notebooks show their extracted text, Markdown notes, PPT files and course/description/file replacement are supported, and the study assistant answers from the student's materials with page/slide/cell sources. The app detects this automatically; against a backend without it (e.g. the current Render deployment) these parts say they are not available.
+
+The workspace includes demo/sample-only behavior in some areas: files attached to an assistant message are local to the browser tab, account preferences are local-only because the backend has no preferences endpoint, statistics are illustrative, and the study assistant only works when the backend provides it (see above). Profile details and password changes use the backend user endpoints; changing a password signs the user out and returns them to sign-in. The course-materials panel starts collapsed and can be expanded from its menu button; the notebook/PDF center column automatically uses the available space, and uploaded PDFs auto-fit to the viewer width until the user manually changes zoom. Success and action-confirmation messages dismiss after three seconds; validation and error messages remain visible.
 
 ## Backend
 
-The API source is in the sibling `Backend/TaskGeneration/backend` project. The frontend uses `/api` as its default base URL and the Vite proxy in `vite.config.js` to forward API traffic. For production or a direct cross-origin setup, configure `VITE_API_BASE_URL` and the backend's `CORS_ORIGINS` appropriately.
+The backend is deployed at https://taskgeneration.onrender.com. The browser calls it directly at `VITE_API_PROXY_TARGET` + `VITE_API_BASE_URL` (e.g. `https://taskgeneration.onrender.com/api`), so the backend's `CORS_ORIGINS` must include the site's origin. With `VITE_API_PROXY_TARGET` empty, requests stay relative (`/api`) and the Vite proxy in `vite.config.js` forwards them to `http://127.0.0.1:8000`.
 
 The backend's `FRONTEND_URL` must match the address where this frontend is reachable (default `http://localhost:5173`) for email reset links to open the app. The reset token is captured from the emailed link and the query string is immediately removed from the browser address bar. See the [backend instructions](../Backend/TaskGeneration/INSTRUCTIONS.md) for database, email, LLM configuration, and endpoint details.
 

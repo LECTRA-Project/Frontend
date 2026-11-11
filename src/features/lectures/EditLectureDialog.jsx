@@ -3,7 +3,8 @@ import { useRef, useState } from "react";
 import Modal from "../../components/ui/Modal.jsx";
 import Button from "../../components/ui/Button.jsx";
 import TextField from "../../components/ui/TextField.jsx";
-import { ACCEPTED_EXTENSIONS, hasAcceptedExtension } from "./materialTypes.js";
+import { ACCEPTED_EXTENSIONS } from "../../services/materials/materialTypes.js";
+import { hasAcceptedExtension } from "./materialTypes.js";
 import "./lectures.css";
 
 /*
@@ -13,10 +14,11 @@ import "./lectures.css";
 
   Props:
     lecture   the backend lecture
+    titleOnly true when the backend only supports renaming (no AI processing)
     onSave    async (changes) => void — throws ApiError on failure
     onCancel  closes the dialog
 */
-export default function EditLectureDialog({ lecture, onSave, onCancel }) {
+export default function EditLectureDialog({ lecture, titleOnly = false, onSave, onCancel }) {
   const fileRef = useRef(null);
   const [title, setTitle] = useState(lecture.title);
   const [course, setCourse] = useState(lecture.course ?? "");
@@ -32,9 +34,11 @@ export default function EditLectureDialog({ lecture, onSave, onCancel }) {
     if (titleError) return;
     const changes = {};
     if (title.trim() !== lecture.title) changes.title = title.trim();
-    if (course.trim() !== (lecture.course ?? "")) changes.course = course.trim();
-    if (description.trim() !== (lecture.description ?? "")) changes.description = description.trim();
-    if (file) changes.file = file;
+    if (!titleOnly) {
+      if (course.trim() !== (lecture.course ?? "")) changes.course = course.trim();
+      if (description.trim() !== (lecture.description ?? "")) changes.description = description.trim();
+      if (file) changes.file = file;
+    }
     if (Object.keys(changes).length === 0) {
       onCancel();
       return;
@@ -59,6 +63,11 @@ export default function EditLectureDialog({ lecture, onSave, onCancel }) {
           error={titleError ?? error?.fieldErrors?.title}
           onChange={(event) => setTitle(event.target.value)}
         />
+        {titleOnly && (
+          <p className="notice">This server supports renaming only. Course, description and file replacement need the AI-enabled backend.</p>
+        )}
+        {!titleOnly && (
+        <>
         <TextField
           label="Course"
           value={course}
@@ -90,7 +99,7 @@ export default function EditLectureDialog({ lecture, onSave, onCancel }) {
             ref={fileRef}
             type="file"
             hidden
-            accept={ACCEPTED_EXTENSIONS.join(",")}
+            accept={ACCEPTED_EXTENSIONS}
             data-testid="replace-file-input"
             onChange={(event) => {
               const picked = event.target.files?.[0];
@@ -105,6 +114,8 @@ export default function EditLectureDialog({ lecture, onSave, onCancel }) {
           )}
           {error?.fieldErrors?.file && <span className="field__error">{error.fieldErrors.file}</span>}
         </div>
+        </>
+        )}
 
         {error && !Object.keys(error.fieldErrors ?? {}).length && (
           <p className="field__error" role="alert">

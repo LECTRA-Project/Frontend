@@ -12,10 +12,12 @@ import { sendStudyMessage } from "../../../services/studyAssistant.js";
 
   Props:
     materials          the student's materials (toMaterial items); completed ones can be searched
+    available          false when the backend has no AI assistant (null while unknown)
     onAttachClick      opens the upload dialog (+ button) — files are added to the materials
     onOpenReference    called with a reference { lecture_id, source_type, source_number, … }
 */
-export default function StudyAssistantPanel({ materials = [], onAttachClick, onOpenReference }) {
+export default function StudyAssistantPanel({ materials = [], available = true, onAttachClick, onOpenReference }) {
+  const unavailable = available === false;
   const [messages, setMessages] = useState([]);
   const [scope, setScope] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -55,13 +57,13 @@ export default function StudyAssistantPanel({ materials = [], onAttachClick, onO
         <h2 id="assistant-title" className="panel__title">
           Study assistant
         </h2>
-        <span className="pill" title="Materials the assistant can search">
-          <span className={`pill__dot ${searchable.length ? "pill__dot--on" : ""}`} />
-          {searchable.length === 1 ? "1 material" : `${searchable.length} materials`}
+        <span className="pill" title={unavailable ? "The server has no AI assistant yet" : "Materials the assistant can search"}>
+          <span className={`pill__dot ${searchable.length && !unavailable ? "pill__dot--on" : ""}`} />
+          {unavailable ? "Not available" : searchable.length === 1 ? "1 material" : `${searchable.length} materials`}
         </span>
       </div>
 
-      <div className="assistant__scope">
+      <div className="assistant__scope" hidden={unavailable}>
         <label htmlFor="assistant-scope">Search in</label>
         <select id="assistant-scope" value={activeScope} onChange={(event) => setScope(event.target.value)}>
           <option value="all">All my materials</option>
@@ -79,9 +81,11 @@ export default function StudyAssistantPanel({ materials = [], onAttachClick, onO
             <span className="assistant__empty-icon">
               <Icon name="message" />
             </span>
-            <p className="assistant__empty-title">Ask about your materials</p>
+            <p className="assistant__empty-title">{unavailable ? "Assistant not available yet" : "Ask about your materials"}</p>
             <p className="assistant__empty-text">
-              {searchable.length
+              {unavailable
+                ? "The connected server doesn’t run the AI assistant yet. Your materials are still saved and can be opened."
+                : searchable.length
                 ? "Answers come only from your uploaded lectures, with the page, slide or cell they’re based on."
                 : processing
                   ? "Your materials are still being processed. You can ask as soon as one shows Completed."
@@ -121,7 +125,7 @@ export default function StudyAssistantPanel({ materials = [], onAttachClick, onO
         )}
       </div>
 
-      <ChatComposer attachments={[]} onSend={handleSend} onAttachClick={onAttachClick} onRemoveAttachment={() => {}} disabled={busy} />
+      <ChatComposer attachments={[]} onSend={handleSend} onAttachClick={onAttachClick} onRemoveAttachment={() => {}} disabled={busy || unavailable} />
     </section>
   );
 }

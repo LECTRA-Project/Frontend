@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   deleteLecture,
+  detectServerFeatures,
   listAllLectures,
   reprocessLecture,
   updateLecture,
@@ -24,6 +25,8 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
   const [lectures, setLectures] = useState([]);
   const [uploads, setUploads] = useState([]); // { id, name, progress, error }
   const [loading, setLoading] = useState(true);
+  // { ai: boolean } once known: whether the backend has AI processing and the assistant.
+  const [features, setFeatures] = useState(null);
   const [error, setError] = useState(null);
   const mounted = useRef(true);
 
@@ -53,6 +56,7 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
   // Initial load (state is only set once the request settles, like useApi).
   useEffect(() => {
     const controller = new AbortController();
+    detectServerFeatures({ signal: controller.signal }).then(setFeatures, () => {});
     listAllLectures({ signal: controller.signal }).then(
       (list) => {
         setLectures(list);
@@ -127,5 +131,5 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
     [replaceLecture]
   );
 
-  return { lectures, uploads, loading, error, refresh, upload, dismissUpload, update, remove, retry };
+  return { lectures, uploads, loading, error, features, refresh, upload, dismissUpload, update, remove, retry };
 }

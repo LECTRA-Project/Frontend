@@ -236,3 +236,94 @@ describe("lecture workspace", () => {
     expect(await within(assistant).findByText(/not configured on the server/)).toBeInTheDocument();
   });
 });
+
+describe("lecture workspace on a backend without AI processing (e.g. today's Render deployment)", () => {
+  let api;
+  // Exactly what that backend returns: no processing fields, a public S3 URL.
+  const legacy = {
+    id: "old-1", user_id: TEST_USER.id, title: "Intro slides", original_filename: "intro.pptx",
+    file_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation", file_size: 10,
+    s3_url: "https://bucket.s3.eu-central-1.amazonaws.com/lectures/u/1/intro.pptx",
+    uploaded_at: "2026-11-01T10:00:00Z", updated_at: "2026-11-01T10:00:00Z",
+  };
+  const legacyPdf = { ...legacy, id: "old-2", title: "Reading", original_filename: "reading.pdf", file_type: "application/pdf",
+    s3_url: "https://bucket.s3.eu-central-1.amazonaws.com/lectures/u/2/reading.pdf" };
+
+  beforeEach(() => {
+    api = mockApi();
+    api.onGet("/users/me").reply(200, ok(TEST_USER));
+    api.onGet("/student_profile/lectures/00000000-0000-0000-0000-000000000000").reply(405, { status: false, message: "Method Not Allowed", data: null });
+    api.onGet("/student_profile/lectures").reply(200, ok({ lectures: [legacy, legacyPdf], page: 1, page_size: 100, total: 2, total_pages: 1 }));
+    saveToken(token);
+  });
+
+  afterEach(() => {
+    api.restore();
+    localStorage.clear();
+  });
+
+  async function openWorkspace() {
+    const user = userEvent.setup();
+    renderApp("/workspace");
+    await user.click(await screen.findByRole("button", { name: "Show course materials" }));
+    const panel = screen.getByRole("region", { name: "Course materials" });
+    await within(panel).findByText("Intro slides");
+    const assistant = screen.getByRole("region", { name: "Study assistant" });
+    await within(assistant).findByText("Assistant not available yet");
+    return { user, panel, assistant };
+  }
+
+  it("lists lectures without status badges and says the assistant is not available", async () => {
+    const { panel, assistant } = await openWorkspace();
+    expect(within(panel).getByText("PPTX")).toBeInTheDocument();
+    expect(within(panel).queryByText("Processing")).not.toBeInTheDocument();
+    expect(within(assistant).getByText("Not available")).toBeInTheDocument();
+    expect(within(assistant).getByRole("button", { name: "Send message" })).toBeDisabled();
+    expect(api.history.post.filter((r) => r.url.includes("assistant"))).toHaveLength(0);
+  });
+
+  it("opens a PDF straight from its S3 URL", async () => {
+    const { user, panel } = await openWorkspace();
+    await user.click(within(panel).getByRole("button", { name: /^Reading/ }));
+    const frame = await screen.findByTitle("Reading");
+    expect(frame.getAttribute("src")).toMatch(/^https:\/\/bucket\.s3.+reading\.pdf#page=1/);
+    expect(api.history.get.some((r) => r.url.endsWith("/file"))).toBe(false);
+  });
+
+  it("offers a download for slides instead of extracted text", async () => {
+    const { user, panel } = await openWorkspace();
+    await user.click(within(panel).getByRole("button", { name: /^Intro slides/ }));
+    const viewer = await screen.findByRole("region", { name: "Lecture: Intro slides" });
+    expect(within(viewer).getByRole("link", { name: "Download" })).toHaveAttribute("href", legacy.s3_url);
+    expect(within(viewer).getByText(/can’t be previewed/)).toBeInTheDocument();
+    expect(api.history.get.some((r) => r.url.endsWith("/content"))).toBe(false);
+  });
+
+  it("uploads only the file types that backend accepts, without a course field", async () => {
+    const { user, panel } = await openWorkspace();
+    await user.click(within(panel).getByRole("button", { name: "Upload materials" }));
+    const dialog = screen.getByRole("dialog", { name: "Upload lecture materials" });
+    expect(within(dialog).queryByLabelText("Course (optional)")).not.toBeInTheDocument();
+    expect(within(dialog).getByTestId("upload-input")).toHaveAttribute("accept", ".pdf,.pptx,.ipynb");
+    await userEvent.setup({ applyAccept: false }).upload(within(dialog).getByTestId("upload-input"), new File(["# x"], "notes.md"));
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("notes.md");
+  });
+
+  it("only renames, sending just the title", async () => {
+    api.onPatch("/student_profile/lectures/old-1").reply((config) => {
+      expect(JSON.parse(config.data)).toEqual({ title: "Intro (week 1)" });
+      return [200, ok({ ...legacy, title: "Intro (week 1)" })];
+    });
+    const { user, panel } = await openWorkspace();
+    await user.click(within(panel).getByRole("button", { name: "Edit Intro slides" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit lecture" });
+    expect(within(dialog).queryByLabelText("Course")).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Replace file" })).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/supports renaming only/)).toBeInTheDocument();
+    const title = within(dialog).getByLabelText("Title");
+    await user.clear(title);
+    await user.type(title, "Intro (week 1)");
+    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    expect(await within(panel).findByText("Intro (week 1)")).toBeInTheDocument();
+  });
+});
