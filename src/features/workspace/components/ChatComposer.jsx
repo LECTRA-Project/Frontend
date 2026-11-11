@@ -14,6 +14,8 @@ const CELL_ICONS = { code: "code", markdown: "text", raw: "fileText" };
   StudyAssistantPanel) are listed above the input as removable context, separately from
   attached files. `cellDragActive` / `dropOver` highlight the composer as the drop target.
   Dropping a cell never runs it or sends anything; only Send does.
+  `note` is shown above the input (e.g. why sending is blocked). onSend may return false
+  to keep the typed text.
 */
 export default function ChatComposer({
   attachments,
@@ -30,6 +32,8 @@ export default function ChatComposer({
   onRemoveMaterial = () => {},
   dropHint = "Drop to add this cell to your question",
   dropInvalid = false,
+  note = null,
+  placeholder = "Ask about your materials…",
 }) {
   const [text, setText] = useState("");
   const canSend = text.trim().length > 0 && !disabled;
@@ -38,8 +42,8 @@ export default function ChatComposer({
   function handleSubmit(event) {
     event.preventDefault();
     if (!canSend) return;
-    onSend(text.trim());
-    setText("");
+    // onSend may return false to keep the text (e.g. the question is too long to send).
+    if (onSend(text.trim()) !== false) setText("");
   }
 
   const dropClass = dropOver ? "composer--drop-over" : cellDragActive ? "composer--drop-ready" : "";
@@ -134,6 +138,12 @@ export default function ChatComposer({
         </div>
       )}
 
+      {note && (
+        <p className="composer__note" role="status">
+          {note}
+        </p>
+      )}
+
       {hasContext && !connected && (
         <p className="composer__note">
           The assistant isn’t available on this server yet, so a message won’t get an answer. You can still prepare your question.
@@ -148,7 +158,7 @@ export default function ChatComposer({
         <input
           id="composer-input"
           className="composer__input"
-          placeholder="Ask about your materials…"
+          placeholder={placeholder}
           value={text}
           onChange={(event) => setText(event.target.value)}
           autoComplete="off"

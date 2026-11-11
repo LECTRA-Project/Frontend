@@ -626,7 +626,9 @@ export default function WorkspaceLayout() {
         <div {...slotProps("assistant")}>
           <StudyAssistantPanel
             materials={materials}
-            available={library.features ? library.features.ai : null}
+            chat={library.features?.chat === true}
+            focusLectureId={open?.lectureId ?? selectedId}
+            available={library.features ? library.features.ai || library.features.chat : null}
             onAttachClick={() => setUploadOpen(true)}
             onOpenReference={handleOpenReference}
             cellContext={cellContext}
