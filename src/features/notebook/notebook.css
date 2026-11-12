@@ -129,58 +129,6 @@
 }
 
 /* ---------- Body ---------- */
-/* ---------- Collapsed notebook ----------
-   Only hidden, never unmounted: cells, outputs and the kernel are untouched. */
-.notebook__body[hidden],
-.notebook-toolbar__row[hidden] {
-  display: none;
-}
-.notebook--collapsed .notebook-toolbar {
-  border-bottom: none;
-}
-.notebook-toolbar__end {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  flex-shrink: 0;
-}
-/* Rail: a narrow strip (side-by-side layout) with the grip, icon and expand button stacked. */
-.notebook--rail .notebook-toolbar {
-  padding: var(--space-2) 0;
-}
-.notebook--rail .notebook-toolbar__row,
-.notebook--rail .notebook-toolbar__file,
-.notebook--rail .notebook-toolbar__end {
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-}
-.notebook--rail .notebook-toolbar__file {
-  flex: none;
-}
-.notebook--rail .notebook-toolbar__title,
-.notebook--rail .notebook-toolbar__save {
-  display: none;
-}
-/* Keep the kernel's coloured dot (running / idle / error) visible; its text is kept for
-   screen readers and in the tooltip. */
-.notebook--rail .kernel-status {
-  padding: 4px;
-  border: none;
-  background: none;
-}
-.notebook--rail .kernel-status > :not(.pill__dot) {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.notebook--rail .notebook-toolbar__end {
-  order: -1; /* the expand button first, at the top of the rail */
-}
-
 .notebook__body {
   flex: 1;
   overflow-y: auto;

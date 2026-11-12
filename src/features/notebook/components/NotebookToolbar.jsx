@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
-import IconButton from "../../../components/ui/IconButton.jsx";
 import Menu from "../../../components/ui/Menu.jsx";
 import KernelStatus from "./KernelStatus.jsx";
 
@@ -31,8 +30,9 @@ function SaveState({ saveInfo }) {
 }
 
 /*
-  The notebook toolbar: title, save state and kernel status on the first row;
-  cell, run, kernel and file actions on the second.
+  The notebook toolbar: title, save state, kernel status and the panel's own actions
+  (`actions`: pin, widen, close) on the first row; cell, run, kernel and file actions on
+  the second.
 */
 export default function NotebookToolbar({
   title,
@@ -52,8 +52,7 @@ export default function NotebookToolbar({
   onNew,
   onImport,
   onDownload,
-  handle = null,
-  collapse = null,
+  actions = null,
 }) {
   // The title is edited locally and committed on every change; an empty title is replaced on blur.
   const [draftTitle, setDraftTitle] = useState(null);
@@ -67,7 +66,6 @@ export default function NotebookToolbar({
     <div className="notebook-toolbar">
       <div className="notebook-toolbar__row">
         <div className="notebook-toolbar__file">
-          {handle}
           <Icon name="notebook" />
           <input
             className="notebook-toolbar__title"
@@ -84,31 +82,11 @@ export default function NotebookToolbar({
           />
           <SaveState saveInfo={saveInfo} />
         </div>
-        <div className="notebook-toolbar__end">
-          <KernelStatus kernelState={kernelState} lastRunFailed={lastRunFailed} />
-          {collapse && (
-            <IconButton
-              icon={
-                collapse.mode === "rail"
-                  ? collapse.collapsed ? "chevronRight" : "chevronLeft"
-                  : collapse.collapsed ? "chevronDown" : "chevronUp"
-              }
-              label={collapse.collapsed ? "Expand notebook" : "Collapse notebook"}
-              aria-expanded={!collapse.collapsed}
-              aria-controls="notebook-content"
-              className="notebook-toolbar__collapse"
-              onClick={collapse.onToggle}
-            />
-          )}
-        </div>
+        <KernelStatus kernelState={kernelState} lastRunFailed={lastRunFailed} />
+        {actions && <div className="notebook-toolbar__panel-actions">{actions}</div>}
       </div>
 
-      <div
-        className="notebook-toolbar__row notebook-toolbar__actions"
-        role="toolbar"
-        aria-label="Notebook actions"
-        hidden={collapse?.collapsed}
-      >
+      <div className="notebook-toolbar__row notebook-toolbar__actions" role="toolbar" aria-label="Notebook actions">
         <div className="notebook-toolbar__group">
           <Button variant="ghost" size="sm" icon="plus" onClick={onAddCode} title="Add a code cell">
             <span className="notebook-toolbar__label">Code</span>
