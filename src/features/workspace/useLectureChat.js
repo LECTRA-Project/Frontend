@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  attachChatLecture,
   createChatSession,
   deleteChatSession,
+  detachChatLecture,
   listAllChatMessages,
   listAllChatSessions,
   renameChatSession,
@@ -10,18 +12,25 @@ import {
 } from "../../api/services/chat.js";
 
 /*
-  Saved lecture chats (the Lecture Chat API) for the Study Assistant.
+  Saved chats (the Lecture Chat API) for the chat-first workspace. Every chat owns its
+  materials (session.lectures) and answers from all of them.
 
-  - Loads the student's chat sessions when `enabled` (most recently active first).
-  - openSession(id) loads that chat's messages; startNewChat() clears the view, and the
-    next send() creates a session for the chosen lecture first.
+  - Loads the student's chat sessions once `enabled` (most recently active first).
+  - openSession(id) loads that chat's messages; startNewChat() shows an empty new chat.
+    A new chat has no session until it needs one: the first question or the first
+    material creates it.
+  - attachLectures(sessionId | null, ids) adds materials to a chat (null: the new chat,
+    which is created with them); detachLecture removes one from a chat.
+  - updateLecture / forgetLecture keep the chats' materials in step after a lecture is
+    renamed or deleted from the library.
   - send() shows the question at once, then replaces it with the saved question and the
     answer. The backend saves nothing when answering fails, so a failed question stays
     visible with the error and can simply be asked again.
 
   Messages in state: { id, role: "user" | "assistant" | "system", content, sources, extras }
-  (extras: what the student added — notebook cell and material labels, shown under the question).
+  (extras: what the student added — notebook cell labels, shown under the question).
 */
+
 /*
   After a timed-out question: the session's saved messages if they end with the answer to
   `question` (the saved question may carry an appended notebook block), else null.
@@ -36,14 +45,17 @@ async function findSavedAnswer(sessionId, question) {
   }
 }
 
+const NEW = "new-chat";
+
 export function useLectureChat({ enabled }) {
   const [sessions, setSessions] = useState([]);
-  const [sessionsLoading, setSessionsLoading] = useState(enabled);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState(null);
   const [activeId, setActiveId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // Chats waiting for an answer (session ids; NEW for a new chat not created yet).
+  const [pending, setPending] = useState(() => new Set());
   const messagesRequest = useRef(null);
   // The chat on screen, readable after an await (a send can finish after the student switched chats).
   const activeRef = useRef(null);
@@ -128,29 +140,62 @@ export function useLectureChat({ enabled }) {
     setMessagesLoading(false);
   }, [select]);
 
+  /* Adds lectures to a chat; `sessionId` null creates the new chat with them. Returns the session. */
+  const attachLectures = useCallback(
+    async (sessionId, lectureIds) => {
+      if (lectureIds.length === 0) return null;
+      if (!sessionId) {
+        const created = await createChatSession({ lectureIds });
+        putSession(created, { toTop: true });
+        // Still on the new chat: it now is this session.
+        if (activeRef.current === null) select(created.id);
+        return created;
+      }
+      let session = null;
+      for (const lectureId of lectureIds) {
+        session = await attachChatLecture(sessionId, lectureId);
+        putSession(session);
+      }
+      return session;
+    },
+    [putSession, select]
+  );
+
+  const detachLecture = useCallback(
+    async (sessionId, lectureId) => {
+      const session = await detachChatLecture(sessionId, lectureId);
+      putSession(session);
+      return session;
+    },
+    [putSession]
+  );
+
   /*
-    Asks `content` in the open chat, or — when no chat is open, or it is about another
-    lecture — in a new chat about `lectureId`. `question` is what the student typed
-    (shown in the list); `content` is what is sent (it may carry notebook context).
-    Resolves true once answered, false on failure (the error is shown in the chat).
+    Asks `content` in the open chat (a new chat is created first). `question` is what the
+    student typed (shown in the list); `content` is what is sent (it may carry notebook
+    context). Resolves true once answered, false on failure (the error is shown in the chat).
   */
   const send = useCallback(
-    async ({ lectureId, question, content, extras = [] }) => {
+    async ({ question, content, extras = [] }) => {
       const pendingId = crypto.randomUUID();
-      const current = sessions.find((item) => item.id === activeRef.current);
-      const reuse = current && current.lecture?.id === lectureId;
-      if (!reuse && current) {
-        select(null);
-        setMessages([]);
-      }
+      let sessionId = activeRef.current;
+      let key = sessionId ?? NEW;
+      const mark = (from, to) =>
+        setPending((current) => {
+          const next = new Set(current);
+          next.delete(from);
+          if (to) next.add(to);
+          return next;
+        });
       setMessages((list) => [...list, { id: pendingId, role: "user", content: question, extras, pending: true }]);
-      setBusy(true);
-      let sessionId = reuse ? current.id : null;
+      mark(null, key);
       try {
         if (!sessionId) {
-          const created = await createChatSession({ lectureId });
+          const created = await createChatSession({ lectureIds: [] });
           sessionId = created.id;
           putSession(created, { toTop: true });
+          mark(key, sessionId);
+          key = sessionId;
           if (activeRef.current === null) select(created.id);
         }
         const result = await sendChatMessage(sessionId, content);
@@ -180,23 +225,42 @@ export function useLectureChat({ enabled }) {
           err?.code === "ECONNABORTED" && sessionId
             ? "The assistant is taking longer than usual. Your answer may still arrive — open this chat again from Chats in a minute."
             : err.message || "The assistant could not answer right now.";
-        if (err?.status === 409 && sessionId) {
-          // The lecture was deleted: the chat can be read but no longer answers.
-          setSessions((list) => list.map((item) => (item.id === sessionId ? { ...item, lecture: null } : item)));
-        }
         if (activeRef.current === sessionId || activeRef.current === null) {
           setMessages((list) => [
-            ...list.map((message) => (message.id === pendingId ? { ...message, pending: false } : message)),
+            ...list.map((item) => (item.id === pendingId ? { ...item, pending: false } : item)),
             { id: crypto.randomUUID(), role: "system", content: message },
           ]);
         }
         return false;
       } finally {
-        setBusy(false);
+        mark(key, null);
       }
     },
-    [sessions, putSession, select]
+    [putSession, select]
   );
+
+  /* A lecture was renamed: show the new title in every chat that has it. */
+  const updateLecture = useCallback((lecture) => {
+    const swap = (list) => list.map((item) => (item.id === lecture.id ? { ...item, ...lecture } : item));
+    setSessions((list) =>
+      list.map((session) => {
+        if (!session.lectures?.some((item) => item.id === lecture.id)) return session;
+        const lectures = swap(session.lectures);
+        return { ...session, lectures, lecture: lectures[0] ?? null };
+      })
+    );
+  }, []);
+
+  /* A lecture was deleted from the library: the backend drops it from every chat too. */
+  const forgetLecture = useCallback((lectureId) => {
+    setSessions((list) =>
+      list.map((session) => {
+        if (!session.lectures?.some((item) => item.id === lectureId)) return session;
+        const lectures = session.lectures.filter((item) => item.id !== lectureId);
+        return { ...session, lectures, lecture: lectures[0] ?? null };
+      })
+    );
+  }, []);
 
   const rename = useCallback(
     async (id, title) => {
@@ -215,20 +279,27 @@ export function useLectureChat({ enabled }) {
   );
 
   const activeSession = sessions.find((item) => item.id === activeId) ?? null;
+  // Only the chat on screen shows that it is waiting for an answer.
+  const busy = pending.has(activeId ?? NEW);
 
   return {
     sessions,
     sessionsLoading,
     sessionsError,
     reloadSessions: loadSessions,
+    activeId,
     activeSession,
     messages,
     messagesLoading,
     busy,
     openSession,
     startNewChat,
+    attachLectures,
+    detachLecture,
     send,
     rename,
     remove,
+    updateLecture,
+    forgetLecture,
   };
 }
