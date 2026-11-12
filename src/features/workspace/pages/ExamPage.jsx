@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
@@ -13,6 +13,7 @@ const QUESTION_COUNT = 4;
 const OPTIONS = ["A", "B", "C", "D"];
 
 export default function ExamPage() {
+  const { search } = useLocation(); // back to the same chat and material (?chat=…&lecture=…)
   const [current, setCurrent] = useState(0); // index of the question shown (0-based)
   const [answers, setAnswers] = useState({}); // { questionIndex: "A" | "B" | ... }
   const [submitted, setSubmitted] = useState(false);
@@ -33,9 +34,9 @@ export default function ExamPage() {
             Question {questionNumber} of {QUESTION_COUNT}
           </p>
         </div>
-        <Link to="/workspace" className="btn btn--ghost">
+        <Link to={{ pathname: "/workspace", search }} className="btn btn--ghost">
           <Icon name="arrowLeft" />
-          Back to notebook
+          Back to chat
         </Link>
       </div>
 

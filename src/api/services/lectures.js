@@ -2,17 +2,18 @@ import { apiClient, ApiError } from "../client.js";
 import { del, get, patch, post } from "../http.js";
 
 /*
-  LECTURES SERVICE — the four Student Profile lecture APIs plus the AI helpers.
+  LECTURES SERVICE — the Student Profile lecture APIs.
 
-    GET    /student_profile/lectures                     listLectures
+    GET    /student_profile/lectures                     listLectures / listAllLectures
     POST   /student_profile/upload-lecture               uploadLecture
-    PATCH  /student_profile/lectures/{id}                updateLecture  (JSON, or multipart with a file)
+    PATCH  /student_profile/lectures/{id}                renameLecture  (JSON { title })
     DELETE /student_profile/lectures/{id}                deleteLecture
-    GET    /student_profile/lectures/{id}                getLecture
+    GET    /student_profile/lectures/{id}                detectServerFeatures (probe only)
     POST   /student_profile/lectures/{id}/reprocess      reprocessLecture
     GET    /student_profile/lectures/{id}/content        getLectureContent
     GET    /student_profile/lectures/{id}/file           fetchLectureFile (Blob)
-    POST   /student_profile/assistant/ask                askAssistant
+
+  The backend stores a lecture's title and file only: there is no course or description.
 */
 const BASE = "/student_profile";
 
@@ -28,12 +29,10 @@ function unwrap(response, action) {
   return response.data;
 }
 
-export async function listLectures({ page = 1, pageSize = 100, search, fileType, course, status, signal } = {}) {
+export async function listLectures({ page = 1, pageSize = 100, search, fileType, signal } = {}) {
   const params = { page, page_size: pageSize };
   if (search) params.search = search;
   if (fileType) params.file_type = fileType;
-  if (course) params.course = course;
-  if (status) params.processing_status = status;
   return unwrap(await get(`${BASE}/lectures`, { params, signal }), "load your lectures");
 }
 
@@ -47,12 +46,10 @@ export async function listAllLectures({ signal } = {}) {
   return lectures;
 }
 
-export async function uploadLecture({ file, title, description, course, onProgress, signal }) {
+export async function uploadLecture({ file, title, onProgress, signal }) {
   const form = new FormData();
   form.append("title", title);
   form.append("file", file);
-  if (description) form.append("description", description);
-  if (course) form.append("course", course);
   const response = await post(`${BASE}/upload-lecture`, form, {
     headers: MULTIPART,
     timeout: UPLOAD_TIMEOUT_MS,
@@ -64,34 +61,9 @@ export async function uploadLecture({ file, title, description, course, onProgre
   return unwrap(response, "upload the lecture");
 }
 
-/*
-  Partial update. Only the keys you pass are sent:
-    { title, description, course }  → JSON
-    with `file`                      → multipart (replaces the file; the backend reprocesses it)
-  description/course: "" or null clears them.
-*/
-export async function updateLecture(id, { title, description, course, file, onProgress } = {}) {
-  const changes = {};
-  if (title !== undefined) changes.title = title;
-  if (description !== undefined) changes.description = description;
-  if (course !== undefined) changes.course = course;
-
-  let response;
-  if (file) {
-    const form = new FormData();
-    for (const [key, value] of Object.entries(changes)) form.append(key, value ?? "");
-    form.append("file", file);
-    response = await patch(`${BASE}/lectures/${id}`, form, {
-      headers: MULTIPART,
-      timeout: UPLOAD_TIMEOUT_MS,
-      onUploadProgress: (event) => {
-        if (onProgress && event.total) onProgress(Math.round((event.loaded / event.total) * 100));
-      },
-    });
-  } else {
-    response = await patch(`${BASE}/lectures/${id}`, changes);
-  }
-  return unwrap(response, "update the lecture");
+/* Renames a lecture. The backend accepts only { title } (1–255 characters) and rejects other fields. */
+export async function renameLecture(id, title) {
+  return unwrap(await patch(`${BASE}/lectures/${id}`, { title }), "rename the lecture");
 }
 
 export async function deleteLecture(id) {
@@ -116,10 +88,6 @@ export async function detectServerFeatures({ signal } = {}) {
   }
 }
 
-export async function getLecture(id, { signal } = {}) {
-  return unwrap(await get(`${BASE}/lectures/${id}`, { signal }), "load the lecture");
-}
-
 export async function reprocessLecture(id) {
   return unwrap(await post(`${BASE}/lectures/${id}/reprocess`), "retry processing");
 }
@@ -137,16 +105,4 @@ export async function fetchLectureFile(id, { signal } = {}) {
     signal,
   });
   return response.data;
-}
-
-/*
-  Ask the study assistant. Returns { answer, found, references[], searched_chunks }.
-  history: [{ role: "user" | "assistant", content }] — recent turns, oldest first.
-*/
-export async function askAssistant({ question, lectureIds = [], history = [], signal }) {
-  const body = { question };
-  if (lectureIds.length) body.lecture_ids = lectureIds;
-  if (history.length) body.history = history;
-  const response = await post(`${BASE}/assistant/ask`, body, { timeout: 90000, signal });
-  return unwrap(response, "get an answer");
 }

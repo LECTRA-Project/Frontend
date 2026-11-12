@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -64,8 +64,9 @@ describe("sign in", () => {
     expect(await screen.findByRole("button", { name: "Open profile menu" })).toHaveTextContent("AL");
 
     await openProfileMenu(user);
-    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
-    expect(screen.getByText(TEST_USER.email)).toBeInTheDocument();
+    const profileMenu = screen.getByRole("menu", { name: "Profile menu" });
+    expect(within(profileMenu).getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(within(profileMenu).getByText(TEST_USER.email)).toBeInTheDocument();
   });
 
   it("shows the backend error for a wrong password and stays on sign-in", async () => {
@@ -467,46 +468,25 @@ describe("profile form validation", () => {
 });
 
 describe("session", () => {
-  it("opens course materials from the header's menu button as a menu over the dimmed workspace", async () => {
+  it("shows the chat menu beside the chat, collapses it to an icon rail and opens it again", async () => {
     backendWithUser();
-    api.onGet("/student_profile/lectures").reply(200, ok({
-      lectures: [{
-        id: "lecture-1", user_id: TEST_USER.id, title: "Lecture 01 — Notes", original_filename: "notes.pdf",
-        file_type: "application/pdf", file_size: 42, s3_url: "local://lectures/x/notes.pdf",
-        uploaded_at: "2026-11-01T10:00:00Z", updated_at: "2026-11-01T10:00:00Z", description: null, course: null,
-        processing_status: "completed", processing_error: null, processing_attempts: 1, processed_at: "2026-11-01T10:00:05Z",
-        content_version: 1, chunk_count: 3, source_count: 12, source_type: "page",
-      }],
-      page: 1, page_size: 100, total: 1, total_pages: 1,
-    }));
     saveToken(token);
     const user = userEvent.setup();
-    const { container } = renderApp("/workspace");
+    renderApp("/workspace");
 
-    await screen.findByRole("button", { name: "Open profile menu" });
-    // Closed at first; the menu button sits in the header, left of the LECTRA logo.
-    const toggle = screen.getByRole("button", { name: "Show course materials" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
-    expect(toggle.closest(".ws-header__start")).toContainElement(screen.getByRole("link", { name: /LECTRA/ }));
+    const menu = await screen.findByRole("navigation", { name: "Chats and this chat's materials" });
+    expect(within(menu).getByRole("heading", { name: "Materials in this chat" })).toBeInTheDocument();
+    expect(within(menu).getByText("Ada Lovelace")).toBeInTheDocument();
+    // On a wide screen the header has no menu button; the menu has its own.
+    expect(screen.queryByRole("button", { name: "Open menu", expanded: false })).not.toBeInTheDocument();
 
-    await user.click(toggle);
-    expect(screen.getByRole("button", { name: "Hide course materials" })).toHaveAttribute("aria-expanded", "true");
-    expect(await screen.findByText("Lecture 01 — Notes", { selector: ".material-row__name" })).toBeVisible();
-    // Over the workspace (outside its grid), with the rest dimmed.
-    expect(container.querySelector(".workspace__body")).not.toContainElement(screen.getByRole("region", { name: "Course materials" }));
-    const backdrop = container.querySelector(".materials-backdrop");
-    expect(backdrop).toBeInTheDocument();
+    await user.click(within(menu).getByRole("button", { name: "Collapse menu" }));
+    const rail = screen.getByRole("navigation", { name: "Menu" });
+    expect(screen.queryByRole("navigation", { name: "Chats and this chat's materials" })).not.toBeInTheDocument();
+    expect(within(rail).getByRole("button", { name: "New chat" })).toBeInTheDocument();
 
-    // A click on the dimmed area closes it, and so do Escape and its close button.
-    await user.click(backdrop);
-    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Show course materials" }));
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Show course materials" }));
-    await user.click(screen.getByRole("button", { name: "Close course materials" }));
-    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
+    await user.click(within(rail).getByRole("button", { name: "Open menu" }));
+    expect(screen.getByRole("navigation", { name: "Chats and this chat's materials" })).toBeInTheDocument();
   });
 
   it("restores a saved session on reload and skips the sign-in page", async () => {

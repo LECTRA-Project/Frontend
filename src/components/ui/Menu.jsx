@@ -9,7 +9,8 @@ import Icon from "./Icon.jsx";
     label    accessible name of the button (also its tooltip)
     icon     icon shown on the button (default "more")
     text     optional visible text next to the icon
-    items    array of { label, icon?, onSelect, disabled?, danger? } or "separator"
+    items    array of { label, icon?, onSelect, disabled?, danger?, key? } or "separator"
+             (key: when labels can repeat, e.g. file names)
     align    "end" (default) or "start": which edge of the button the list lines up with
     triggerProps  optional extra props for the button (e.g. pointer handlers of a drag handle)
 
@@ -91,7 +92,7 @@ export default function Menu({ label, icon = "more", text, items, align = "end",
               <div key={`separator-${index}`} className="menu__separator" role="separator" />
             ) : (
               <button
-                key={item.label}
+                key={item.key ?? item.label}
                 type="button"
                 role="menuitem"
                 className={`menu__item ${item.danger ? "menu__item--danger" : ""}`}
