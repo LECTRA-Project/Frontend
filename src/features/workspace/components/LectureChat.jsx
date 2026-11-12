@@ -21,7 +21,9 @@ const SOURCE_TYPES = { pdf: "page", slides: "slide", notebook: "cell", notes: "s
 /*
   The Study Assistant's saved lecture chats (Lecture Chat API, see useLectureChat).
 
-  Every chat is about exactly one lecture — the one open in the viewer (focusLectureId).
+  Every chat belongs to one lecture — the one open in the viewer (focusLectureId) — but the
+  student can ask anything: the backend answers general questions too, and cites pages only
+  when the answer comes from the lecture.
   To chat about another lecture, the student opens it from Course materials:
     - the first question creates the chat (the backend names it after that question);
     - if the open chat is about another lecture than the one in the viewer, sending starts
@@ -73,7 +75,9 @@ export default function LectureChat({
     blocked = `“${viewed.name}” can’t be chatted about${viewed.status && viewed.status !== "completed" ? " until it’s processed" : ""}. Open a PDF, slides or notebook from Course materials.`;
   else if (session && !session.lecture && !lectureId) blocked = "The lecture of this chat was deleted. Open a lecture from Course materials to keep asking.";
   else if (!lectureId)
-    blocked = materials.length ? "Open a lecture from Course materials to chat about it." : "Upload a PDF, slides or a notebook to start a chat.";
+    blocked = materials.length
+      ? "Open a lecture from Course materials to start a chat — then ask anything."
+      : "Upload a PDF, slides or a notebook to start a chat.";
 
   let note = blocked ?? tooLong;
   if (!note && startsNewChat) note = `Sending starts a new chat about “${lectureName}”.`;
@@ -202,13 +206,13 @@ export default function LectureChat({
             <span className="assistant__empty-icon">
               <Icon name="message" />
             </span>
-            <p className="assistant__empty-title">Ask about a lecture</p>
+            <p className="assistant__empty-title">Ask anything</p>
             <p className="assistant__empty-text">
               {usable.length
-                ? "Answers come only from the lecture open in the viewer, with the pages they’re based on. Your chats are saved."
+                ? "Ask about the open lecture or any general question. Answers from the lecture show the pages they’re based on. Your chats are saved."
                 : materials.length
                   ? "Your materials are still being processed. You can ask as soon as one shows Completed."
-                  : "Upload PDFs, slides or notebooks, then ask questions about them here."}
+                  : "Upload a PDF, slides or a notebook to start a chat — then ask about it or anything else."}
             </p>
           </div>
         ) : (
@@ -234,7 +238,7 @@ export default function LectureChat({
         {...composerProps}
         connected
         note={note}
-        placeholder="Ask about this lecture…"
+        placeholder="Ask anything…"
         onSend={handleSend}
         disabled={chat.busy || Boolean(blocked)}
       />

@@ -288,12 +288,24 @@ describe("lecture workspace on a backend without AI processing (e.g. today's Ren
     expect(api.history.get.some((r) => r.url.endsWith("/file"))).toBe(false);
   });
 
-  it("offers a download for slides instead of extracted text", async () => {
+  it("shows PowerPoint slides in the Office Online viewer, with a download", async () => {
     const { user, panel } = await openWorkspace();
     await user.click(within(panel).getByRole("button", { name: /^Intro slides/ }));
     const viewer = await screen.findByRole("region", { name: "Lecture: Intro slides" });
     expect(within(viewer).getByRole("link", { name: "Download" })).toHaveAttribute("href", legacy.s3_url);
-    expect(within(viewer).getByText(/can’t be previewed/)).toBeInTheDocument();
+    const frame = within(viewer).getByTitle("Slides: Intro slides");
+    expect(frame).toHaveAttribute("src", `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(legacy.s3_url)}`);
+    expect(within(viewer).queryByText(/can’t be previewed/)).not.toBeInTheDocument();
+
+    // Like a PDF: beside the notebook (which stays visible), movable and collapsible.
+    expect(document.querySelector('[data-section="pdf"]')).toContainElement(viewer);
+    expect(screen.getByRole("region", { name: "Notebook" })).toBeVisible();
+    expect(within(viewer).getByRole("button", { name: "Move PDF viewer" })).toBeInTheDocument();
+    await user.click(within(viewer).getByRole("button", { name: "Collapse lecture viewer" }));
+    expect(viewer).toHaveClass("lecture-view--collapsed", "lecture-view--rail");
+    expect(frame).not.toBeVisible();
+    await user.click(within(viewer).getByRole("button", { name: "Expand lecture viewer" }));
+    expect(within(viewer).getByTitle("Slides: Intro slides")).toBe(frame); // not reloaded
     expect(api.history.get.some((r) => r.url.endsWith("/content"))).toBe(false);
   });
 

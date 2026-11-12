@@ -119,6 +119,9 @@ export default function WorkspaceLayout() {
   const [columnWidths, setColumnWidths] = useState({}); // set by the column dividers (see resizeColumns)
   // The notebook collapsed to its header (or a narrow rail); its cells stay mounted, just hidden.
   const [notebookCollapsed, setNotebookCollapsed] = useState(false);
+  // The PDF viewer and Study assistant collapse the same way (hidden, never unmounted).
+  const [pdfCollapsed, setPdfCollapsed] = useState(false);
+  const [assistantCollapsed, setAssistantCollapsed] = useState(false);
   const columnDrag = useRef(null); // { left, right, widths } measured when a divider drag starts
   const [resizingSplit, setResizingSplit] = useState(false);
   const pairRef = useRef(null); // spans the PDF + notebook pair, for the divider's drag maths
@@ -295,6 +298,7 @@ export default function WorkspaceLayout() {
   function openLecture(lectureId, focusAt = null) {
     setSelectedId(lectureId);
     setOpen({ lectureId, focus: focusAt });
+    setPdfCollapsed(false); // show what was just opened
     const path = isHome ? "/workspace" : location.pathname;
     navigate(`${path}?lecture=${encodeURIComponent(lectureId)}`);
   }
@@ -371,7 +375,11 @@ export default function WorkspaceLayout() {
   const pdfPage = Math.max(1, Math.min(citedPage, openMaterial?.pages || citedPage));
 
   // A PDF opened over the notebook is shown above it instead of replacing it.
-  const splitView = openMaterial !== null && openMaterial.type === "pdf" && !showsSource && location.pathname === "/workspace";
+  // Any lecture opened over the notebook (PDF, slides, notes, cited slide…) shows beside it, in the viewer section.
+  const splitView = openMaterial !== null && location.pathname === "/workspace";
+  const viewerLabel = openMaterial?.type === "pdf" && !showsSource ? "PDF viewer" : "Lecture viewer";
+  const viewerCollapse = () =>
+    splitView ? collapseFor("pdf", pdfIsCollapsed, setPdfCollapsed, viewerLabel, "It stays where you were.") : null;
 
   /* ---------- Section arrangement ---------- */
   // The materials menu is hidden while collapsed (the header's menu button toggles it);
@@ -384,9 +392,17 @@ export default function WorkspaceLayout() {
   // Only the notebook itself collapses: Home, Exam and lectures shown in its place never do.
   const notebookShown = location.pathname === "/workspace" && (openMaterial === null || splitView);
   const notebookIsCollapsed = notebookCollapsed && notebookShown;
+  // The PDF viewer collapses only as its own section (beside / above the notebook), not over the Exam.
+  const pdfIsCollapsed = pdfCollapsed && splitView;
+  const assistantIsCollapsed = assistantCollapsed && !isHome;
+  const collapsedSections = new Set([
+    ...(notebookIsCollapsed ? ["notebook"] : []),
+    ...(pdfIsCollapsed ? ["pdf"] : []),
+    ...(assistantIsCollapsed ? ["assistant"] : []),
+  ]);
   const grid = computeGrid(sectionLayout, {
     visible: visibleSections,
-    collapsed: new Set(notebookIsCollapsed ? ["notebook"] : []),
+    collapsed: collapsedSections,
     pdfShare,
     widths: columnWidths,
   });
@@ -575,8 +591,17 @@ export default function WorkspaceLayout() {
     if (phase === "key") columnDrag.current = null;
   }
 
-  // Alone in its column (side by side) the notebook folds sideways; stacked, it folds up.
-  const notebookAlone = !stacked && grid.columns.some((spec) => spec.members.length === 1 && spec.members[0] === "notebook");
+  // Alone in its column (side by side) a section folds sideways into a rail; stacked, it folds up into its header.
+  const aloneInColumn = (id) => !stacked && grid.columns.some((spec) => spec.members.length === 1 && spec.members[0] === id);
+  const notebookAlone = aloneInColumn("notebook");
+  const collapseFor = (id, collapsed, setCollapsed, label, kept) => ({
+    collapsed,
+    mode: aloneInColumn(id) ? "rail" : "bar",
+    onToggle: () => {
+      setCollapsed(!collapsed);
+      announceLayout(collapsed ? `${label} expanded.` : `${label} collapsed. ${kept}`);
+    },
+  });
 
   const columnDividers = stacked
     ? []
@@ -596,8 +621,10 @@ export default function WorkspaceLayout() {
 
   const home = {
     materials,
+    uploads: library.uploads,
     loading: library.loading,
     onUploadClick: () => setUploadOpen(true),
+    onDismissUpload: library.dismissUpload,
     onOpenMaterial: handleSelectMaterial,
   };
 
@@ -615,6 +642,7 @@ export default function WorkspaceLayout() {
         initialPage={pdfPage}
         onCollapse={closeLecture}
         handle={splitView ? handleFor("pdf") : null}
+        collapse={viewerCollapse()}
       />
     );
   } else if (openMaterial && openMaterial.type === "notes" && !showsSource && fileState?.file) {
@@ -623,6 +651,8 @@ export default function WorkspaceLayout() {
         key={fileKey}
         material={{ ...openMaterial, name: openMaterial.lecture.original_filename, file: fileState.file, url: fileState.url }}
         onCollapse={closeLecture}
+        handle={splitView ? handleFor("pdf") : null}
+        collapse={viewerCollapse()}
       />
     );
   } else if (openMaterial) {
@@ -633,6 +663,8 @@ export default function WorkspaceLayout() {
         focus={focus}
         onRetry={() => handleRetry(openMaterial)}
         onClose={closeLecture}
+        handle={splitView ? handleFor("pdf") : null}
+        collapse={viewerCollapse()}
       />
     );
   }
@@ -736,6 +768,7 @@ export default function WorkspaceLayout() {
               setMaterialContext((list) => list.filter((item) => !materialIds.includes(item.id)));
             }}
             handle={handleFor("assistant")}
+            collapse={collapseFor("assistant", assistantIsCollapsed, setAssistantCollapsed, "Study assistant", "Your chat and draft are kept.")}
           />
           {dropOverlay("assistant")}
         </div>

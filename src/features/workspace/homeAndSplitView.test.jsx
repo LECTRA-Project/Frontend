@@ -134,6 +134,53 @@ describe("Home screen", () => {
   });
 });
 
+describe("uploading from Home", () => {
+  it("shows the file as uploading in Recent uploads until the server answers, then lists it", async () => {
+    let answer;
+    api.onPost("/student_profile/upload-lecture").reply(
+      () =>
+        new Promise((resolve) => {
+          answer = () => {
+            const created = pdfLecture("l9", "neural nets", new Date().toISOString());
+            lectures = [created];
+            resolve([201, ok(created)]);
+          };
+        })
+    );
+    const user = userEvent.setup();
+    renderApp("/workspace/home");
+    await user.click(await screen.findByRole("button", { name: "Upload materials" }));
+    const dialog = screen.getByRole("dialog", { name: "Upload lecture materials" });
+    await user.upload(within(dialog).getByTestId("upload-input"), new File(["%PDF-"], "neural_nets.pdf", { type: "application/pdf" }));
+    await user.click(within(dialog).getByRole("button", { name: "Upload" }));
+
+    // A first upload shows the Recent uploads card, with the file in progress under Today.
+    const recent = await screen.findByRole("region", { name: "Recent uploads" });
+    const today = within(recent).getByRole("list", { name: "Today" });
+    expect(within(today).getByText("neural_nets.pdf")).toBeInTheDocument();
+    expect(within(today).getByRole("status")).toHaveTextContent(/Uploading… \d+%|Processing…/);
+    expect(screen.queryByText(/Your study space for lectures/)).not.toBeInTheDocument();
+
+    answer();
+    expect(await within(recent).findByRole("button", { name: /^neural nets/ })).toBeInTheDocument();
+    expect(within(recent).queryByText("neural_nets.pdf")).not.toBeInTheDocument();
+  });
+
+  it("shows a failed upload with its error and lets it be dismissed", async () => {
+    api.onPost("/student_profile/upload-lecture").reply(413, { detail: "File too large" });
+    const user = userEvent.setup();
+    renderApp("/workspace/home");
+    await user.click(await screen.findByRole("button", { name: "Upload materials" }));
+    const dialog = screen.getByRole("dialog", { name: "Upload lecture materials" });
+    await user.upload(within(dialog).getByTestId("upload-input"), new File(["%PDF-"], "big.pdf", { type: "application/pdf" }));
+    await user.click(within(dialog).getByRole("button", { name: "Upload" }));
+
+    expect(await screen.findByText("Upload failed: File too large")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dismiss big.pdf" }));
+    expect(screen.queryByRole("region", { name: "Recent uploads" })).not.toBeInTheDocument();
+  });
+});
+
 describe("PDF + notebook split view", () => {
   it("shows the PDF beside the notebook, keeps the notebook intact, and switches and closes PDFs", async () => {
     lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z"), pdfLecture("l2", "Lecture 2", "2026-11-05T10:00:00Z")];

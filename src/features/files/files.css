@@ -117,11 +117,52 @@
   gap: var(--space-2);
   min-width: 0;
 }
-.pdf__close {
+.pdf__end {
   grid-column: 2;
   grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+.pdf__close {
   flex-shrink: 0;
   color: var(--danger);
+}
+/* ---------- Collapsed PDF viewer (hidden, never unloaded) ---------- */
+.pdf__controls[hidden],
+.pdf__frame-wrap[hidden] {
+  display: none;
+}
+.pdf--collapsed .pdf__toolbar {
+  border-bottom: none;
+}
+/* Rail: a narrow strip with the expand button, grip, icon and close stacked. */
+.pdf--rail .pdf__toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+.viewer__body[hidden] {
+  display: none;
+}
+.pdf--rail .viewer__actions {
+  order: -1;
+  flex-direction: column;
+}
+.pdf--rail .pdf__file,
+.pdf--rail .pdf__end {
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.pdf--rail .pdf__end {
+  order: -1;
+}
+.pdf--rail .pdf__title,
+.pdf--rail .pdf__title-meta {
+  display: none;
 }
 .pdf__close:hover:not(:disabled) {
   color: var(--danger);

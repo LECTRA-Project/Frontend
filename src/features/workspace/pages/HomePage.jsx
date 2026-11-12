@@ -2,6 +2,7 @@ import { useOutletContext } from "react-router-dom";
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
+import IconButton from "../../../components/ui/IconButton.jsx";
 import { groupOf } from "../../../services/materials/materialTypes.js";
 import { useAuth } from "../../auth/authContext.js";
 
@@ -50,16 +51,20 @@ function groupByDay(materials) {
 
   Outlet context `home` (from WorkspaceLayout):
     materials                 the lecture materials (toMaterial items, see lectures/materialTypes.js)
+    uploads                   files being sent: { id, name, progress, error } (useLectureLibrary)
     loading                   true while the library is first loaded
     onUploadClick             opens the upload dialog
+    onDismissUpload(id)       removes a failed upload from the list
     onOpenMaterial(material)  opens a material in the workspace
 */
 export default function HomePage() {
   const { home } = useOutletContext();
-  const { materials, loading, onUploadClick, onOpenMaterial } = home;
+  const { materials, uploads = [], loading, onUploadClick, onDismissUpload, onOpenMaterial } = home;
   const { user } = useAuth();
   const firstName = (user?.full_name ?? "").trim().split(/\s+/)[0];
   const groups = groupByDay(materials);
+  // Files being uploaded show first, under Today (a first upload shows the card too).
+  if (uploads.length && groups[0]?.label !== "Today") groups.unshift({ label: "Today", items: [] });
 
   const greeting = (
     <h2 id="home-title" className="home__greeting">
@@ -107,6 +112,8 @@ export default function HomePage() {
                 <div key={group.label} className="home__day">
                   <h4 className="home__day-title">{group.label}</h4>
                   <ul className="home__recent-list" aria-label={group.label}>
+                    {group.label === "Today" &&
+                      uploads.map((upload) => <UploadRow key={upload.id} upload={upload} onDismiss={onDismissUpload} />)}
                     {group.items.map(({ item, date }) => (
                       <li key={item.id}>
                         <button type="button" className="material-row home__recent-row" onClick={() => onOpenMaterial(item)}>
@@ -117,6 +124,15 @@ export default function HomePage() {
                               {item.meta}
                               {date && ` · ${timeFormat.format(date)}`}
                             </span>
+                            {item.status === "processing" && (
+                              <span className="home__state">
+                                <span className="home__spinner" aria-hidden="true" />
+                                Processing…
+                              </span>
+                            )}
+                            {item.status === "failed" && (
+                              <span className="home__state home__state--error">Processing failed — open it to retry</span>
+                            )}
                           </span>
                         </button>
                       </li>
@@ -129,5 +145,37 @@ export default function HomePage() {
         )}
       </div>
     </section>
+  );
+}
+
+/*
+  A file being uploaded: a progress bar while it is sent, then "Processing…" while the
+  server reads it (it answers only once the text is extracted), or the error.
+*/
+function UploadRow({ upload, onDismiss }) {
+  const sent = upload.progress >= 100;
+  return (
+    <li className="material-row home__recent-row home__upload" aria-busy={!upload.error}>
+      <Icon name={upload.error ? "alert" : "upload"} />
+      <span className="material-row__text">
+        <span className="material-row__name">{upload.name}</span>
+        {upload.error ? (
+          <span className="home__state home__state--error" role="alert">
+            Upload failed: {upload.error}
+          </span>
+        ) : (
+          <>
+            <span className="home__state" role="status">
+              <span className="home__spinner" aria-hidden="true" />
+              {sent ? "Processing…" : `Uploading… ${upload.progress}%`}
+            </span>
+            <span className={`material-progress ${sent ? "material-progress--busy" : ""}`} aria-hidden="true">
+              <span className="material-progress__bar" style={{ width: sent ? undefined : `${upload.progress}%` }} />
+            </span>
+          </>
+        )}
+      </span>
+      {upload.error && <IconButton icon="close" label={`Dismiss ${upload.name}`} onClick={() => onDismiss(upload.id)} />}
+    </li>
   );
 }

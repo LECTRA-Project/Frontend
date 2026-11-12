@@ -303,3 +303,11 @@ Project Copilot instructions in `.github/copilot-instructions.md` reinforce this
 ## Deploying on Vercel
 
 This is a single-page app: `vercel.json` rewrites every path to `index.html` (real files such as `/assets/*` are still served first), so links like `/workspace?lecture=<id>` work when pasted into a new tab or reloaded instead of returning Vercel's 404.
+
+**Collapsing the PDF viewer and Study assistant.** Like the notebook, both have a chevron in their header: side by side they fold into a narrow rail and the other sections take the width; stacked with another section they fold up to their header. They are only hidden, never unmounted: the PDF stays at its page and zoom, and the chat keeps its messages and draft. Opening a lecture expands the PDF viewer again. The PDF shown over the Exam view does not collapse.
+
+**Ask anything.** The backend now answers general questions too, so the Study assistant says *Ask anything*. A chat still belongs to the lecture open in the viewer (the chat API needs a `lecture_id`); answers taken from the lecture cite its pages.
+
+**PowerPoint slides.** On the deployed backend (no slide-text endpoint), `.pptx` / `.ppt` files open in Microsoft's Office Online viewer (`view.officeapps.live.com`), which loads the file's public S3 URL on Microsoft's side. This needs the S3 objects to stay publicly readable; the file URL is shared with Microsoft for rendering. Download stays available.
+
+**Every lecture opens beside the notebook.** On the notebook page, any opened lecture (PDF, PowerPoint slides, notes, or a cited slide / cell) goes into the viewer column beside the notebook, which stays visible; the viewer can be moved, resized and collapsed like the PDF viewer. Over the Exam view a lecture still replaces the centre.

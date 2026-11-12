@@ -16,8 +16,11 @@ import "./files.css";
   Props:
     material    { name, type, size, file, url }
     onCollapse  closes the viewer
+    handle      optional grip for moving it in the workspace (SectionHandle)
+    collapse    optional { collapsed, mode: "rail" | "bar", onToggle }, like PdfViewerPanel
 */
-export default function MaterialViewerPanel({ material, onCollapse }) {
+export default function MaterialViewerPanel({ material, onCollapse, handle = null, collapse = null }) {
+  const collapsed = Boolean(collapse?.collapsed);
   const group = groupOf(material.type);
   const [markdown, setMarkdown] = useState({ html: null, error: null });
 
@@ -34,9 +37,15 @@ export default function MaterialViewerPanel({ material, onCollapse }) {
   }, [material]);
 
   return (
-    <section className="panel center-panel pdf" aria-label={`Viewer: ${material.name}`}>
+    <section
+      className={["panel center-panel pdf", collapsed ? "pdf--collapsed" : "", collapsed && collapse.mode === "rail" ? "pdf--rail" : ""]
+        .filter(Boolean)
+        .join(" ")}
+      aria-label={`Viewer: ${material.name}`}
+    >
       <div className="pdf__toolbar">
         <div className="pdf__file">
+          {handle}
           <Icon name={group.icon} className="pdf__title-icon" />
           <h2 className="pdf__title">{material.name}</h2>
           <span className="pdf__title-meta">
@@ -44,6 +53,18 @@ export default function MaterialViewerPanel({ material, onCollapse }) {
           </span>
         </div>
         <div className="viewer__actions">
+          {collapse && (
+            <IconButton
+              icon={
+                collapse.mode === "rail"
+                  ? collapse.collapsed ? "chevronRight" : "chevronLeft"
+                  : collapse.collapsed ? "chevronDown" : "chevronUp"
+              }
+              label={collapse.collapsed ? "Expand lecture viewer" : "Collapse lecture viewer"}
+              aria-expanded={!collapse.collapsed}
+              onClick={collapse.onToggle}
+            />
+          )}
           <a className="icon-btn icon-btn--outlined" href={material.url} download={material.name} aria-label={`Download ${material.name}`} title="Download">
             <Icon name="download" />
           </a>
@@ -51,7 +72,7 @@ export default function MaterialViewerPanel({ material, onCollapse }) {
         </div>
       </div>
 
-      <div className="viewer__body">
+      <div className="viewer__body" hidden={collapsed}>
         {material.type === "notes" ? (
           markdown.error ? (
             <p className="viewer__message" role="alert">
