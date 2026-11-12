@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import WorkspaceHeader from "./components/WorkspaceHeader.jsx";
 import CourseMaterialsPanel from "./components/CourseMaterialsPanel.jsx";
@@ -90,6 +90,7 @@ async function downloadFromStorage(url) {
 export default function WorkspaceLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const userKey = user?.id ?? user?.email ?? "signed-in-user";
   const library = useLectureLibrary();
@@ -105,10 +106,10 @@ export default function WorkspaceLayout() {
   const [editing, setEditing] = useState(null); // lecture
   const [deleting, setDeleting] = useState(null); // lecture
   const [notice, setNotice] = useState(null);
-  // The lecture shown in the centre, plus the URL it was opened on: it only shows while
-  // the URL is unchanged, so the Exam button or "Back to notebook" leaves it automatically.
-  // focus = { sourceType, sourceNumber } from a cited source.
-  const [open, setOpen] = useState(null); // { lectureId, path, focus }
+  // The open lecture is in the URL (?lecture=<id>), so a link can be copied, reloaded or
+  // shared, and Back closes it. Leaving the page (e.g. the Exam button) drops it.
+  // `open` only remembers the cited place it was opened at: focus = { sourceType, sourceNumber }.
+  const [open, setOpen] = useState(null); // { lectureId, focus }
   const [openedFile, setOpenedFile] = useState(null); // { key, url, file, error }
   const [cellContext, setCellContext] = useState([]); // notebook cells added to the next assistant message
   const [cellDragActive, setCellDragActive] = useState(false); // a cell is being dragged
@@ -118,6 +119,9 @@ export default function WorkspaceLayout() {
   const [columnWidths, setColumnWidths] = useState({}); // set by the column dividers (see resizeColumns)
   // The notebook collapsed to its header (or a narrow rail); its cells stay mounted, just hidden.
   const [notebookCollapsed, setNotebookCollapsed] = useState(false);
+  // The PDF viewer and Study assistant collapse the same way (hidden, never unmounted).
+  const [pdfCollapsed, setPdfCollapsed] = useState(false);
+  const [assistantCollapsed, setAssistantCollapsed] = useState(false);
   const columnDrag = useRef(null); // { left, right, widths } measured when a divider drag starts
   const [resizingSplit, setResizingSplit] = useState(false);
   const pairRef = useRef(null); // spans the PDF + notebook pair, for the divider's drag maths
@@ -250,9 +254,10 @@ export default function WorkspaceLayout() {
 
   const isHome = location.pathname === "/workspace/home";
   const drawerOpen = materialsOpen && !isHome;
-  const openMaterial =
-    open && open.path === location.pathname ? materials.find((item) => item.id === open.lectureId) ?? null : null;
-  const showsSource = openMaterial !== null && (open.focus?.sourceType ?? "page") !== "page";
+  const urlLectureId = isHome ? null : searchParams.get("lecture");
+  const openMaterial = urlLectureId ? materials.find((item) => item.id === urlLectureId) ?? null : null;
+  const focus = open?.lectureId === urlLectureId ? open.focus : null;
+  const showsSource = openMaterial !== null && (focus?.sourceType ?? "page") !== "page";
   const needsFile = openMaterial !== null && FILE_VIEWERS.has(openMaterial.type) && !showsSource && !basic;
   const fileKey = needsFile ? `${openMaterial.id}:${openMaterial.lecture.content_version}` : null;
 
@@ -282,21 +287,31 @@ export default function WorkspaceLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileKey]);
 
-  function openLecture(lectureId, focus = null) {
+  // A link to a lecture that isn't (or no longer is) in the student's materials.
+  useEffect(() => {
+    if (!urlLectureId || library.loading || library.error || openMaterial) return;
+    setNotice("That lecture isn’t in your materials.");
+    navigate(location.pathname, { replace: true });
+  }, [urlLectureId, library.loading, library.error, openMaterial, navigate, location.pathname]);
+
+  /* Opens a lecture in the viewer: /workspace?lecture=<id> (Home only lists materials, so it goes to the workspace). */
+  function openLecture(lectureId, focusAt = null) {
     setSelectedId(lectureId);
-    // Home only lists materials: opening one goes to the workspace (PDFs open above the notebook).
-    if (location.pathname === "/workspace/home") {
-      navigate("/workspace");
-      setOpen({ lectureId, path: "/workspace", focus });
-      return;
-    }
-    setOpen({ lectureId, path: location.pathname, focus });
+    setOpen({ lectureId, focus: focusAt });
+    setPdfCollapsed(false); // show what was just opened
+    const path = isHome ? "/workspace" : location.pathname;
+    navigate(`${path}?lecture=${encodeURIComponent(lectureId)}`);
+  }
+
+  function closeLecture() {
+    setOpen(null);
+    navigate(location.pathname);
   }
 
   async function openNotebook(material) {
     setSelectedId(material.id);
     setOpen(null);
-    if (location.pathname !== "/workspace") navigate("/workspace");
+    if (location.pathname !== "/workspace" || urlLectureId) navigate("/workspace");
     try {
       const blob = basic ? await downloadFromStorage(material.lecture.s3_url) : await fetchLectureFile(material.id);
       await notebookState.actions.openFile(new File([blob], material.lecture.original_filename, { type: "application/x-ipynb+json" }));
@@ -348,7 +363,7 @@ export default function WorkspaceLayout() {
 
   async function handleDelete() {
     await library.remove(deleting.id);
-    if (open?.lectureId === deleting.id) setOpen(null);
+    if (urlLectureId === deleting.id) closeLecture();
     if (selectedId === deleting.id) setSelectedId(null);
     setDeleting(null);
     setNotice("Lecture deleted.");
@@ -356,11 +371,15 @@ export default function WorkspaceLayout() {
 
   const fileState = openedFile?.key === fileKey ? openedFile : null;
   // A cited page can be out of range after the file was replaced with a shorter one.
-  const citedPage = open?.focus?.sourceType === "page" ? open.focus.sourceNumber : 1;
+  const citedPage = focus?.sourceType === "page" ? focus.sourceNumber : 1;
   const pdfPage = Math.max(1, Math.min(citedPage, openMaterial?.pages || citedPage));
 
   // A PDF opened over the notebook is shown above it instead of replacing it.
-  const splitView = openMaterial !== null && openMaterial.type === "pdf" && !showsSource && location.pathname === "/workspace";
+  // Any lecture opened over the notebook (PDF, slides, notes, cited slide…) shows beside it, in the viewer section.
+  const splitView = openMaterial !== null && location.pathname === "/workspace";
+  const viewerLabel = openMaterial?.type === "pdf" && !showsSource ? "PDF viewer" : "Lecture viewer";
+  const viewerCollapse = () =>
+    splitView ? collapseFor("pdf", pdfIsCollapsed, setPdfCollapsed, viewerLabel, "It stays where you were.") : null;
 
   /* ---------- Section arrangement ---------- */
   // The materials menu is hidden while collapsed (the header's menu button toggles it);
@@ -373,9 +392,17 @@ export default function WorkspaceLayout() {
   // Only the notebook itself collapses: Home, Exam and lectures shown in its place never do.
   const notebookShown = location.pathname === "/workspace" && (openMaterial === null || splitView);
   const notebookIsCollapsed = notebookCollapsed && notebookShown;
+  // The PDF viewer collapses only as its own section (beside / above the notebook), not over the Exam.
+  const pdfIsCollapsed = pdfCollapsed && splitView;
+  const assistantIsCollapsed = assistantCollapsed && !isHome;
+  const collapsedSections = new Set([
+    ...(notebookIsCollapsed ? ["notebook"] : []),
+    ...(pdfIsCollapsed ? ["pdf"] : []),
+    ...(assistantIsCollapsed ? ["assistant"] : []),
+  ]);
   const grid = computeGrid(sectionLayout, {
     visible: visibleSections,
-    collapsed: new Set(notebookIsCollapsed ? ["notebook"] : []),
+    collapsed: collapsedSections,
     pdfShare,
     widths: columnWidths,
   });
@@ -564,8 +591,17 @@ export default function WorkspaceLayout() {
     if (phase === "key") columnDrag.current = null;
   }
 
-  // Alone in its column (side by side) the notebook folds sideways; stacked, it folds up.
-  const notebookAlone = !stacked && grid.columns.some((spec) => spec.members.length === 1 && spec.members[0] === "notebook");
+  // Alone in its column (side by side) a section folds sideways into a rail; stacked, it folds up into its header.
+  const aloneInColumn = (id) => !stacked && grid.columns.some((spec) => spec.members.length === 1 && spec.members[0] === id);
+  const notebookAlone = aloneInColumn("notebook");
+  const collapseFor = (id, collapsed, setCollapsed, label, kept) => ({
+    collapsed,
+    mode: aloneInColumn(id) ? "rail" : "bar",
+    onToggle: () => {
+      setCollapsed(!collapsed);
+      announceLayout(collapsed ? `${label} expanded.` : `${label} collapsed. ${kept}`);
+    },
+  });
 
   const columnDividers = stacked
     ? []
@@ -585,8 +621,10 @@ export default function WorkspaceLayout() {
 
   const home = {
     materials,
+    uploads: library.uploads,
     loading: library.loading,
     onUploadClick: () => setUploadOpen(true),
+    onDismissUpload: library.dismissUpload,
     onOpenMaterial: handleSelectMaterial,
   };
 
@@ -602,8 +640,9 @@ export default function WorkspaceLayout() {
             : { ...openMaterial, url: fileState?.url ?? null, loading: !fileState, loadError: fileState?.error ?? null }
         }
         initialPage={pdfPage}
-        onCollapse={() => setOpen(null)}
+        onCollapse={closeLecture}
         handle={splitView ? handleFor("pdf") : null}
+        collapse={viewerCollapse()}
       />
     );
   } else if (openMaterial && openMaterial.type === "notes" && !showsSource && fileState?.file) {
@@ -611,17 +650,21 @@ export default function WorkspaceLayout() {
       <MaterialViewerPanel
         key={fileKey}
         material={{ ...openMaterial, name: openMaterial.lecture.original_filename, file: fileState.file, url: fileState.url }}
-        onCollapse={() => setOpen(null)}
+        onCollapse={closeLecture}
+        handle={splitView ? handleFor("pdf") : null}
+        collapse={viewerCollapse()}
       />
     );
   } else if (openMaterial) {
     centre = (
       <LectureContentPanel
-        key={`${openMaterial.id}:${open.focus?.sourceType}:${open.focus?.sourceNumber}`}
+        key={`${openMaterial.id}:${focus?.sourceType}:${focus?.sourceNumber}`}
         lecture={openMaterial.lecture}
-        focus={open.focus}
+        focus={focus}
         onRetry={() => handleRetry(openMaterial)}
-        onClose={() => setOpen(null)}
+        onClose={closeLecture}
+        handle={splitView ? handleFor("pdf") : null}
+        collapse={viewerCollapse()}
       />
     );
   }
@@ -725,6 +768,7 @@ export default function WorkspaceLayout() {
               setMaterialContext((list) => list.filter((item) => !materialIds.includes(item.id)));
             }}
             handle={handleFor("assistant")}
+            collapse={collapseFor("assistant", assistantIsCollapsed, setAssistantCollapsed, "Study assistant", "Your chat and draft are kept.")}
           />
           {dropOverlay("assistant")}
         </div>
@@ -767,7 +811,7 @@ export default function WorkspaceLayout() {
               uploads={library.uploads}
               loading={library.loading}
               error={library.error}
-              selectedId={selectedId}
+              selectedId={urlLectureId ?? selectedId}
               onSelect={handleSelectMaterial}
               onEdit={(item) => setEditing(item.lecture)}
               onDelete={(item) => setDeleting(item.lecture)}

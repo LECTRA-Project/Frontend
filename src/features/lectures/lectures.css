@@ -162,3 +162,43 @@
     padding: var(--space-4);
   }
 }
+
+/* PowerPoint slides in the Office Online viewer: fills the panel's body. */
+.lecture-view__slides {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 420px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-subtle);
+}
+/* The basic backend's Download is a link styled as a button: no link colour or underline. */
+.lecture-view__toolbar a.btn {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+/* ---------- Collapsed lecture viewer (hidden, never unloaded) ---------- */
+.lecture-view__body[hidden] {
+  display: none;
+}
+.lecture-view--collapsed .lecture-view__toolbar {
+  border-bottom: none;
+}
+/* Rail: a narrow strip with the buttons, grip and icon stacked. */
+.lecture-view--rail .lecture-view__toolbar {
+  flex-direction: column;
+  padding: var(--space-2) 0;
+  gap: var(--space-2);
+}
+.lecture-view--rail .lecture-view__file {
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.lecture-view--rail .lecture-view__titles,
+.lecture-view--rail .lecture-view__toolbar > a.btn,
+.lecture-view--rail .lecture-view__toolbar > .btn {
+  display: none;
+}

@@ -160,7 +160,7 @@ describe("Study Assistant lecture chats", () => {
 
   it("asks to open a lecture when none is open", async () => {
     const user = await openWorkspace(null);
-    expect(within(assistant()).getByText("Open a lecture from Course materials to chat about it.")).toBeInTheDocument();
+    expect(within(assistant()).getByText("Open a lecture from Course materials to start a chat — then ask anything.")).toBeInTheDocument();
     await user.type(input(), "Hello");
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
   });

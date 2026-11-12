@@ -8,7 +8,17 @@ import { lectureMeta, STATUS_LABEL, displayStatus } from "./materialTypes.js";
 import "./lectures.css";
 
 /*
-  Centre panel for slides, notebooks and images (PDFs use PdfViewerPanel).
+  PowerPoint can't be drawn by the browser. On the basic backend (no slide text) the slides
+  are shown with Microsoft's Office Online viewer, which loads the file's public S3 URL on
+  Microsoft's side — so no CORS rule on the bucket is needed. The file must stay publicly
+  readable for this to work.
+*/
+export const OFFICE_VIEWER = "https://view.officeapps.live.com/op/embed.aspx?src=";
+const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?? "") || /\.pptx?$/i.test(lecture.original_filename ?? "");
+
+/*
+  Centre panel for slides, notebooks and images (PDFs use PdfViewerPanel). On the basic
+  backend, PowerPoint slides are shown in the Office Online viewer (see OFFICE_VIEWER).
 
   Shows the text Lectra extracted from the file, one block per slide or notebook cell,
   in the same order as the original. `focus` ({ sourceType, sourceNumber }) scrolls to
@@ -19,8 +29,12 @@ import "./lectures.css";
     focus      optional source to highlight
     onRetry    retries failed processing
     onClose    closes the panel
+    handle     optional grip for moving it in the workspace (SectionHandle)
+    collapse   optional { collapsed, mode: "rail" | "bar", onToggle }, like PdfViewerPanel; collapsing
+               only hides the body, so the slides stay loaded
 */
-export default function LectureContentPanel({ lecture, focus, onRetry, onClose }) {
+export default function LectureContentPanel({ lecture, focus, onRetry, onClose, handle = null, collapse = null }) {
+  const collapsed = Boolean(collapse?.collapsed);
   const [content, setContent] = useState(null);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
@@ -31,6 +45,7 @@ export default function LectureContentPanel({ lecture, focus, onRetry, onClose }
   // endpoints; the stored file is then opened from its S3 URL.
   const basic = lecture.processing_status === undefined;
   const isImage = basic ? !/(pdf|powerpoint|presentation|ipynb|markdown)/.test(lecture.file_type) : lecture.source_type == null;
+  const officeSlides = basic && isSlides(lecture) && /^https:\/\//.test(lecture.s3_url ?? "");
 
   useEffect(() => {
     if (status !== "completed") return undefined;
@@ -90,9 +105,19 @@ export default function LectureContentPanel({ lecture, focus, onRetry, onClose }
   }
 
   return (
-    <section className="panel center-panel lecture-view" aria-label={`Lecture: ${lecture.title}`}>
+    <section
+      className={[
+        "panel center-panel lecture-view",
+        collapsed ? "lecture-view--collapsed" : "",
+        collapsed && collapse.mode === "rail" ? "lecture-view--rail" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      aria-label={`Lecture: ${lecture.title}`}
+    >
       <div className="lecture-view__toolbar">
         <div className="lecture-view__file">
+          {handle}
           <Icon name={lecture.source_type === "cell" ? "notebook" : lecture.source_type === "slide" ? "slides" : "book"} />
           <div className="lecture-view__titles">
             <h2 className="lecture-view__title">{lecture.title}</h2>
@@ -111,16 +136,36 @@ export default function LectureContentPanel({ lecture, focus, onRetry, onClose }
             {downloading ? "Downloading…" : "Download"}
           </Button>
         )}
+        {collapse && (
+          <IconButton
+            icon={
+              collapse.mode === "rail"
+                ? collapse.collapsed ? "chevronRight" : "chevronLeft"
+                : collapse.collapsed ? "chevronDown" : "chevronUp"
+            }
+            label={collapse.collapsed ? "Expand lecture viewer" : "Collapse lecture viewer"}
+            aria-expanded={!collapse.collapsed}
+            onClick={collapse.onToggle}
+          />
+        )}
         <IconButton icon="close" label="Close lecture" outlined onClick={onClose} />
       </div>
 
-      <div className="lecture-view__body" ref={bodyRef}>
+      <div className="lecture-view__body" ref={bodyRef} hidden={collapsed}>
         {lecture.description && <p className="lecture-view__description">{lecture.description}</p>}
 
         {isImage && (basic ? lecture.s3_url : imageUrl) && (
           <img className="lecture-view__image" src={basic ? lecture.s3_url : imageUrl} alt={lecture.title} />
         )}
-        {basic && !isImage && (
+        {officeSlides && (
+          <iframe
+            className="lecture-view__slides"
+            title={`Slides: ${lecture.title}`}
+            src={`${OFFICE_VIEWER}${encodeURIComponent(lecture.s3_url)}`}
+            allowFullScreen
+          />
+        )}
+        {basic && !isImage && !officeSlides && (
           <p className="lecture-view__notice" role="status">
             This file can’t be previewed in the browser — use Download to open it. Reading slides and notebook
             text for the study assistant needs the AI-enabled backend, which this server doesn’t run yet.

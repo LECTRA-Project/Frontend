@@ -3,6 +3,7 @@ import { useState } from "react";
 import Icon from "../../../components/ui/Icon.jsx";
 import ChatComposer from "./ChatComposer.jsx";
 import LectureChat from "./LectureChat.jsx";
+import IconButton from "../../../components/ui/IconButton.jsx";
 import { sendStudyMessage } from "../../../services/studyAssistant.js";
 import {
   CELL_DROP_ZONE_ATTR,
@@ -47,6 +48,7 @@ import {
     materialDrag       while a course material is dragged: { fileName, over, problem }
                        (the drop itself is handled by the workspace; this panel is its target)
     onRemoveMaterial   removes one material from the draft
+    collapse           optional { collapsed, mode: "rail" | "bar", onToggle } from the workspace
 */
 export default function StudyAssistantPanel({
   chat = false,
@@ -67,7 +69,9 @@ export default function StudyAssistantPanel({
   materialContext = [],
   materialDrag = null,
   onRemoveMaterial = () => {},
+  collapse = null,
 }) {
+  const collapsed = Boolean(collapse?.collapsed);
   const unavailable = available === false;
   const [messages, setMessages] = useState([]);
   const [nativeDragOver, setNativeDragOver] = useState(false);
@@ -145,7 +149,15 @@ export default function StudyAssistantPanel({
 
   return (
     <section
-      className={`panel assistant ${dropOver ? "assistant--drop-over" : ""} ${dropOver && dropInvalid ? "assistant--drop-invalid" : ""}`}
+      className={[
+        "panel assistant",
+        dropOver ? "assistant--drop-over" : "",
+        dropOver && dropInvalid ? "assistant--drop-invalid" : "",
+        collapsed ? "assistant--collapsed" : "",
+        collapsed && collapse.mode === "rail" ? "assistant--rail" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       aria-labelledby="assistant-title"
       {...{ [CELL_DROP_ZONE_ATTR]: "" }}
       onDragEnter={handleDragOver}
@@ -160,11 +172,29 @@ export default function StudyAssistantPanel({
             Study assistant
           </h2>
         </div>
-        <span className="pill" title={unavailable ? "The server has no AI assistant yet" : "Materials the assistant can search"}>
-          <span className={`pill__dot ${searchable.length && !unavailable ? "pill__dot--on" : ""}`} />
-          {unavailable ? "Not available" : searchable.length === 1 ? "1 material" : `${searchable.length} materials`}
-        </span>
+        <div className="assistant__end">
+          <span className="pill" title={unavailable ? "The server has no AI assistant yet" : "Materials the assistant can search"}>
+            <span className={`pill__dot ${searchable.length && !unavailable ? "pill__dot--on" : ""}`} />
+            {unavailable ? "Not available" : searchable.length === 1 ? "1 material" : `${searchable.length} materials`}
+          </span>
+          {collapse && (
+            <IconButton
+              icon={
+              collapse.mode === "rail"
+                ? collapse.collapsed ? "chevronRight" : "chevronLeft"
+                : collapse.collapsed ? "chevronDown" : "chevronUp"
+            }
+              label={collapsed ? "Expand study assistant" : "Collapse study assistant"}
+              aria-expanded={!collapsed}
+              aria-controls="assistant-content"
+              onClick={collapse.onToggle}
+            />
+          )}
+        </div>
       </div>
+
+      {/* Collapsing only hides the chat: messages, the draft and the open chat are kept. */}
+      <div id="assistant-content" className="assistant__content" hidden={collapsed}>
 
       {chat ? (
         <LectureChat
@@ -277,6 +307,7 @@ export default function StudyAssistantPanel({
       <p className="visually-hidden" role="status">
         <span key={announcement.seq}>{announcement.text}</span>
       </p>
+      </div>
     </section>
   );
 }
