@@ -9,6 +9,10 @@
   MAX_PER_COLUMN sections in a column. A section that is not shown right now (the PDF
   viewer while no PDF is open) keeps its place, and empty columns are simply skipped.
 
+  A section can be collapsed (computeGrid's `collapsed` option; the notebook uses it):
+  stacked with others it keeps only its header bar, alone in its column it becomes a
+  narrow rail, and the other sections take the space.
+
   The workspace never moves a section in the DOM: computeGrid() turns the layout into
   CSS grid tracks and per-section grid coordinates, so moving a section never remounts
   it (the PDF frame, notebook kernel and chat all stay as they are).
@@ -172,12 +176,13 @@ const round = (value) => Math.round(value * 1e6) / 1e6;
               PDF/notebook divider (placed at the top edge of the lower section)
     maxStack  the most full-size sections stacked in one column
 */
-export function computeGrid(layout, { visible, materialsCollapsed = false, pdfShare = 0.5, widths = {} }) {
+export function computeGrid(layout, { visible, materialsCollapsed = false, collapsed = new Set(), pdfShare = 0.5, widths = {} }) {
   const columns = layout.map((items) => items.filter((id) => visible.has(id))).filter((items) => items.length > 0);
   const order = Object.fromEntries(layout.flat().map((id, index) => [id, index]));
 
   const info = columns.map((items) => {
-    const isCompact = (id) => id === "materials" && materialsCollapsed && items.length > 1;
+    // A collapsed section stacked with others keeps only its header bar (an "auto" row).
+    const isCompact = (id) => ((id === "materials" && materialsCollapsed) || collapsed.has(id)) && items.length > 1;
     const autoTop = isCompact(items[0]);
     const autoBottom = !autoTop && isCompact(items[items.length - 1]);
     const flexIds = items.filter((_, index) => !(index === 0 && autoTop) && !(index === items.length - 1 && autoBottom));
@@ -252,9 +257,14 @@ export function computeGrid(layout, { visible, materialsCollapsed = false, pdfSh
     }
   });
 
-  const columnSpecs = columns.map((items) => {
+  let columnSpecs = columns.map((items) => {
     const key = columnKey(items);
-    const flex = items.includes("pdf") || items.includes("notebook");
+    // A collapsed section alone in its column becomes a narrow rail.
+    if (items.length === 1 && collapsed.has(items[0])) {
+      return { key, track: "var(--ws-collapsed-w)", flex: false, rail: true, members: items, px: 48 };
+    }
+    // Flexible when it holds an expanded PDF or notebook.
+    const flex = items.some((id) => (id === "pdf" || id === "notebook") && !collapsed.has(id));
     const size = widths[key];
     if (flex) return { key, track: `minmax(0, ${size ?? 1}fr)`, flex, members: items, px: null };
     if (size) return { key, track: `${size}px`, flex, members: items, px: size };
@@ -267,6 +277,11 @@ export function computeGrid(layout, { visible, materialsCollapsed = false, pdfSh
     const track = sized.length === 1 ? sized[0] : `max(${sized.join(", ")})`;
     return { key, track, flex, members: items, px: null };
   });
+  // Nothing left to take the spare width (e.g. the notebook is collapsed and no PDF is open):
+  // the remaining columns share it instead of leaving an empty gap.
+  if (!columnSpecs.some((spec) => spec.flex)) {
+    columnSpecs = columnSpecs.map((spec) => (spec.rail ? spec : { ...spec, track: "minmax(0, 1fr)", flex: true, px: null }));
+  }
 
   const maxStack = Math.max(...info.map((column) => column.items.filter((id) => !column.isCompact(id)).length));
 
