@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
+import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER, openMaterialsMenu } from "../../test/helpers.jsx";
 
 /*
   The Study Assistant with the Lecture Chat API (saved chat sessions, one lecture each),
@@ -109,20 +109,31 @@ afterEach(() => api.restore());
 const assistant = () => screen.getByRole("region", { name: "Study assistant" });
 const input = () => screen.getByLabelText("Message to the study assistant");
 
-async function openWorkspace() {
+/* Opens the workspace; with `lecture`, opens that lecture in the viewer (what the chat is about). */
+async function openWorkspace(lecture = "Search algorithms") {
   const user = userEvent.setup();
   renderApp("/workspace");
   await screen.findByRole("region", { name: "Study assistant" });
-  await within(assistant()).findByLabelText("Chat about");
+  await within(assistant()).findByRole("button", { name: /^Recent chats/ }); // the chat API was detected
+  if (lecture) await openLecture(user, lecture);
   return user;
 }
 
-describe("Study Assistant lecture chats", () => {
-  it("starts a chat about the chosen lecture, shows the answer with its cited page, and saves it", async () => {
-    const user = await openWorkspace();
-    expect(within(assistant()).getByText("New chat", { selector: ".chat-bar__title" })).toBeInTheDocument();
+async function openLecture(user, name) {
+  const panel = await openMaterialsMenu();
+  await user.click(await within(panel).findByRole("button", { name: new RegExp(`^${name}`) }));
+  await screen.findByRole("region", { name: `PDF viewer: ${name}` });
+}
 
-    await user.selectOptions(within(assistant()).getByLabelText("Chat about"), "l-games");
+describe("Study Assistant lecture chats", () => {
+  it("starts a chat about the lecture open in the viewer, shows the answer with its cited page, and saves it", async () => {
+    const user = await openWorkspace("Game playing");
+    expect(within(assistant()).getByText("New chat", { selector: ".chat-bar__title" })).toBeInTheDocument();
+    expect(within(assistant()).queryByLabelText("Chat about")).not.toBeInTheDocument();
+    expect(within(assistant()).getByText("Game playing", { selector: ".chat-bar__lecture" })).toBeInTheDocument();
+    // The chat's lecture opens in the viewer, so questions stay in this chat.
+    expect(await screen.findByRole("region", { name: "PDF viewer: Game playing" })).toBeInTheDocument();
+
     await user.type(input(), "What is A*?");
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
@@ -141,11 +152,32 @@ describe("Study Assistant lecture chats", () => {
     await waitFor(() => expect(sent).toHaveLength(2));
     expect(sent[1].id).toBe("s-new");
     expect(api.history.post.filter((request) => request.url === BASE)).toHaveLength(1);
+
+    // Opening another lecture: the next question starts a new chat about it.
+    await openLecture(user, "Search algorithms");
+    expect(within(assistant()).getByText(/Sending starts a new chat about “Search algorithms”/)).toBeInTheDocument();
   });
 
-  it("opens an earlier chat from the Chats list with its saved messages", async () => {
+  it("asks to open a lecture when none is open", async () => {
+    const user = await openWorkspace(null);
+    expect(within(assistant()).getByText("Open a lecture from Course materials to chat about it.")).toBeInTheDocument();
+    await user.type(input(), "Hello");
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+  });
+
+  it("adds a new line with Shift+Enter and sends with Enter", async () => {
     const user = await openWorkspace();
-    await user.click(within(assistant()).getByRole("button", { name: /^Chats/ }));
+    await user.type(input(), "Line one{Shift>}{Enter}{/Shift}Line two");
+    expect(input()).toHaveValue("Line one\nLine two");
+    expect(sent).toEqual([]);
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(sent).toEqual([{ id: "s-new", content: "Line one\nLine two" }]));
+    expect(input()).toHaveValue("");
+  });
+
+  it("opens an earlier chat from Recent chats with its saved messages and shows its lecture", async () => {
+    const user = await openWorkspace();
+    await user.click(within(assistant()).getByRole("button", { name: /^Recent chats/ }));
     await user.click(await within(assistant()).findByRole("button", { name: /^Minimax recap/ }));
 
     expect(await within(assistant()).findByText("Minimax picks the best worst case.")).toBeInTheDocument();
@@ -161,7 +193,7 @@ describe("Study Assistant lecture chats", () => {
     api.onPatch(`${BASE}/s-old`).reply((config) => [200, ok({ ...sessions[0], title: JSON.parse(config.data).title })]);
     api.onDelete(`${BASE}/s-old`).reply(200, ok({ id: "s-old" }));
     const user = await openWorkspace();
-    await user.click(within(assistant()).getByRole("button", { name: /^Chats/ }));
+    await user.click(within(assistant()).getByRole("button", { name: /^Recent chats/ }));
 
     await user.click(await within(assistant()).findByRole("button", { name: "Rename “Minimax recap”" }));
     const field = within(assistant()).getByLabelText("Chat title");
@@ -190,8 +222,8 @@ describe("Study Assistant lecture chats", () => {
 
   it("can't send in a chat whose lecture was deleted", async () => {
     sessions = [chatSession("s-old", "Minimax recap", null)];
-    const user = await openWorkspace();
-    await user.click(within(assistant()).getByRole("button", { name: /^Chats/ }));
+    const user = await openWorkspace(null);
+    await user.click(within(assistant()).getByRole("button", { name: /^Recent chats/ }));
     await user.click(await within(assistant()).findByRole("button", { name: /^Minimax recap/ }));
 
     expect(await within(assistant()).findByText(/lecture of this chat was deleted/)).toBeInTheDocument();

@@ -51,14 +51,15 @@ describe("sign in", () => {
     expect(await screen.findByRole("heading", { name: "Forgot your password?" })).toBeInTheDocument();
   });
 
-  it("signs in and opens the workspace with the real user", async () => {
+  it("signs in and opens the Home screen with the real user", async () => {
     backendWithUser();
     const user = userEvent.setup();
     const { router } = renderApp("/");
 
     await fillSignIn(user, TEST_USER.email, "secret123");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace/home"));
+    expect(await screen.findByText(/^Good (morning|afternoon|evening), Ada$/)).toBeInTheDocument();
     expect(savedToken()).toBe(token);
     expect(await screen.findByRole("button", { name: "Open profile menu" })).toHaveTextContent("AL");
 
@@ -252,8 +253,7 @@ describe("create account", () => {
     await fillRegister(user);
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/workspace/home"));
-    expect(await screen.findByRole("heading", { name: "Welcome to LECTRA" })).toBeInTheDocument();
-    expect(await screen.findByText("No recent study materials")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /^Good (morning|afternoon|evening), Ada$/ })).toBeInTheDocument();
     expect(JSON.parse(api.history.post[0].data)).toEqual({
       email: TEST_USER.email,
       password: "StrongerPass1!",
@@ -467,7 +467,7 @@ describe("profile form validation", () => {
 });
 
 describe("session", () => {
-  it("starts with course materials collapsed and toggles the list open", async () => {
+  it("opens course materials from the header's menu button as a menu over the dimmed workspace", async () => {
     backendWithUser();
     api.onGet("/student_profile/lectures").reply(200, ok({
       lectures: [{
@@ -484,21 +484,29 @@ describe("session", () => {
     const { container } = renderApp("/workspace");
 
     await screen.findByRole("button", { name: "Open profile menu" });
-    await screen.findByText("Lecture 01 — Notes", { selector: ".material-row__name" });
-    const sidebar = screen.getByRole("region", { name: "Course materials" });
+    // Closed at first; the menu button sits in the header, left of the LECTRA logo.
     const toggle = screen.getByRole("button", { name: "Show course materials" });
-
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(sidebar).toHaveClass("materials--collapsed");
-    expect(screen.queryByText("Lecture 01 — Notes", { selector: ".material-row__name" })).not.toBeVisible();
-    expect(container.querySelector(".center-panel")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
+    expect(toggle.closest(".ws-header__start")).toContainElement(screen.getByRole("link", { name: /LECTRA/ }));
 
     await user.click(toggle);
-
     expect(screen.getByRole("button", { name: "Hide course materials" })).toHaveAttribute("aria-expanded", "true");
-    expect(sidebar).not.toHaveClass("materials--collapsed");
-    expect(screen.getByText("Lecture 01 — Notes", { selector: ".material-row__name" })).toBeVisible();
-    expect(container.querySelector(".workspace__body")).not.toHaveClass("workspace__body--materials-collapsed");
+    expect(await screen.findByText("Lecture 01 — Notes", { selector: ".material-row__name" })).toBeVisible();
+    // Over the workspace (outside its grid), with the rest dimmed.
+    expect(container.querySelector(".workspace__body")).not.toContainElement(screen.getByRole("region", { name: "Course materials" }));
+    const backdrop = container.querySelector(".materials-backdrop");
+    expect(backdrop).toBeInTheDocument();
+
+    // A click on the dimmed area closes it, and so do Escape and its close button.
+    await user.click(backdrop);
+    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show course materials" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show course materials" }));
+    await user.click(screen.getByRole("button", { name: "Close course materials" }));
+    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
   });
 
   it("restores a saved session on reload and skips the sign-in page", async () => {
@@ -506,7 +514,7 @@ describe("session", () => {
     saveToken(token);
     const { router } = renderApp("/");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace/home"));
     expect(screen.getByRole("button", { name: "Open profile menu" })).toHaveTextContent("AL");
   });
 

@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
+import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER, openMaterialsMenu } from "../../test/helpers.jsx";
 
 const token = makeToken();
 
@@ -70,8 +70,7 @@ describe("lecture workspace", () => {
   async function openWorkspace() {
     const user = userEvent.setup();
     renderApp("/workspace");
-    await user.click(await screen.findByRole("button", { name: "Show course materials" }));
-    const panel = screen.getByRole("region", { name: "Course materials" });
+    const panel = await openMaterialsMenu();
     await within(panel).findByText("Search algorithms");
     return { user, panel };
   }
@@ -265,8 +264,7 @@ describe("lecture workspace on a backend without AI processing (e.g. today's Ren
   async function openWorkspace() {
     const user = userEvent.setup();
     renderApp("/workspace");
-    await user.click(await screen.findByRole("button", { name: "Show course materials" }));
-    const panel = screen.getByRole("region", { name: "Course materials" });
+    const panel = await openMaterialsMenu();
     await within(panel).findByText("Intro slides");
     const assistant = screen.getByRole("region", { name: "Study assistant" });
     await within(assistant).findByText("Assistant not available yet");

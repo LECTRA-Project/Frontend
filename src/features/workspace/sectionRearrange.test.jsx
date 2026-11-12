@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCell, createNotebook } from "../../services/notebook/ipynb.js";
 import { saveNotebook } from "../../services/notebook/notebookStorage.js";
-import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
+import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER, openMaterialsMenu } from "../../test/helpers.jsx";
 
 /*
   Rearranging the four workspace sections (drag the header grip, or its Move menu),
@@ -12,7 +12,7 @@ import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../t
 */
 
 const CODE = "answer = 6 * 7\nprint(answer)";
-const LAYOUT_KEY = `lectra:workspace-layout:v1:${TEST_USER.id}`;
+const LAYOUT_KEY = `lectra:workspace-layout:v2:${TEST_USER.id}`;
 
 const LECTURE = {
   id: "l1",
@@ -87,9 +87,7 @@ async function chooseMove(user, label, item) {
 }
 
 async function openPdf(user) {
-  const panel = screen.getByRole("region", { name: "Course materials" });
-  const show = within(panel).queryByRole("button", { name: "Show course materials" });
-  if (show) await user.click(show);
+  const panel = await openMaterialsMenu();
   await user.click(await within(panel).findByRole("button", { name: /^Lecture 1/ }));
   const pdf = await screen.findByRole("region", { name: "PDF viewer: Lecture 1" });
   await waitFor(() => expect(pdf.querySelector("iframe")).not.toBeNull());
@@ -115,51 +113,51 @@ function dragSection(label, over, { release = true } = {}) {
 const zone = (target, edge) => document.querySelector(`[data-drop-target="${target}"][data-drop-edge="${edge}"]`);
 
 describe("rearranging workspace sections", () => {
-  it("starts with the original layout and a labelled grip in every section header", async () => {
+  it("starts with the notebook and assistant side by side and a labelled grip in every section header", async () => {
     await openWorkspace();
-    expect(columns()).toBe("var(--ws-collapsed-w) minmax(0, 1fr) var(--ws-assistant-w)");
-    expect(placeOf("materials").column).toBe("1");
-    expect(placeOf("notebook").column).toBe("2");
-    expect(placeOf("assistant").column).toBe("3");
-    for (const label of ["Course materials", "Notebook", "Study assistant"]) expect(grip(label)).toBeInTheDocument();
+    expect(columns()).toBe("minmax(0, 1fr) var(--ws-assistant-w)");
+    expect(placeOf("notebook").column).toBe("1");
+    expect(placeOf("assistant").column).toBe("2");
+    for (const label of ["Notebook", "Study assistant"]) expect(grip(label)).toBeInTheDocument();
+    // Course materials is a menu over the workspace, not a section.
+    expect(screen.queryByRole("button", { name: "Move Course materials" })).not.toBeInTheDocument();
     expect(localStorage.getItem(LAYOUT_KEY)).toBeNull();
   });
 
   it("drags a section onto a highlighted drop zone and reflows the others", async () => {
     await openWorkspace();
-    const handle = dragSection("Study assistant", () => zone("materials", "left"), { release: false });
+    const handle = dragSection("Study assistant", () => zone("notebook", "left"), { release: false });
 
     // While dragging: the moved section is marked, the other sections offer drop zones.
     expect(slot("assistant")).toHaveClass("ws-slot--dragging");
-    expect(zone("notebook", "left")).not.toBeNull();
+    expect(zone("notebook", "top")).not.toBeNull();
     expect(zone("assistant", "left")).toBeNull(); // not onto itself
-    expect(zone("materials", "left")).toHaveClass("section-drop__zone--active");
-    expect(slot("materials").querySelector(".section-drop__label")).toHaveTextContent("Place to the left of Course materials");
+    expect(zone("notebook", "left")).toHaveClass("section-drop__zone--active");
+    expect(slot("notebook").querySelector(".section-drop__label")).toHaveTextContent("Place to the left of Notebook");
     expect(document.querySelector(".section-ghost")).toHaveTextContent("Moving Study assistant");
 
     fireEvent.pointerUp(handle, { pointerId: 1, pointerType: "mouse", clientX: 300, clientY: 200 });
     fireEvent.click(handle);
 
     expect(placeOf("assistant").column).toBe("1");
-    expect(placeOf("materials").column).toBe("2");
-    expect(placeOf("notebook").column).toBe("3");
-    expect(columns()).toBe("var(--ws-assistant-w) var(--ws-collapsed-w) minmax(0, 1fr)");
+    expect(placeOf("notebook").column).toBe("2");
+    expect(columns()).toBe("var(--ws-assistant-w) minmax(0, 1fr)");
     expect(document.querySelector(".section-drop")).toBeNull();
     expect(screen.queryByRole("menu")).not.toBeInTheDocument(); // the drag didn't open the menu
-    expect(status()).toContain("Study assistant moved to the left of Course materials.");
-    expect(JSON.parse(localStorage.getItem(LAYOUT_KEY))).toEqual([["assistant"], ["materials"], ["pdf", "notebook"]]);
+    expect(status()).toContain("Study assistant moved to the left of Notebook.");
+    expect(JSON.parse(localStorage.getItem(LAYOUT_KEY))).toEqual([["materials"], ["pdf"], ["assistant"], ["notebook"]]);
   });
 
   it("leaves everything in place when dropped outside a target or cancelled with Escape", async () => {
     await openWorkspace();
     dragSection("Notebook", null);
-    expect(placeOf("notebook").column).toBe("2");
+    expect(placeOf("notebook").column).toBe("1");
     expect(status()).toContain("Notebook was not moved.");
 
-    dragSection("Course materials", () => zone("assistant", "right"), { release: false });
+    dragSection("Study assistant", () => zone("notebook", "left"), { release: false });
     fireEvent.keyDown(window, { key: "Escape" });
     expect(document.querySelector(".section-drop")).toBeNull();
-    expect(placeOf("materials").column).toBe("1");
+    expect(placeOf("assistant").column).toBe("2");
     expect(localStorage.getItem(LAYOUT_KEY)).toBeNull();
   });
 
@@ -172,7 +170,7 @@ describe("rearranging workspace sections", () => {
     await user.keyboard("{Escape}");
 
     await chooseMove(user, "Study assistant", "Move left"); // joins the notebook column
-    expect(placeOf("assistant").column).toBe("2");
+    expect(placeOf("assistant").column).toBe("1");
     expect(status()).toContain("Study assistant moved left.");
     expect(grip("Study assistant")).toHaveFocus(); // focus comes back to the same grip
 
@@ -180,8 +178,8 @@ describe("rearranging workspace sections", () => {
     expect(placeOf("assistant").row).toBe("1 / 2");
     expect(placeOf("notebook").row).toBe("2 / 3");
 
-    await chooseMove(user, "Course materials", "Reset layout");
-    expect(columns()).toBe("var(--ws-collapsed-w) minmax(0, 1fr) var(--ws-assistant-w)");
+    await chooseMove(user, "Notebook", "Reset layout");
+    expect(columns()).toBe("minmax(0, 1fr) var(--ws-assistant-w)");
     expect(status()).toContain("Workspace layout reset.");
     expect(localStorage.getItem(LAYOUT_KEY)).toBeNull();
   });
@@ -194,16 +192,17 @@ describe("rearranging workspace sections", () => {
     const zoom = within(pdf).getByText(/%$/).textContent;
     const frame = pdf.querySelector("iframe"); // the viewer reloads its frame on page/zoom changes, not on moves
     const cell = screen.getByRole("group", { name: "Python cell 1" });
-    const materialRow = within(slot("materials")).getByRole("button", { name: /^Lecture 1/ });
     await user.type(screen.getByLabelText("Message to the study assistant"), "half-written question");
     const assistant = screen.getByRole("region", { name: "Study assistant" });
 
-    // PDF below the notebook, then the assistant to the far left.
-    await chooseMove(user, "PDF viewer", "Move down");
+    // The PDF starts beside the notebook; drop it below the notebook, then the assistant to the far left.
+    expect(placeOf("pdf").column).toBe("1");
+    expect(placeOf("notebook").column).toBe("2");
+    dragSection("PDF viewer", () => zone("notebook", "bottom"));
     expect(placeOf("notebook").row).toBe("1 / 2");
     expect(placeOf("pdf").row).toBe("2 / 3");
     expect(screen.getByRole("separator", { name: "Resize PDF and notebook" })).toHaveAttribute("aria-valuetext", "Notebook 50% of the height");
-    dragSection("Study assistant", () => zone("materials", "left"));
+    dragSection("Study assistant", () => zone("notebook", "left"));
     expect(placeOf("assistant").column).toBe("1");
 
     // Same elements, same state.
@@ -213,8 +212,7 @@ describe("rearranging workspace sections", () => {
     expect(within(pdf).getByText(/%$/).textContent).toBe(zoom);
     expect(screen.getByRole("group", { name: "Python cell 1" })).toBe(cell);
     expect(cell).toHaveTextContent("print(answer)");
-    expect(within(slot("materials")).getByRole("button", { name: /^Lecture 1/ })).toBe(materialRow);
-    expect(materialRow).toHaveAttribute("aria-current", "true");
+    expect(within(await openMaterialsMenu()).getByRole("button", { name: /^Lecture 1/ })).toHaveAttribute("aria-current", "true");
     expect(screen.getByRole("region", { name: "Study assistant" })).toBe(assistant);
     expect(screen.getByLabelText("Message to the study assistant")).toHaveValue("half-written question");
   });
@@ -223,13 +221,12 @@ describe("rearranging workspace sections", () => {
     localStorage.setItem(LAYOUT_KEY, JSON.stringify([["notebook"], ["materials", "assistant"], ["pdf"]]));
     const first = await openWorkspace();
     expect(placeOf("notebook").column).toBe("1");
-    expect(placeOf("materials").column).toBe("2");
     expect(placeOf("assistant").column).toBe("2");
     first.unmount();
 
     localStorage.setItem(LAYOUT_KEY, JSON.stringify([["notebook"], ["materials"]]));
     await openWorkspace();
-    expect(columns()).toBe("var(--ws-collapsed-w) minmax(0, 1fr) var(--ws-assistant-w)");
+    expect(columns()).toBe("minmax(0, 1fr) var(--ws-assistant-w)");
   });
 
   it("stacks every section in layout order on narrow screens, with only above/below drop zones", async () => {
@@ -240,8 +237,7 @@ describe("rearranging workspace sections", () => {
     expect(body).toHaveClass("workspace__body--stacked");
     expect(document.querySelector(".workspace")).toHaveClass("workspace--stacked");
     const order = (section) => Number(slot(section).style.getPropertyValue("--slot-order"));
-    expect(order("assistant")).toBeLessThan(order("materials"));
-    expect(order("materials")).toBeLessThan(order("notebook"));
+    expect(order("assistant")).toBeLessThan(order("notebook"));
 
     dragSection("Notebook", () => zone("assistant", "top"), { release: false });
     expect(zone("assistant", "left")).toBeNull();

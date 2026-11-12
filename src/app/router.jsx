@@ -16,7 +16,7 @@ import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
 /*
   All screens of the app and their URLs.
 
-  Guests only (signed-in users are sent on to the workspace; a new account lands on Home):
+  Guests only (signed-in users are sent on to Home):
   /                    Sign in
   /create-account      Create account
   /forget-password     Request a password reset link
@@ -25,7 +25,7 @@ import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
   Signed-in users only (guests are sent to sign-in):
   /workspace           Study workspace with the Notebook in the centre
   /workspace/exam      Study workspace with the Exam view in the centre
-  /workspace/home      Study workspace with the Home / Welcome screen in the centre
+  /workspace/home      Home: greeting, upload and recent materials (no Study assistant); where sign-in lands
   /profile             My profile
   /settings            Account settings
   /statistics          Statistics

@@ -28,7 +28,8 @@ import {
 
   Props:
     chat               true when the server has the Lecture Chat API (saved chat sessions)
-    focusLectureId     the lecture open in the workspace; the default lecture for a new chat
+    focusLectureId     the lecture open in the viewer; what chat questions are about
+    onOpenLecture(id)  opens a lecture in the viewer (when a saved chat about it is opened)
     materials          the student's materials (toMaterial items); completed ones can be searched
     available          false when the backend has no AI assistant (null while unknown)
     onAttachClick      opens the upload dialog (+ button) — files are added to the materials
@@ -50,6 +51,7 @@ import {
 export default function StudyAssistantPanel({
   chat = false,
   focusLectureId = null,
+  onOpenLecture,
   materials = [],
   available = true,
   onAttachClick,
@@ -168,6 +170,7 @@ export default function StudyAssistantPanel({
         <LectureChat
           materials={materials}
           focusLectureId={focusLectureId}
+          onOpenLecture={onOpenLecture}
           onOpenReference={onOpenReference}
           cellContext={cellContext}
           materialContext={materialContext}

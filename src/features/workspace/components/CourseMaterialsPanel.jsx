@@ -16,7 +16,8 @@ import { STATUS_LABEL } from "../../lectures/materialTypes.js";
     loading / error   state of the initial load
     selectedId        id of the highlighted item
     collapsed         whether the materials list is hidden
-    onToggleCollapsed toggles the materials list
+    onToggleCollapsed toggles the materials list (optional)
+    onClose           closes the menu (optional; shows a close button)
     onSelect          called with the material when an item is clicked
     onEdit / onDelete / onRetry   called with the material
     onDismissUpload   removes a failed upload from the list
@@ -88,6 +89,7 @@ export default function CourseMaterialsPanel({
   selectedId,
   collapsed,
   onToggleCollapsed,
+  onClose,
   onSelect,
   onEdit,
   onDelete,
@@ -108,19 +110,23 @@ export default function CourseMaterialsPanel({
 
   return (
     <section
+      id="course-materials"
       className={`panel materials ${collapsed ? "materials--collapsed" : ""}`}
       aria-label="Course materials"
     >
       <div className="materials__top">
         {handle}
         {!collapsed && <h2 className="panel__title">Course materials</h2>}
-        <IconButton
-          icon={collapsed ? "menu" : "chevronLeft"}
-          label={collapsed ? "Show course materials" : "Hide course materials"}
-          aria-expanded={!collapsed}
-          aria-controls="course-material-list"
-          onClick={onToggleCollapsed}
-        />
+        {onClose && <IconButton icon="close" label="Close course materials" onClick={onClose} />}
+        {onToggleCollapsed && (
+          <IconButton
+            icon={collapsed ? "menu" : "chevronLeft"}
+            label={collapsed ? "Show course materials" : "Hide course materials"}
+            aria-expanded={!collapsed}
+            aria-controls="course-material-list"
+            onClick={onToggleCollapsed}
+          />
+        )}
 
         <label className="materials__filter" hidden={collapsed || materials.length === 0}>
           <span className="visually-hidden">Filter materials</span>
