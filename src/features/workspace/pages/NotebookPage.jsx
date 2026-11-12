@@ -20,7 +20,15 @@ import "../../notebook/notebook.css";
   (services/python/), and the notebook is saved in this browser only.
 */
 export default function NotebookPage() {
-  const { notebookState, kernel, kernelState, assistantDraft, notebookHandle = null } = useOutletContext();
+  const {
+    notebookState,
+    kernel,
+    kernelState,
+    assistantDraft,
+    notebookHandle = null,
+    notebookCollapse = null, // { collapsed, mode: "rail" | "bar", onToggle } from the workspace
+  } = useOutletContext();
+  const collapsed = Boolean(notebookCollapse?.collapsed);
   const { notebook, runState, saveInfo, notice, lastRunFailed, pendingOpen, actions } = notebookState;
   const { cells } = notebook;
 
@@ -217,7 +225,20 @@ export default function NotebookPage() {
   const kernelUnavailable = kernelState.status === "unavailable";
 
   return (
-    <section className="panel center-panel notebook" aria-label="Notebook">
+    /*
+      Collapsing only hides the cells: everything stays mounted, so code, outputs, editor
+      state, the run queue and the Python kernel are exactly as they were when expanded.
+    */
+    <section
+      className={[
+        "panel center-panel notebook",
+        collapsed ? "notebook--collapsed" : "",
+        collapsed && notebookCollapse.mode === "rail" ? "notebook--rail" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      aria-label="Notebook"
+    >
       <NotebookToolbar
         title={notebook.title}
         saveInfo={saveInfo}
@@ -237,6 +258,7 @@ export default function NotebookPage() {
         onImport={() => fileInputRef.current?.click()}
         onDownload={download}
         handle={notebookHandle}
+        collapse={notebookCollapse}
       />
       <input
         ref={fileInputRef}
@@ -251,7 +273,7 @@ export default function NotebookPage() {
         }}
       />
 
-      <div className="notebook__body">
+      <div className="notebook__body" id="notebook-content" hidden={collapsed}>
         {kernelUnavailable && (
           <div className="notebook__notice notebook__notice--error" role="alert">
             <span>{kernelState.error}</span>
