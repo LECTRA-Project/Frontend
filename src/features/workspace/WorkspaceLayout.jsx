@@ -116,6 +116,8 @@ export default function WorkspaceLayout() {
   const [draftAnnouncement, setDraftAnnouncement] = useState({ text: "", seq: 0 });
   const [pdfShare, setPdfShare] = useState(0.5); // PDF stacked over the notebook: its fraction of the height
   const [columnWidths, setColumnWidths] = useState({}); // set by the column dividers (see resizeColumns)
+  // The notebook collapsed to its header (or a narrow rail); its cells stay mounted, just hidden.
+  const [notebookCollapsed, setNotebookCollapsed] = useState(false);
   const columnDrag = useRef(null); // { left, right, widths } measured when a divider drag starts
   const [resizingSplit, setResizingSplit] = useState(false);
   const pairRef = useRef(null); // spans the PDF + notebook pair, for the divider's drag maths
@@ -368,7 +370,15 @@ export default function WorkspaceLayout() {
     ...(isHome ? [] : ["assistant"]),
     ...(splitView ? ["pdf"] : []),
   ]);
-  const grid = computeGrid(sectionLayout, { visible: visibleSections, pdfShare, widths: columnWidths });
+  // Only the notebook itself collapses: Home, Exam and lectures shown in its place never do.
+  const notebookShown = location.pathname === "/workspace" && (openMaterial === null || splitView);
+  const notebookIsCollapsed = notebookCollapsed && notebookShown;
+  const grid = computeGrid(sectionLayout, {
+    visible: visibleSections,
+    collapsed: new Set(notebookIsCollapsed ? ["notebook"] : []),
+    pdfShare,
+    widths: columnWidths,
+  });
   const gridKey = JSON.stringify([grid.columns, grid.maxStack]);
   const gridRef = useRef(grid);
   gridRef.current = grid;
@@ -554,9 +564,12 @@ export default function WorkspaceLayout() {
     if (phase === "key") columnDrag.current = null;
   }
 
+  // Alone in its column (side by side) the notebook folds sideways; stacked, it folds up.
+  const notebookAlone = !stacked && grid.columns.some((spec) => spec.members.length === 1 && spec.members[0] === "notebook");
+
   const columnDividers = stacked
     ? []
-    : grid.columns.slice(0, -1).map((spec, index) => (
+    : grid.columns.slice(0, -1).map((spec, index) => spec.rail || grid.columns[index + 1].rail ? null : (
         <ColumnDivider
           key={`${spec.key}|${grid.columns[index + 1].key}`}
           leftLabel={spec.members.map((id) => SECTION_LABELS[id]).join(" / ")}
@@ -655,7 +668,26 @@ export default function WorkspaceLayout() {
         */}
         <div {...slotProps("notebook")}>
           <div className="center-slot" hidden={openMaterial !== null && !splitView}>
-            <Outlet context={{ notebookState, kernel, kernelState, assistantDraft, home, notebookHandle: handleFor("notebook") }} />
+            <Outlet
+              context={{
+                notebookState,
+                kernel,
+                kernelState,
+                assistantDraft,
+                home,
+                notebookHandle: handleFor("notebook"),
+                notebookCollapse: {
+                  collapsed: notebookIsCollapsed,
+                  // Alone in its column it folds sideways into a rail; stacked, up into its header.
+                  mode: notebookAlone ? "rail" : "bar",
+                  onToggle: () => {
+                    const next = !notebookCollapsed;
+                    setNotebookCollapsed(next);
+                    announceLayout(next ? "Notebook collapsed. Your cells and Python session are kept." : "Notebook expanded.");
+                  },
+                },
+              }}
+            />
           </div>
           {!splitView && centre}
           {dropOverlay("notebook")}
