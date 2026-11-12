@@ -7,33 +7,10 @@
   padding: 0 var(--space-5) var(--space-5);
   overflow-y: auto;
 }
-.lecture-form__textarea {
-  height: auto;
-  min-height: 88px;
-  padding-top: var(--space-2);
-  resize: vertical;
-  line-height: 1.5;
-}
-.lecture-form__file {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-.lecture-form__file .field__label {
-  width: 100%;
-}
-.lecture-form__file-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.lecture-form__hint {
   font-size: var(--text-sm);
   color: var(--text-secondary);
-}
-.lecture-form__file .notice {
-  width: 100%;
+  overflow-wrap: anywhere;
 }
 .btn--danger,
 .btn--danger:hover:not(:disabled) {
@@ -41,56 +18,13 @@
   border-color: var(--danger);
 }
 
-.lecture-view__toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 56px;
-  padding: var(--space-2) var(--space-4);
-  border-bottom: 1px solid var(--border-default);
-}
-.lecture-view__file {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-.lecture-view__file > svg {
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-.lecture-view__titles {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.lecture-view__title {
-  font-size: 15px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.lecture-view__meta {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .lecture-view__body {
-  flex: 1;
-  overflow-y: auto;
+  padding: var(--space-5);
+}
+.lecture-view__body > .viewer__zoomed {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-5) var(--space-6);
-}
-.lecture-view__description {
-  max-width: 720px;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
 }
 .lecture-view__image {
   max-width: 100%;
@@ -98,6 +32,8 @@
   border: 1px solid var(--border-default);
 }
 .lecture-view__notice {
+  width: 100%;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -114,15 +50,20 @@
   color: var(--danger);
 }
 .source-block {
+  width: 100%;
   max-width: 720px;
+  margin: 0 auto;
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  box-shadow: 0 1px 3px rgba(42, 43, 42, 0.08);
   scroll-margin-top: var(--space-4);
 }
+/* The slide or cell an answer cited (opened from its source chip). */
 .source-block--focused {
-  border: 1.5px solid var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
   background: var(--accent-soft);
 }
 .source-block__title {
@@ -163,7 +104,10 @@
   }
 }
 
-/* PowerPoint slides in the Office Online viewer: fills the panel's body. */
+/* PowerPoint slides in the Office Online viewer (basic backend): fills the viewer. */
+.lecture-view__body:has(.lecture-view__slides) > .viewer__zoomed {
+  height: 100%;
+}
 .lecture-view__slides {
   display: block;
   flex: 1;
@@ -172,33 +116,4 @@
   border: none;
   border-radius: var(--radius-md, 8px);
   background: var(--bg-subtle);
-}
-/* The basic backend's Download is a link styled as a button: no link colour or underline. */
-.lecture-view__toolbar a.btn {
-  color: var(--text-primary);
-  text-decoration: none;
-}
-
-/* ---------- Collapsed lecture viewer (hidden, never unloaded) ---------- */
-.lecture-view__body[hidden] {
-  display: none;
-}
-.lecture-view--collapsed .lecture-view__toolbar {
-  border-bottom: none;
-}
-/* Rail: a narrow strip with the buttons, grip and icon stacked. */
-.lecture-view--rail .lecture-view__toolbar {
-  flex-direction: column;
-  padding: var(--space-2) 0;
-  gap: var(--space-2);
-}
-.lecture-view--rail .lecture-view__file {
-  flex: none;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.lecture-view--rail .lecture-view__titles,
-.lecture-view--rail .lecture-view__toolbar > a.btn,
-.lecture-view--rail .lecture-view__toolbar > .btn {
-  display: none;
 }

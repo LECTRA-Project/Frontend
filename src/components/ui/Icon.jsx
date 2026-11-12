@@ -92,7 +92,6 @@ const PATHS = {
   chevronLeft: <path d="m12 5-5 5 5 5" />,
   chevronRight: <path d="m8 5 5 5-5 5" />,
   chevronDown: <path d="m5 8 5 5 5-5" />,
-  chevronUp: <path d="m5 12 5-5 5 5" />,
   arrowLeft: <path d="M16 10H4M9 5l-5 5 5 5" />,
   arrowRight: <path d="M4 10h12M11 5l5 5-5 5" />,
   arrowUp: <path d="M10 16V4M5 9l5-5 5 5" />,
@@ -194,6 +193,36 @@ const PATHS = {
     <>
       <circle cx="10" cy="10" r="7" />
       <path d="M10 6.5v4M10 13.5v.01" />
+    </>
+  ),
+  // A panel with a column on the left: the menu (collapse / open it).
+  sidebar: (
+    <>
+      <rect x="2.5" y="3.5" width="15" height="13" rx="2.5" />
+      <path d="M7.5 3.5v13" />
+    </>
+  ),
+  // A panel with a column on the right: pin the notebook beside the chat.
+  dock: (
+    <>
+      <rect x="2.5" y="3.5" width="15" height="13" rx="2.5" />
+      <path d="M11.5 3.5v13" />
+    </>
+  ),
+  external: (
+    <>
+      <path d="M11.5 3.5h5v5M16.5 3.5 9 11" />
+      <path d="M15 11.5v4a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4" />
+    </>
+  ),
+  expand: <path d="M12.5 3.5h4v4M7.5 16.5h-4v-4M16.5 3.5l-5.5 5.5M3.5 16.5 9 11" />,
+  collapse: <path d="M3.5 11.5h5v5M16.5 8.5h-5v-5M11.5 8.5l5.5-5.5M3 17l5.5-5.5" />,
+  chat: <path d="M17 10a6.5 6.5 0 0 1-9.4 5.8L3.5 17l.9-3.8A6.5 6.5 0 1 1 17 10z" />,
+  image: (
+    <>
+      <rect x="3" y="3.5" width="14" height="13" rx="2" />
+      <circle cx="7.5" cy="8" r="1.5" />
+      <path d="m3.5 15 4.5-4.5 3 3 2-2 3.5 3.5" />
     </>
   ),
 };

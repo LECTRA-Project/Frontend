@@ -4,8 +4,13 @@ import Button from "../../components/ui/Button.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import IconButton from "../../components/ui/IconButton.jsx";
 import { fetchLectureFile, getLectureContent } from "../../api/services/lectures.js";
+import { ViewerBanner, ViewerHead, ZoomControls } from "../files/ViewerChrome.jsx";
 import { lectureMeta, STATUS_LABEL, displayStatus } from "./materialTypes.js";
 import "./lectures.css";
+
+const UNIT = { page: "Page", slide: "Slide", cell: "Cell", section: "Section" };
+const ZOOM_MIN = 50;
+const ZOOM_MAX = 200;
 
 /*
   PowerPoint can't be drawn by the browser. On the basic backend (no slide text) the slides
@@ -17,29 +22,33 @@ export const OFFICE_VIEWER = "https://view.officeapps.live.com/op/embed.aspx?src
 const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?? "") || /\.pptx?$/i.test(lecture.original_filename ?? "");
 
 /*
-  Centre panel for slides, notebooks and images (PDFs use PdfViewerPanel). On the basic
-  backend, PowerPoint slides are shown in the Office Online viewer (see OFFICE_VIEWER).
+  Viewer for slides, notebooks and images beside the chat (PDFs use PdfViewerPanel). On the
+  basic backend, PowerPoint slides are shown in the Office Online viewer (see OFFICE_VIEWER).
 
   Shows the text Lectra extracted from the file, one block per slide or notebook cell,
-  in the same order as the original. `focus` ({ sourceType, sourceNumber }) scrolls to
-  and highlights the slide or cell an assistant answer cited.
+  in the same order as the original. The toolbar steps through the blocks and zooms.
+  `focus` ({ sourceType, sourceNumber }) scrolls to that slide or cell; with `cited` it is
+  also highlighted and a banner says it was opened from a source in an answer, until the
+  student moves on.
 
   Props:
-    lecture    the backend lecture
-    focus      optional source to highlight
-    onRetry    retries failed processing
-    onClose    closes the panel
-    handle     optional grip for moving it in the workspace (SectionHandle)
-    collapse   optional { collapsed, mode: "rail" | "bar", onToggle }, like PdfViewerPanel; collapsing
-               only hides the body, so the slides stay loaded
+    lecture           the backend lecture
+    focus             optional place to open at
+    cited             true when opened from a source in an answer
+    onRetry           retries failed processing
+    onClose           closes the viewer
+    onOpenInNotebook  optional (notebooks): opens the file in the runnable notebook
 */
-export default function LectureContentPanel({ lecture, focus, onRetry, onClose, handle = null, collapse = null }) {
-  const collapsed = Boolean(collapse?.collapsed);
+export default function LectureContentPanel({ lecture, focus, cited = false, onRetry, onClose, onOpenInNotebook = null }) {
   const [content, setContent] = useState(null);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [imageUrl, setImageUrl] = useState(null);
+  const [current, setCurrent] = useState(null); // index of the block in view
+  const [citedActive, setCitedActive] = useState(Boolean(cited && focus));
+  const [zoom, setZoom] = useState(100);
   const bodyRef = useRef(null);
+  const scrollFrame = useRef(0);
   const status = displayStatus(lecture.processing_status);
   // A backend without AI processing sends no processing fields and has no file/content
   // endpoints; the stored file is then opened from its S3 URL.
@@ -73,11 +82,46 @@ export default function LectureContentPanel({ lecture, focus, onRetry, onClose, 
     };
   }, [isImage, basic, lecture.id]);
 
+  useEffect(() => () => cancelAnimationFrame(scrollFrame.current), []);
+
+  // Group sections by source number so a slide's notes / a cell's output sit with it.
+  const groups = [];
+  for (const section of content?.sections ?? []) {
+    const last = groups[groups.length - 1];
+    if (last && last.number === section.source_number) last.sections.push(section);
+    else groups.push({ number: section.source_number, type: section.source_type, sections: [section] });
+  }
+  const focusIndex = focus ? groups.findIndex((group) => group.type === focus.sourceType && group.number === focus.sourceNumber) : -1;
+  const shown = current ?? Math.max(0, focusIndex);
+  const unit = UNIT[groups[shown]?.type ?? lecture.source_type] ?? "Section";
+
+  // Open at the focused slide or cell once the content is there.
   useEffect(() => {
     if (!focus || !content) return;
     const target = bodyRef.current?.querySelector(`[data-source="${focus.sourceType}-${focus.sourceNumber}"]`);
-    target?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    target?.scrollIntoView?.({ block: "start" });
   }, [focus, content]);
+
+  function goTo(index) {
+    const group = groups[index];
+    if (!group) return;
+    setCurrent(index);
+    setCitedActive(false);
+    bodyRef.current?.querySelector(`[data-source="${group.type}-${group.number}"]`)?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  }
+
+  // The toolbar follows manual scrolling: the first block still in view is the current one.
+  function handleScroll() {
+    cancelAnimationFrame(scrollFrame.current);
+    scrollFrame.current = requestAnimationFrame(() => {
+      const body = bodyRef.current;
+      if (!body) return;
+      const top = body.getBoundingClientRect().top + 8;
+      const blocks = [...body.querySelectorAll("[data-source]")];
+      const index = blocks.findIndex((block) => block.getBoundingClientRect().bottom > top);
+      if (index >= 0 && index !== shown) setCurrent(index);
+    });
+  }
 
   async function download() {
     setDownloading(true);
@@ -96,127 +140,120 @@ export default function LectureContentPanel({ lecture, focus, onRetry, onClose, 
     }
   }
 
-  // Group sections by source number so a slide's notes / a cell's output sit with it.
-  const groups = [];
-  for (const section of content?.sections ?? []) {
-    const last = groups[groups.length - 1];
-    if (last && last.number === section.source_number) last.sections.push(section);
-    else groups.push({ number: section.source_number, type: section.source_type, sections: [section] });
-  }
+  const icon = lecture.source_type === "cell" ? "code" : lecture.source_type === "slide" ? "slides" : "book";
 
   return (
-    <section
-      className={[
-        "panel center-panel lecture-view",
-        collapsed ? "lecture-view--collapsed" : "",
-        collapsed && collapse.mode === "rail" ? "lecture-view--rail" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      aria-label={`Lecture: ${lecture.title}`}
-    >
-      <div className="lecture-view__toolbar">
-        <div className="lecture-view__file">
-          {handle}
-          <Icon name={lecture.source_type === "cell" ? "notebook" : lecture.source_type === "slide" ? "slides" : "book"} />
-          <div className="lecture-view__titles">
-            <h2 className="lecture-view__title">{lecture.title}</h2>
-            <span className="lecture-view__meta">
-              {lecture.original_filename} · {lectureMeta(lecture)}
-            </span>
-          </div>
-        </div>
-        {basic ? (
-          <a className="btn btn--secondary btn--sm" href={lecture.s3_url} target="_blank" rel="noopener noreferrer" download>
-            <Icon name="download" />
-            Download
-          </a>
-        ) : (
-          <Button size="sm" icon="download" onClick={download} disabled={downloading}>
-            {downloading ? "Downloading…" : "Download"}
+    <section className="viewer lecture-view" aria-label={`Lecture: ${lecture.title}`}>
+      <ViewerHead icon={icon} title={lecture.title} meta={`${lecture.original_filename} · ${lectureMeta(lecture)}`} onClose={onClose}>
+        {onOpenInNotebook && (
+          <Button size="sm" icon="play" onClick={onOpenInNotebook} title="Open this notebook in the runnable notebook">
+            Run in notebook
           </Button>
         )}
-        {collapse && (
+        {basic ? (
+          <a className="icon-btn" href={lecture.s3_url} target="_blank" rel="noopener noreferrer" download aria-label="Download" title="Download">
+            <Icon name="download" />
+          </a>
+        ) : (
+          <IconButton icon="download" label={downloading ? "Downloading…" : "Download"} onClick={download} disabled={downloading} />
+        )}
+      </ViewerHead>
+
+      {groups.length > 0 && (
+        <div className="viewer__toolbar">
+          <IconButton icon="chevronLeft" label={`Previous ${unit.toLowerCase()}`} disabled={shown <= 0} onClick={() => goTo(shown - 1)} />
+          <span className={`viewer__position ${citedActive && shown === focusIndex ? "viewer__position--cited" : ""}`}>
+            {unit} {groups[shown]?.number}
+          </span>
           <IconButton
-            icon={
-              collapse.mode === "rail"
-                ? collapse.collapsed ? "chevronRight" : "chevronLeft"
-                : collapse.collapsed ? "chevronDown" : "chevronUp"
-            }
-            label={collapse.collapsed ? "Expand lecture viewer" : "Collapse lecture viewer"}
-            aria-expanded={!collapse.collapsed}
-            onClick={collapse.onToggle}
+            icon="chevronRight"
+            label={`Next ${unit.toLowerCase()}`}
+            disabled={shown >= groups.length - 1}
+            onClick={() => goTo(shown + 1)}
           />
-        )}
-        <IconButton icon="close" label="Close lecture" outlined onClick={onClose} />
-      </div>
-
-      <div className="lecture-view__body" ref={bodyRef} hidden={collapsed}>
-        {lecture.description && <p className="lecture-view__description">{lecture.description}</p>}
-
-        {isImage && (basic ? lecture.s3_url : imageUrl) && (
-          <img className="lecture-view__image" src={basic ? lecture.s3_url : imageUrl} alt={lecture.title} />
-        )}
-        {officeSlides && (
-          <iframe
-            className="lecture-view__slides"
-            title={`Slides: ${lecture.title}`}
-            src={`${OFFICE_VIEWER}${encodeURIComponent(lecture.s3_url)}`}
-            allowFullScreen
+          <span className="viewer__spacer" />
+          <ZoomControls
+            zoom={zoom}
+            canZoomOut={zoom > ZOOM_MIN}
+            canZoomIn={zoom < ZOOM_MAX}
+            onZoomOut={() => setZoom(zoom - 10)}
+            onZoomIn={() => setZoom(zoom + 10)}
           />
-        )}
-        {basic && !isImage && !officeSlides && (
-          <p className="lecture-view__notice" role="status">
-            This file can’t be previewed in the browser — use Download to open it. Reading slides and notebook
-            text for the study assistant needs the AI-enabled backend, which this server doesn’t run yet.
-          </p>
-        )}
+        </div>
+      )}
 
-        {status === "processing" && (
-          <p className="lecture-view__notice" role="status">
-            Lectra is reading this file. Its content appears here when processing is complete.
-          </p>
-        )}
-        {(status === "failed" || status === "skipped") && (
-          <div className={`lecture-view__notice ${status === "failed" ? "lecture-view__notice--error" : ""}`} role="status">
-            <p>
-              <strong>{STATUS_LABEL[status]}.</strong> {lecture.processing_error}
+      {citedActive && focusIndex >= 0 && (
+        <ViewerBanner>
+          Opened from a source in the answer: {(UNIT[focus.sourceType] ?? "Section").toLowerCase()} {focus.sourceNumber}
+        </ViewerBanner>
+      )}
+
+      <div className="viewer__content lecture-view__body" ref={bodyRef} onScroll={handleScroll} style={{ "--viewer-zoom": zoom / 100 }}>
+        <div className="viewer__zoomed">
+          {isImage && (basic ? lecture.s3_url : imageUrl) && (
+            <img className="lecture-view__image" src={basic ? lecture.s3_url : imageUrl} alt={lecture.title} />
+          )}
+          {officeSlides && (
+            <iframe
+              className="lecture-view__slides"
+              title={`Slides: ${lecture.title}`}
+              src={`${OFFICE_VIEWER}${encodeURIComponent(lecture.s3_url)}`}
+              allowFullScreen
+            />
+          )}
+          {basic && !isImage && !officeSlides && (
+            <p className="lecture-view__notice" role="status">
+              This file can’t be previewed in the browser — use Download to open it. Reading slides and notebook
+              text for the study assistant needs the AI-enabled backend, which this server doesn’t run yet.
             </p>
-            {status === "failed" && (
-              <Button size="sm" icon="refresh" onClick={onRetry}>
-                Retry processing
-              </Button>
-            )}
-          </div>
-        )}
-        {error && (
-          <p className="field__error" role="alert">
-            {error.message}
-          </p>
-        )}
-        {status === "completed" && !content && !error && <p className="lecture-view__notice">Loading content…</p>}
+          )}
 
-        {groups.map((group) => {
-          const focused = focus && focus.sourceType === group.type && focus.sourceNumber === group.number;
-          return (
-            <article
-              key={`${group.type}-${group.number}`}
-              data-source={`${group.type}-${group.number}`}
-              className={`source-block ${focused ? "source-block--focused" : ""}`}
-            >
-              <h3 className="source-block__title">{group.sections[0].location.replace(/ \(.+\)| output$/, "")}</h3>
-              {group.sections.map((section, index) => {
-                const code = section.source_label?.startsWith("code") || section.source_label === "output";
-                return (
-                  <div key={index} className="source-block__part">
-                    {section.source_label && <span className="source-block__label">{section.source_label}</span>}
-                    {code ? <pre className="source-block__code">{section.text}</pre> : <p className="source-block__text">{section.text}</p>}
-                  </div>
-                );
-              })}
-            </article>
-          );
-        })}
+          {status === "processing" && (
+            <p className="lecture-view__notice" role="status">
+              Lectra is reading this file. Its content appears here when processing is complete.
+            </p>
+          )}
+          {(status === "failed" || status === "skipped") && (
+            <div className={`lecture-view__notice ${status === "failed" ? "lecture-view__notice--error" : ""}`} role="status">
+              <p>
+                <strong>{STATUS_LABEL[status]}.</strong> {lecture.processing_error}
+              </p>
+              {status === "failed" && (
+                <Button size="sm" icon="refresh" onClick={onRetry}>
+                  Retry processing
+                </Button>
+              )}
+            </div>
+          )}
+          {error && (
+            <p className="field__error" role="alert">
+              {error.message}
+            </p>
+          )}
+          {status === "completed" && !content && !error && <p className="lecture-view__notice">Loading content…</p>}
+
+          {groups.map((group, index) => {
+            const highlighted = citedActive && index === focusIndex;
+            return (
+              <article
+                key={`${group.type}-${group.number}`}
+                data-source={`${group.type}-${group.number}`}
+                className={`source-block ${highlighted ? "source-block--focused" : ""}`}
+              >
+                <h3 className="source-block__title">{group.sections[0].location.replace(/ \(.+\)| output$/, "")}</h3>
+                {group.sections.map((section, part) => {
+                  const code = section.source_label?.startsWith("code") || section.source_label === "output";
+                  return (
+                    <div key={part} className="source-block__part">
+                      {section.source_label && <span className="source-block__label">{section.source_label}</span>}
+                      {code ? <pre className="source-block__code">{section.text}</pre> : <p className="source-block__text">{section.text}</p>}
+                    </div>
+                  );
+                })}
+              </article>
+            );
+          })}
+        </div>
       </div>
     </section>
   );

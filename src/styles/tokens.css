@@ -9,6 +9,7 @@
   --bg-surface: #ffffff;
   --bg-subtle: #faf9f6;
   --bg-scrim: rgba(42, 43, 42, 0.32);
+  --bg-sunken: #efece5; /* behind documents in the material viewer */
 
   /* Text */
   --text-primary: #2a2b2a;
@@ -43,6 +44,8 @@
   --code-definition: #2a2b2a;
   --code-output-bg: #ffffff;
   --warning: #b07a1f;
+  --warning-soft: #f5ecdc;
+  --warning-strong: #7a5212;
 
   /* Typography */
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;

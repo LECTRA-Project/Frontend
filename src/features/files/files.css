@@ -1,4 +1,4 @@
-/* Upload dialog and inline PDF viewer */
+/* Upload dialog and the material viewer */
 
 /* ---------- Upload dialog ---------- */
 .upload {
@@ -95,185 +95,178 @@
   gap: var(--space-2);
 }
 
-/* ---------- PDF viewer (inline, in the workspace centre panel) ---------- */
-.pdf {
+/* ---------- Material viewer (beside the chat): shared header, toolbar and banner ---------- */
+.viewer {
+  flex: 1;
   min-width: 0;
   min-height: 0;
-  /* keeps the toolbar below the sticky header when scrolled into view on phones */
-  scroll-margin-top: calc(var(--header-height) + var(--space-4));
+  display: flex;
+  flex-direction: column;
 }
-.pdf__toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.viewer__head {
+  flex: none;
+  height: 60px;
+  display: flex;
   align-items: center;
-  gap: var(--space-2) var(--space-4);
-  min-height: 56px;
-  padding: var(--space-2) var(--space-4);
+  gap: var(--space-2);
+  padding: 0 var(--space-2) 0 var(--space-4);
   border-bottom: 1px solid var(--border-default);
+  background: var(--bg-subtle);
 }
-.pdf__file {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-.pdf__end {
-  grid-column: 2;
-  grid-row: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+.viewer__head .icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   flex-shrink: 0;
 }
-.pdf__close {
+.viewer__head .btn {
   flex-shrink: 0;
-  color: var(--danger);
 }
-/* ---------- Collapsed PDF viewer (hidden, never unloaded) ---------- */
-.pdf__controls[hidden],
-.pdf__frame-wrap[hidden] {
-  display: none;
-}
-.pdf--collapsed .pdf__toolbar {
-  border-bottom: none;
-}
-/* Rail: a narrow strip with the expand button, grip, icon and close stacked. */
-.pdf--rail .pdf__toolbar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) 0;
-}
-.viewer__body[hidden] {
-  display: none;
-}
-.pdf--rail .viewer__actions {
-  order: -1;
-  flex-direction: column;
-}
-.pdf--rail .pdf__file,
-.pdf--rail .pdf__end {
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.pdf--rail .pdf__end {
-  order: -1;
-}
-.pdf--rail .pdf__title,
-.pdf--rail .pdf__title-meta {
-  display: none;
-}
-.pdf__close:hover:not(:disabled) {
-  color: var(--danger);
-}
-.pdf__title-icon {
-  flex-shrink: 0;
+.viewer__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
   color: var(--accent);
 }
-.pdf__title {
-  font-size: 15px;
-  font-weight: 600;
+.viewer__titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.viewer__title,
+.viewer__meta {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pdf__title-meta {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
+.viewer__title {
+  font-size: var(--text-md);
+  font-weight: 600;
 }
-.pdf__controls {
-  grid-column: 1 / -1;
+.viewer__meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.viewer__toolbar {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-1);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-subtle);
 }
-.pdf__pager,
-.pdf__zoom {
+.viewer__toolbar .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+}
+.viewer__position {
+  min-width: 76px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+/* The page / slide / cell an answer cited, while it is shown. */
+.viewer__position--cited {
+  background: var(--accent-hover);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.viewer__spacer {
+  flex: 1;
+}
+.viewer__zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.viewer__zoom-value {
+  min-width: 44px;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.viewer__banner {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent-hover);
+  color: var(--accent-strong);
   font-size: var(--text-sm);
 }
+.viewer__banner svg {
+  flex-shrink: 0;
+}
+.viewer__content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+/* Text zoom of the slides / notebook / notes content (set by the zoom controls). */
+.viewer__zoomed {
+  zoom: var(--viewer-zoom, 1);
+}
+.viewer__message-wrap {
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+}
+
+/* ---------- PDF viewer ---------- */
 .pdf__page-input {
-  width: 32px;
-  height: 28px;
+  width: 44px;
+  height: 30px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
+  font: inherit;
   text-align: center;
 }
 .pdf__page-count {
   color: var(--text-secondary);
+  font-weight: 400;
 }
-.pdf__zoom-value {
-  min-width: 40px;
-  text-align: center;
-}
-
 .pdf__frame-wrap {
-  flex: 1;
-  min-height: 0;
-  background: #f2f0ea;
+  display: flex;
+  overflow: hidden;
+  background: var(--bg-sunken);
+}
+/* Opened from a source: the page shown is the one the answer cited. */
+.pdf__frame-wrap--cited {
+  box-shadow: inset 0 0 0 3px var(--accent);
 }
 .pdf__frame {
+  flex: 1;
   width: 100%;
   height: 100%;
   border: none;
 }
 
 /* ---------- Notes / slides viewer ---------- */
-.viewer__actions {
-  grid-column: 2;
-  grid-row: 1;
-  display: flex;
-  gap: var(--space-2);
-}
 .viewer__body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   padding: var(--space-6);
+  background: var(--bg-surface);
 }
 .viewer__document {
   max-width: 760px;
+  margin: 0 auto;
 }
 .viewer__message {
   font-size: var(--text-sm);
   color: var(--text-secondary);
 }
-.viewer__unsupported {
-  max-width: 420px;
-  margin: var(--space-8) auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  text-align: center;
-}
-.viewer__unsupported .btn {
-  max-width: 100%;
-  margin-top: var(--space-3);
-  text-decoration: none;
-}
-.viewer__unsupported-icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  margin-bottom: var(--space-2);
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.viewer__unsupported-title {
-  font-weight: 600;
-}
 
-@media (max-width: 700px) {
-  .pdf__controls {
-    width: 100%;
-    justify-content: space-between;
-  }
-}
