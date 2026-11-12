@@ -120,6 +120,7 @@ Vite only exposes variables prefixed with `VITE_` to browser code. Do not put se
 | `/forget-password` | Request a reset email | Guest |
 | `/reset-password?token=...` | Choose a new password | Public reset link; the page captures the token and immediately removes it from the visible URL |
 | `/workspace` | Python notebook workspace | Signed in |
+| `/workspace?lecture=<id>` | The workspace with that lecture open (any page of it, e.g. `/workspace/exam?lecture=<id>`); the link can be copied, reloaded or shared. An id not in the student's materials shows a notice and is dropped. | Signed in |
 | `/workspace/exam` | Exam workspace | Signed in |
 | `/workspace/home` | Home screen (where signing in and sign-up land) | Signed in |
 | `/profile` | Profile and password fields | Signed in |
@@ -297,3 +298,7 @@ Check the relevant service and feature before assuming a UI is backed by a persi
 6. Never add real secrets to examples or documentation.
 
 Project Copilot instructions in `.github/copilot-instructions.md` reinforce this documentation-maintenance rule for future coding-agent changes.
+
+## Deploying on Vercel
+
+This is a single-page app: `vercel.json` rewrites every path to `index.html` (real files such as `/assets/*` are still served first), so links like `/workspace?lecture=<id>` work when pasted into a new tab or reloaded instead of returning Vercel's 404.

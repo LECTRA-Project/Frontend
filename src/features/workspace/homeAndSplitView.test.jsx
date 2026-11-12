@@ -126,6 +126,7 @@ describe("Home screen", () => {
 
     await user.click(within(recent).getByRole("button", { name: /^Old lecture/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    expect(router.state.location.search).toBe("?lecture=l1");
     expect(await screen.findByRole("region", { name: "PDF viewer: Old lecture" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Notebook" })).toBeVisible();
     expect(screen.getByRole("region", { name: "Study assistant" })).toBeInTheDocument();
@@ -225,5 +226,33 @@ describe("PDF + notebook split view", () => {
     expect(slot("pdf")).not.toBeVisible();
     expect(within(slot("notebook")).getByRole("region", { name: "PDF viewer: Lecture 1" })).toBeInTheDocument();
     expect(screen.queryByRole("separator", { name: /PDF/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("the open lecture in the URL", () => {
+  it("puts the lecture id in the URL, opens it from a pasted link, and drops it when closed", async () => {
+    lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z"), pdfLecture("l2", "Lecture 2", "2026-11-05T10:00:00Z")];
+    const user = userEvent.setup();
+    const { router } = renderApp("/workspace?lecture=l2");
+
+    // A pasted / reloaded link opens that lecture once the materials are loaded.
+    const pane = await screen.findByRole("region", { name: "PDF viewer: Lecture 2" });
+
+    // Opening another one from the menu changes the id in the URL.
+    await openMaterialFromPanel(user, "Lecture 1");
+    expect(router.state.location.search).toBe("?lecture=l1");
+    expect(screen.queryByRole("region", { name: "PDF viewer: Lecture 2" })).not.toBeInTheDocument();
+    expect(pane).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Close PDF viewer" }));
+    expect(router.state.location.search).toBe("");
+    expect(screen.queryByRole("region", { name: /PDF viewer/ })).not.toBeInTheDocument();
+  });
+
+  it("says so when the linked lecture isn't in the student's materials", async () => {
+    lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z")];
+    const { router } = renderApp("/workspace?lecture=missing");
+    expect(await screen.findByText("That lecture isn’t in your materials.")).toBeInTheDocument();
+    expect(router.state.location.search).toBe("");
   });
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import WorkspaceHeader from "./components/WorkspaceHeader.jsx";
 import CourseMaterialsPanel from "./components/CourseMaterialsPanel.jsx";
@@ -90,6 +90,7 @@ async function downloadFromStorage(url) {
 export default function WorkspaceLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const userKey = user?.id ?? user?.email ?? "signed-in-user";
   const library = useLectureLibrary();
@@ -105,10 +106,10 @@ export default function WorkspaceLayout() {
   const [editing, setEditing] = useState(null); // lecture
   const [deleting, setDeleting] = useState(null); // lecture
   const [notice, setNotice] = useState(null);
-  // The lecture shown in the centre, plus the URL it was opened on: it only shows while
-  // the URL is unchanged, so the Exam button or "Back to notebook" leaves it automatically.
-  // focus = { sourceType, sourceNumber } from a cited source.
-  const [open, setOpen] = useState(null); // { lectureId, path, focus }
+  // The open lecture is in the URL (?lecture=<id>), so a link can be copied, reloaded or
+  // shared, and Back closes it. Leaving the page (e.g. the Exam button) drops it.
+  // `open` only remembers the cited place it was opened at: focus = { sourceType, sourceNumber }.
+  const [open, setOpen] = useState(null); // { lectureId, focus }
   const [openedFile, setOpenedFile] = useState(null); // { key, url, file, error }
   const [cellContext, setCellContext] = useState([]); // notebook cells added to the next assistant message
   const [cellDragActive, setCellDragActive] = useState(false); // a cell is being dragged
@@ -248,9 +249,10 @@ export default function WorkspaceLayout() {
 
   const isHome = location.pathname === "/workspace/home";
   const drawerOpen = materialsOpen && !isHome;
-  const openMaterial =
-    open && open.path === location.pathname ? materials.find((item) => item.id === open.lectureId) ?? null : null;
-  const showsSource = openMaterial !== null && (open.focus?.sourceType ?? "page") !== "page";
+  const urlLectureId = isHome ? null : searchParams.get("lecture");
+  const openMaterial = urlLectureId ? materials.find((item) => item.id === urlLectureId) ?? null : null;
+  const focus = open?.lectureId === urlLectureId ? open.focus : null;
+  const showsSource = openMaterial !== null && (focus?.sourceType ?? "page") !== "page";
   const needsFile = openMaterial !== null && FILE_VIEWERS.has(openMaterial.type) && !showsSource && !basic;
   const fileKey = needsFile ? `${openMaterial.id}:${openMaterial.lecture.content_version}` : null;
 
@@ -280,21 +282,30 @@ export default function WorkspaceLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileKey]);
 
-  function openLecture(lectureId, focus = null) {
+  // A link to a lecture that isn't (or no longer is) in the student's materials.
+  useEffect(() => {
+    if (!urlLectureId || library.loading || library.error || openMaterial) return;
+    setNotice("That lecture isn’t in your materials.");
+    navigate(location.pathname, { replace: true });
+  }, [urlLectureId, library.loading, library.error, openMaterial, navigate, location.pathname]);
+
+  /* Opens a lecture in the viewer: /workspace?lecture=<id> (Home only lists materials, so it goes to the workspace). */
+  function openLecture(lectureId, focusAt = null) {
     setSelectedId(lectureId);
-    // Home only lists materials: opening one goes to the workspace (PDFs open above the notebook).
-    if (location.pathname === "/workspace/home") {
-      navigate("/workspace");
-      setOpen({ lectureId, path: "/workspace", focus });
-      return;
-    }
-    setOpen({ lectureId, path: location.pathname, focus });
+    setOpen({ lectureId, focus: focusAt });
+    const path = isHome ? "/workspace" : location.pathname;
+    navigate(`${path}?lecture=${encodeURIComponent(lectureId)}`);
+  }
+
+  function closeLecture() {
+    setOpen(null);
+    navigate(location.pathname);
   }
 
   async function openNotebook(material) {
     setSelectedId(material.id);
     setOpen(null);
-    if (location.pathname !== "/workspace") navigate("/workspace");
+    if (location.pathname !== "/workspace" || urlLectureId) navigate("/workspace");
     try {
       const blob = basic ? await downloadFromStorage(material.lecture.s3_url) : await fetchLectureFile(material.id);
       await notebookState.actions.openFile(new File([blob], material.lecture.original_filename, { type: "application/x-ipynb+json" }));
@@ -346,7 +357,7 @@ export default function WorkspaceLayout() {
 
   async function handleDelete() {
     await library.remove(deleting.id);
-    if (open?.lectureId === deleting.id) setOpen(null);
+    if (urlLectureId === deleting.id) closeLecture();
     if (selectedId === deleting.id) setSelectedId(null);
     setDeleting(null);
     setNotice("Lecture deleted.");
@@ -354,7 +365,7 @@ export default function WorkspaceLayout() {
 
   const fileState = openedFile?.key === fileKey ? openedFile : null;
   // A cited page can be out of range after the file was replaced with a shorter one.
-  const citedPage = open?.focus?.sourceType === "page" ? open.focus.sourceNumber : 1;
+  const citedPage = focus?.sourceType === "page" ? focus.sourceNumber : 1;
   const pdfPage = Math.max(1, Math.min(citedPage, openMaterial?.pages || citedPage));
 
   // A PDF opened over the notebook is shown above it instead of replacing it.
@@ -589,7 +600,7 @@ export default function WorkspaceLayout() {
             : { ...openMaterial, url: fileState?.url ?? null, loading: !fileState, loadError: fileState?.error ?? null }
         }
         initialPage={pdfPage}
-        onCollapse={() => setOpen(null)}
+        onCollapse={closeLecture}
         handle={splitView ? handleFor("pdf") : null}
       />
     );
@@ -598,17 +609,17 @@ export default function WorkspaceLayout() {
       <MaterialViewerPanel
         key={fileKey}
         material={{ ...openMaterial, name: openMaterial.lecture.original_filename, file: fileState.file, url: fileState.url }}
-        onCollapse={() => setOpen(null)}
+        onCollapse={closeLecture}
       />
     );
   } else if (openMaterial) {
     centre = (
       <LectureContentPanel
-        key={`${openMaterial.id}:${open.focus?.sourceType}:${open.focus?.sourceNumber}`}
+        key={`${openMaterial.id}:${focus?.sourceType}:${focus?.sourceNumber}`}
         lecture={openMaterial.lecture}
-        focus={open.focus}
+        focus={focus}
         onRetry={() => handleRetry(openMaterial)}
-        onClose={() => setOpen(null)}
+        onClose={closeLecture}
       />
     );
   }
@@ -735,7 +746,7 @@ export default function WorkspaceLayout() {
               uploads={library.uploads}
               loading={library.loading}
               error={library.error}
-              selectedId={selectedId}
+              selectedId={urlLectureId ?? selectedId}
               onSelect={handleSelectMaterial}
               onEdit={(item) => setEditing(item.lecture)}
               onDelete={(item) => setDeleting(item.lecture)}
