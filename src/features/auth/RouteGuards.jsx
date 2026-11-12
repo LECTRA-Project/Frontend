@@ -8,9 +8,8 @@ import "./auth.css";
 
   RequireAuth  pages for signed-in users only; guests go to sign-in, which sends them
                back to the page they asked for afterwards.
-  GuestOnly    sign-in / create-account; signed-in users go on to the workspace
-               (or the page they were sent away from). Right after creating an
-               account (signed in on /create-account) they go to the Home screen.
+  GuestOnly    sign-in / create-account; signed-in users go on to the Home screen
+               (or the page they were sent away from).
 */
 export function RequireAuth() {
   const { status } = useAuth();
@@ -28,8 +27,7 @@ export function GuestOnly() {
   if (status === "loading") return <SessionLoading />;
   if (status === "authenticated") {
     const from = location.state?.from;
-    const fallback = location.pathname === "/create-account" ? "/workspace/home" : "/workspace";
-    const target = from ? `${from.pathname}${from.search ?? ""}${from.hash ?? ""}` : fallback;
+    const target = from ? `${from.pathname}${from.search ?? ""}${from.hash ?? ""}` : "/workspace/home";
     return <Navigate to={target} replace />;
   }
   return <Outlet />;

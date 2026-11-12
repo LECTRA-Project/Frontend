@@ -5,6 +5,7 @@ import WorkspaceHeader from "./components/WorkspaceHeader.jsx";
 import CourseMaterialsPanel from "./components/CourseMaterialsPanel.jsx";
 import StudyAssistantPanel from "./components/StudyAssistantPanel.jsx";
 import SplitDivider from "./components/SplitDivider.jsx";
+import ColumnDivider from "./components/ColumnDivider.jsx";
 import SectionHandle from "./components/SectionHandle.jsx";
 import {
   computeGrid,
@@ -13,6 +14,7 @@ import {
   minimumWidth,
   moveSection,
   placeSection,
+  resizeColumns,
   saveLayout,
   sameLayout,
   SECTION_LABELS,
@@ -49,10 +51,15 @@ async function downloadFromStorage(url) {
     header on top, then three columns —
     Course materials | Notebook, Exam, Home or an open lecture | Study assistant
 
-  A PDF opened over the notebook shows in a split view: the PDF above, the notebook
-  below, with a draggable divider. The notebook stays mounted throughout, so opening,
-  switching or closing PDFs never resets its cells, outputs or kernel. Opening a PDF
-  from Home goes to the notebook first.
+  A PDF opened from the workspace shows next to the notebook (by default: Course materials |
+  PDF | Notebook | Study assistant, side by side); the dividers between columns resize them
+  (ColumnDivider + resizeColumns). If the student stacks the PDF and notebook in one column,
+  a horizontal divider sizes the two instead. The notebook stays mounted throughout, so opening,
+  switching or closing PDFs never resets its cells, outputs or kernel. Home has no Study
+  assistant; opening a material from Home goes to the workspace (/workspace) first.
+  The header's menu button opens the Course materials menu as a drawer over the workspace
+  (the rest is dimmed; a click outside, Escape or opening a material closes it). It is not
+  part of the section grid, and Home has no menu.
 
   The four sections (Course materials, PDF viewer, Notebook, Study assistant) can be
   rearranged by dragging the grip in their header or with its Move menu (see
@@ -92,7 +99,8 @@ export default function WorkspaceLayout() {
   const notebookState = useNotebook(kernel, userKey);
 
   const [selectedId, setSelectedId] = useState(null);
-  const [materialsCollapsed, setMaterialsCollapsed] = useState(true);
+  // The Course materials menu: a drawer over the workspace (not on Home), opened from the header.
+  const [materialsOpen, setMaterialsOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [editing, setEditing] = useState(null); // lecture
   const [deleting, setDeleting] = useState(null); // lecture
@@ -106,7 +114,9 @@ export default function WorkspaceLayout() {
   const [cellDragActive, setCellDragActive] = useState(false); // a cell is being dragged
   const [cellDragOver, setCellDragOver] = useState(false); // a touch/pen drag is over the assistant
   const [draftAnnouncement, setDraftAnnouncement] = useState({ text: "", seq: 0 });
-  const [pdfShare, setPdfShare] = useState(0.5); // split view: fraction of the height for the PDF
+  const [pdfShare, setPdfShare] = useState(0.5); // PDF stacked over the notebook: its fraction of the height
+  const [columnWidths, setColumnWidths] = useState({}); // set by the column dividers (see resizeColumns)
+  const columnDrag = useRef(null); // { left, right, widths } measured when a divider drag starts
   const [resizingSplit, setResizingSplit] = useState(false);
   const pairRef = useRef(null); // spans the PDF + notebook pair, for the divider's drag maths
   const bodyRef = useRef(null);
@@ -197,9 +207,24 @@ export default function WorkspaceLayout() {
     end: (point) => finishMaterialDrag(point),
     cancel: () => finishMaterialDrag(null),
     add(material) {
-      if (addMaterialToDraft(material)) document.getElementById("composer-input")?.focus();
+      if (addMaterialToDraft(material)) {
+        setMaterialsOpen(false);
+        requestAnimationFrame(() => document.getElementById("composer-input")?.focus());
+      }
     },
   };
+
+  // Escape closes the materials menu (not while a dialog or a drag is open — Escape is theirs then).
+  useEffect(() => {
+    if (!materialsOpen) return undefined;
+    const onKey = (event) => {
+      if (event.key !== "Escape" || materialDragRef.current || document.querySelector('[role="dialog"]')) return;
+      setMaterialsOpen(false);
+      document.querySelector('[aria-controls="course-materials"]')?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [materialsOpen]);
 
   // Escape cancels a material drag.
   useEffect(() => {
@@ -221,6 +246,8 @@ export default function WorkspaceLayout() {
     [addCellToDraft]
   );
 
+  const isHome = location.pathname === "/workspace/home";
+  const drawerOpen = materialsOpen && !isHome;
   const openMaterial =
     open && open.path === location.pathname ? materials.find((item) => item.id === open.lectureId) ?? null : null;
   const showsSource = openMaterial !== null && (open.focus?.sourceType ?? "page") !== "page";
@@ -255,24 +282,13 @@ export default function WorkspaceLayout() {
 
   function openLecture(lectureId, focus = null) {
     setSelectedId(lectureId);
-    const material = materials.find((item) => item.id === lectureId);
-    const isPdfPage = material?.type === "pdf" && (focus?.sourceType ?? "page") === "page";
-    if (isPdfPage && location.pathname === "/workspace/home") {
-      // PDFs open above the notebook (split view), so go to the notebook first.
+    // Home only lists materials: opening one goes to the workspace (PDFs open above the notebook).
+    if (location.pathname === "/workspace/home") {
       navigate("/workspace");
       setOpen({ lectureId, path: "/workspace", focus });
       return;
     }
     setOpen({ lectureId, path: location.pathname, focus });
-  }
-
-  function browseMaterials() {
-    setMaterialsCollapsed(false);
-    requestAnimationFrame(() => {
-      const panel = document.querySelector(".materials");
-      panel?.scrollIntoView?.({ block: "nearest" });
-      panel?.querySelector(".material-row, .materials__bottom button")?.focus();
-    });
   }
 
   async function openNotebook(material) {
@@ -294,6 +310,7 @@ export default function WorkspaceLayout() {
   }
 
   function handleSelectMaterial(material) {
+    setMaterialsOpen(false); // the drawer covers the workspace; get it out of the way
     if (material.type === "notebook") openNotebook(material);
     else openLecture(material.id);
   }
@@ -308,7 +325,7 @@ export default function WorkspaceLayout() {
 
   async function handleUpload(files, options) {
     setUploadOpen(false);
-    setMaterialsCollapsed(false);
+    if (!isHome) setMaterialsOpen(true); // show the upload progress
     const created = await library.upload(files, options);
     if (created.length) setNotice(`${created.length === 1 ? "1 file" : `${created.length} files`} uploaded — processing for the assistant.`);
   }
@@ -344,8 +361,14 @@ export default function WorkspaceLayout() {
   const splitView = openMaterial !== null && openMaterial.type === "pdf" && !showsSource && location.pathname === "/workspace";
 
   /* ---------- Section arrangement ---------- */
-  const visibleSections = new Set(["materials", "notebook", "assistant", ...(splitView ? ["pdf"] : [])]);
-  const grid = computeGrid(sectionLayout, { visible: visibleSections, materialsCollapsed, pdfShare });
+  // The materials menu is hidden while collapsed (the header's menu button toggles it);
+  // Home has no Study assistant.
+  const visibleSections = new Set([
+    "notebook",
+    ...(isHome ? [] : ["assistant"]),
+    ...(splitView ? ["pdf"] : []),
+  ]);
+  const grid = computeGrid(sectionLayout, { visible: visibleSections, pdfShare, widths: columnWidths });
   const gridKey = JSON.stringify([grid.columns, grid.maxStack]);
   const gridRef = useRef(grid);
   gridRef.current = grid;
@@ -362,9 +385,9 @@ export default function WorkspaceLayout() {
       const style = getComputedStyle(body);
       const px = (name, fallback) => parseFloat(style.getPropertyValue(name)) || fallback;
       const needed = minimumWidth(columns, {
-        materials: materialsCollapsed ? px("--ws-collapsed-w", 48) : px("--ws-materials-w", 280),
+        materials: px("--ws-materials-w", 280),
         assistant: px("--ws-assistant-w", 340),
-        flexMin: 320,
+        flexMin: 240,
         gap: 16,
         padding: 16,
       });
@@ -380,7 +403,7 @@ export default function WorkspaceLayout() {
       window.removeEventListener("resize", measure);
       observer?.disconnect();
     };
-  }, [gridKey, materialsCollapsed]);
+  }, [gridKey]);
 
   const announceLayout = useCallback(
     (text) => setLayoutAnnouncement((previous) => ({ text, seq: previous.seq + 1 })),
@@ -469,7 +492,7 @@ export default function WorkspaceLayout() {
     const place = grid.place[section];
     const classes = [
       "ws-slot",
-      place?.compact || (section === "materials" && materialsCollapsed) ? "ws-slot--compact" : "",
+      place?.compact ? "ws-slot--compact" : "",
       sectionDrag?.section === section ? "ws-slot--dragging" : "",
       extraClass,
     ];
@@ -511,11 +534,46 @@ export default function WorkspaceLayout() {
 
   const divider = !stacked ? grid.divider : null;
 
+  /* Rendered width of a grid column (its first section's slot). */
+  const measureColumn = (spec) => ({
+    key: spec.key,
+    flex: spec.flex,
+    width: document.querySelector(`[data-section="${spec.members[0]}"]`)?.getBoundingClientRect().width || 0,
+  });
+
+  // Dragging a column divider: widths are measured at the start, then dx is applied to them.
+  function handleColumnResize(index, dx, phase) {
+    const left = grid.columns[index];
+    const right = grid.columns[index + 1];
+    if (phase !== "move" || !columnDrag.current) {
+      columnDrag.current = { left: measureColumn(left), right: measureColumn(right), widths: columnWidths };
+    }
+    const start = columnDrag.current;
+    if (start.left.width + start.right.width === 0) return; // not laid out
+    setColumnWidths(resizeColumns(start.widths, start.left, start.right, dx));
+    if (phase === "key") columnDrag.current = null;
+  }
+
+  const columnDividers = stacked
+    ? []
+    : grid.columns.slice(0, -1).map((spec, index) => (
+        <ColumnDivider
+          key={`${spec.key}|${grid.columns[index + 1].key}`}
+          leftLabel={spec.members.map((id) => SECTION_LABELS[id]).join(" / ")}
+          rightLabel={grid.columns[index + 1].members.map((id) => SECTION_LABELS[id]).join(" / ")}
+          onResize={(dx, phase) => handleColumnResize(index, dx, phase)}
+          onResizing={(active) => {
+            if (!active) columnDrag.current = null;
+            setResizingSplit(active);
+          }}
+          style={{ "--slot-column": index + 1 }}
+        />
+      ));
+
   const home = {
     materials,
     loading: library.loading,
     onUploadClick: () => setUploadOpen(true),
-    onBrowseMaterials: browseMaterials,
     onOpenMaterial: handleSelectMaterial,
   };
 
@@ -557,7 +615,10 @@ export default function WorkspaceLayout() {
 
   return (
     <div className={`workspace ${stacked ? "workspace--stacked" : ""}`}>
-      <WorkspaceHeader />
+      <WorkspaceHeader
+        materialsOpen={drawerOpen}
+        onToggleMaterials={isHome ? null : () => setMaterialsOpen((value) => !value)}
+      />
 
       {notice && (
         <TransientStatus key={notice} duration={4000} onDismiss={() => setNotice(null)}>
@@ -571,7 +632,6 @@ export default function WorkspaceLayout() {
         ref={bodyRef}
         className={[
           "workspace__body",
-          materialsCollapsed ? "workspace__body--materials-collapsed" : "",
           stacked ? "workspace__body--stacked" : "",
           sectionDrag ? "workspace__body--section-dragging" : "",
           resizingSplit ? "workspace__body--resizing" : "",
@@ -580,28 +640,6 @@ export default function WorkspaceLayout() {
           .join(" ")}
         style={{ "--ws-columns": grid.columns.map((column) => column.track).join(" "), "--ws-rows": grid.rows.join(" ") }}
       >
-        <div {...slotProps("materials")}>
-          <CourseMaterialsPanel
-            materials={materials}
-            uploads={library.uploads}
-            loading={library.loading}
-            error={library.error}
-            selectedId={selectedId}
-            collapsed={materialsCollapsed}
-            onToggleCollapsed={() => setMaterialsCollapsed((collapsed) => !collapsed)}
-            onSelect={handleSelectMaterial}
-            onEdit={(item) => setEditing(item.lecture)}
-            onDelete={(item) => setDeleting(item.lecture)}
-            onRetry={handleRetry}
-            onDismissUpload={library.dismissUpload}
-            onReload={() => library.refresh()}
-            onUploadClick={() => setUploadOpen(true)}
-            handle={handleFor("materials")}
-            materialDrag={materialDragApi}
-          />
-          {dropOverlay("materials")}
-        </div>
-
         {/* PDF viewer section: only shown while a PDF is open over the notebook (split view). */}
         <div {...slotProps("pdf")}>
           {splitView && centre}
@@ -627,7 +665,11 @@ export default function WorkspaceLayout() {
           <StudyAssistantPanel
             materials={materials}
             chat={library.features?.chat === true}
-            focusLectureId={open?.lectureId ?? selectedId}
+            focusLectureId={openMaterial?.id ?? null}
+            onOpenLecture={(lectureId) => {
+              const material = materials.find((item) => item.id === lectureId);
+              if (material) handleSelectMaterial(material);
+            }}
             available={library.features ? library.features.ai || library.features.chat : null}
             onAttachClick={() => setUploadOpen(true)}
             onOpenReference={handleOpenReference}
@@ -655,6 +697,9 @@ export default function WorkspaceLayout() {
           {dropOverlay("assistant")}
         </div>
 
+        {/* Dividers between side-by-side columns: drag to resize. */}
+        {columnDividers}
+
         {/* PDF / notebook divider, when the two are stacked next to each other. */}
         {divider && (
           <div
@@ -675,6 +720,35 @@ export default function WorkspaceLayout() {
           />
         )}
       </div>
+
+      {drawerOpen && (
+        <>
+          {/* Dims the workspace; clicking it closes the menu. See-through while a material is dragged to the assistant. */}
+          <div
+            className={`materials-backdrop ${materialDrag ? "materials-backdrop--dragging" : ""}`}
+            aria-hidden="true"
+            onClick={() => setMaterialsOpen(false)}
+          />
+          <div className="materials-drawer" data-section="materials">
+            <CourseMaterialsPanel
+              materials={materials}
+              uploads={library.uploads}
+              loading={library.loading}
+              error={library.error}
+              selectedId={selectedId}
+              onSelect={handleSelectMaterial}
+              onEdit={(item) => setEditing(item.lecture)}
+              onDelete={(item) => setDeleting(item.lecture)}
+              onRetry={handleRetry}
+              onDismissUpload={library.dismissUpload}
+              onReload={() => library.refresh()}
+              onUploadClick={() => setUploadOpen(true)}
+              onClose={() => setMaterialsOpen(false)}
+              materialDrag={materialDragApi}
+            />
+          </div>
+        </>
+      )}
 
       <p className="visually-hidden" role="status">
         <span key={layoutAnnouncement.seq}>{layoutAnnouncement.text}</span>

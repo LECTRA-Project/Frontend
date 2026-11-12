@@ -3,7 +3,7 @@
 
   A layout is a list of columns, left to right; each column is a stack of section ids,
   top to bottom:
-      [["materials"], ["pdf", "notebook"], ["assistant"]]      (the default)
+      [["materials"], ["pdf"], ["notebook"], ["assistant"]]      (the default: side by side)
 
   Every section appears exactly once, there are at most MAX_COLUMNS columns and at most
   MAX_PER_COLUMN sections in a column. A section that is not shown right now (the PDF
@@ -23,11 +23,12 @@ export const SECTION_LABELS = {
   assistant: "Study assistant",
 };
 export const SECTION_IDS = Object.keys(SECTION_LABELS);
-export const DEFAULT_LAYOUT = [["materials"], ["pdf", "notebook"], ["assistant"]];
+export const DEFAULT_LAYOUT = [["materials"], ["pdf"], ["notebook"], ["assistant"]];
 export const MAX_COLUMNS = 4;
 export const MAX_PER_COLUMN = 3;
 
-const KEY_PREFIX = "lectra:workspace-layout:v1:";
+// v2: the default changed to side by side, so arrangements saved for the old default are dropped.
+const KEY_PREFIX = "lectra:workspace-layout:v2:";
 
 /* ---------- Validation and storage ---------- */
 
@@ -158,9 +159,12 @@ const round = (value) => Math.round(value * 1e6) / 1e6;
                         "auto" row at the top or bottom of the grid instead of a share
     pdfShare            PDF's fraction of the height when the PDF and notebook are stacked
                         next to each other (the divider between them changes it)
+    widths              { [column key]: size } set by the column dividers: px for a column
+                        of materials / assistant, a flex weight (fr) for a PDF / notebook column
 
   Returns:
-    columns   [{ track, flex, members }]   track: CSS track size; flex: holds PDF or notebook
+    columns   [{ key, track, flex, members, px }]   key: columnKey(members); track: CSS track
+              size; flex: holds PDF or notebook; px: a resized fixed column's width
     rows      CSS row track sizes
     place     { [id]: { column, rowStart, rowEnd, compact } }  1-based grid lines
     order     { [id]: n }   reading order (column by column), used when stacked on one column
@@ -168,7 +172,7 @@ const round = (value) => Math.round(value * 1e6) / 1e6;
               PDF/notebook divider (placed at the top edge of the lower section)
     maxStack  the most full-size sections stacked in one column
 */
-export function computeGrid(layout, { visible, materialsCollapsed = false, pdfShare = 0.5 }) {
+export function computeGrid(layout, { visible, materialsCollapsed = false, pdfShare = 0.5, widths = {} }) {
   const columns = layout.map((items) => items.filter((id) => visible.has(id))).filter((items) => items.length > 0);
   const order = Object.fromEntries(layout.flat().map((id, index) => [id, index]));
 
@@ -249,18 +253,19 @@ export function computeGrid(layout, { visible, materialsCollapsed = false, pdfSh
   });
 
   const columnSpecs = columns.map((items) => {
+    const key = columnKey(items);
     const flex = items.includes("pdf") || items.includes("notebook");
-    let track = "minmax(0, 1fr)";
-    if (!flex) {
-      const widths = items.map((id) =>
-        id === "assistant" ? "var(--ws-assistant-w)" : materialsCollapsed ? "var(--ws-collapsed-w)" : "var(--ws-materials-w)"
-      );
-      const unique = [...new Set(widths)];
-      // A collapsed bar stacked with the assistant takes the assistant's width.
-      const sized = unique.length > 1 ? unique.filter((width) => width !== "var(--ws-collapsed-w)") : unique;
-      track = sized.length === 1 ? sized[0] : `max(${sized.join(", ")})`;
-    }
-    return { track, flex, members: items };
+    const size = widths[key];
+    if (flex) return { key, track: `minmax(0, ${size ?? 1}fr)`, flex, members: items, px: null };
+    if (size) return { key, track: `${size}px`, flex, members: items, px: size };
+    const defaults = items.map((id) =>
+      id === "assistant" ? "var(--ws-assistant-w)" : materialsCollapsed ? "var(--ws-collapsed-w)" : "var(--ws-materials-w)"
+    );
+    const unique = [...new Set(defaults)];
+    // A collapsed bar stacked with the assistant takes the assistant's width.
+    const sized = unique.length > 1 ? unique.filter((width) => width !== "var(--ws-collapsed-w)") : unique;
+    const track = sized.length === 1 ? sized[0] : `max(${sized.join(", ")})`;
+    return { key, track, flex, members: items, px: null };
   });
 
   const maxStack = Math.max(...info.map((column) => column.items.filter((id) => !column.isCompact(id)).length));
@@ -274,6 +279,45 @@ export function computeGrid(layout, { visible, materialsCollapsed = false, pdfSh
 */
 export function minimumWidth(columns, { materials, assistant, flexMin, gap, padding }) {
   const widthOf = (spec) =>
-    spec.flex ? flexMin : Math.max(...spec.members.map((id) => (id === "assistant" ? assistant : materials)));
+    spec.flex ? flexMin : spec.px ?? Math.max(...spec.members.map((id) => (id === "assistant" ? assistant : materials)));
   return columns.reduce((sum, spec) => sum + widthOf(spec), 0) + gap * Math.max(0, columns.length - 1) + padding * 2;
+}
+
+/* Identifies a column by its shown sections, for its width (a rearranged column starts at its default width). */
+export function columnKey(members) {
+  return members.join("+");
+}
+
+export const FIXED_MIN = 200;
+export const FIXED_MAX = 640;
+export const FLEX_MIN = 240;
+
+/*
+  New widths after dragging the divider between two neighbouring columns by `dx` px.
+  `left` / `right`: { key, flex, width (rendered px) }; `widths` / `weights`: the current
+  sizes (see computeGrid). A materials / assistant column gets a px width (FIXED_MIN…FIXED_MAX);
+  between two PDF / notebook columns, their flex weights are shared out by the new widths.
+  Returns the new `widths` object, or the same one when nothing changes.
+*/
+export function resizeColumns(widths, left, right, dx) {
+  const clampFixed = (value) => Math.round(Math.min(FIXED_MAX, Math.max(FIXED_MIN, value)));
+  if (!left.flex) {
+    // A flex column on the right shrinks with it; don't squeeze a fixed neighbour below its minimum.
+    const room = right.flex ? right.width - FLEX_MIN : right.width - FIXED_MIN;
+    const width = clampFixed(left.width + Math.min(dx, Math.max(0, room)));
+    const next = { ...widths, [left.key]: width };
+    if (!right.flex) next[right.key] = clampFixed(right.width - (width - left.width));
+    return width === widths[left.key] ? widths : next;
+  }
+  if (!right.flex) {
+    const room = left.width - FLEX_MIN;
+    const width = clampFixed(right.width - Math.max(dx, -Math.max(0, room)));
+    return width === widths[right.key] ? widths : { ...widths, [right.key]: width };
+  }
+  const total = left.width + right.width;
+  if (total <= 0) return widths;
+  const leftWidth = Math.min(total - FLEX_MIN, Math.max(FLEX_MIN, left.width + dx));
+  const weight = (widths[left.key] ?? 1) + (widths[right.key] ?? 1);
+  const leftWeight = Math.round((weight * leftWidth) / total * 1000) / 1000;
+  return { ...widths, [left.key]: leftWeight, [right.key]: Math.round((weight - leftWeight) * 1000) / 1000 };
 }

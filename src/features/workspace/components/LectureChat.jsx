@@ -21,20 +21,22 @@ const SOURCE_TYPES = { pdf: "page", slides: "slide", notebook: "cell", notes: "s
 /*
   The Study Assistant's saved lecture chats (Lecture Chat API, see useLectureChat).
 
-  Every chat is about exactly one lecture:
-    - with no chat open, "Chat about" picks the lecture; the first question creates the chat
-      (the backend names it after that question);
-    - a course material dragged onto the assistant becomes the lecture to ask about — if the
-      open chat is about another lecture, sending starts a new chat about the dropped one;
+  Every chat is about exactly one lecture — the one open in the viewer (focusLectureId).
+  To chat about another lecture, the student opens it from Course materials:
+    - the first question creates the chat (the backend names it after that question);
+    - if the open chat is about another lecture than the one in the viewer, sending starts
+      a new chat about the viewer's lecture; with nothing open, the open chat continues;
+    - a course material dragged onto the assistant becomes the lecture to ask about;
     - notebook cells dragged in are appended to the question as reference context.
-  The Chats list opens, renames and deletes earlier chats. Answers list the pages they
-  cite; clicking one opens the lecture there.
+  Recent chats opens (also opening its lecture in the viewer), renames and deletes earlier
+  chats. Answers list the pages they cite; clicking one opens the lecture there.
 
   Props: see StudyAssistantPanel (this is its body when the server has the chat API).
 */
 export default function LectureChat({
   materials,
   focusLectureId,
+  onOpenLecture,
   onOpenReference,
   cellContext,
   materialContext,
@@ -43,7 +45,6 @@ export default function LectureChat({
 }) {
   const chat = useLectureChat({ enabled: true });
   const [view, setView] = useState("chat"); // "chat" | "history"
-  const [pickedId, setPickedId] = useState(null);
   const [renaming, setRenaming] = useState(null); // { id, title }
   const [deleting, setDeleting] = useState(null); // session
   const [listError, setListError] = useState(null);
@@ -54,23 +55,28 @@ export default function LectureChat({
   const usable = materials.filter((item) => (item.status ?? "completed") === "completed" && SOURCE_TYPES[item.type]);
   const typeOf = (lectureId) => materials.find((item) => item.id === lectureId)?.type;
 
-  // The lecture the next question is about.
+  // The lecture the next question is about: a dropped material, else the one in the viewer,
+  // else the open chat's.
   const session = chat.activeSession;
   const dropped = materialContext.length === 1 ? materialContext[0] : null;
-  const defaultId = usable.some((item) => item.id === focusLectureId) ? focusLectureId : usable[0]?.id;
-  const pickedLectureId = usable.some((item) => item.id === pickedId) ? pickedId : defaultId;
-  const lectureId = dropped?.lectureId ?? session?.lecture?.id ?? pickedLectureId ?? null;
-  const startsNewChat = Boolean(session && dropped && dropped.lectureId !== session.lecture?.id);
+  const viewed = materials.find((item) => item.id === focusLectureId) ?? null;
+  const viewedUsable = viewed !== null && usable.includes(viewed);
+  const lectureId = dropped?.lectureId ?? (viewedUsable ? viewed.id : null) ?? session?.lecture?.id ?? null;
+  const lectureName = dropped?.fileName ?? (viewedUsable ? viewed.name : null) ?? session?.lecture?.title ?? null;
+  const startsNewChat = Boolean(session && lectureId && lectureId !== session.lecture?.id);
 
   const question = (text) => withNotebookContext(text, cellContext.map(toAssistantContext));
 
   let blocked = null;
   if (materialContext.length > 1) blocked = "A chat answers from one lecture at a time. Keep one course material and remove the others.";
-  else if (session && !session.lecture && !dropped) blocked = "The lecture of this chat was deleted. Start a new chat to keep asking.";
-  else if (!lectureId) blocked = usable.length ? "Choose a lecture to ask about." : "Upload a PDF, slides or a notebook to start a chat.";
+  else if (viewed && !viewedUsable && !dropped)
+    blocked = `“${viewed.name}” can’t be chatted about${viewed.status && viewed.status !== "completed" ? " until it’s processed" : ""}. Open a PDF, slides or notebook from Course materials.`;
+  else if (session && !session.lecture && !lectureId) blocked = "The lecture of this chat was deleted. Open a lecture from Course materials to keep asking.";
+  else if (!lectureId)
+    blocked = materials.length ? "Open a lecture from Course materials to chat about it." : "Upload a PDF, slides or a notebook to start a chat.";
 
   let note = blocked ?? tooLong;
-  if (!note && startsNewChat) note = `Sending starts a new chat about “${dropped.fileName}”.`;
+  if (!note && startsNewChat) note = `Sending starts a new chat about “${lectureName}”.`;
 
   // Keep the newest message in view.
   useEffect(() => {
@@ -144,10 +150,10 @@ export default function LectureChat({
           onClick={() => setView((current) => (current === "history" ? "chat" : "history"))}
         >
           <Icon name="message" size={14} />
-          Chats{chat.sessions.length ? ` (${chat.sessions.length})` : ""}
+          Recent chats{chat.sessions.length ? ` (${chat.sessions.length})` : ""}
         </button>
         <span className="chat-bar__title" title={session?.title}>
-          {view === "history" ? "Your chats" : session ? session.title : "New chat"}
+          {view === "history" ? "Recent chats" : session ? session.title : "New chat"}
         </span>
         <button
           type="button"
@@ -163,36 +169,10 @@ export default function LectureChat({
         </button>
       </div>
 
-      {view === "chat" && (
+      {view === "chat" && (lectureName || session) && (
         <div className="assistant__scope">
-          {session ? (
-            <>
-              <span>About</span>
-              <span className="chat-bar__lecture">{session.lecture ? session.lecture.title : "Deleted lecture"}</span>
-            </>
-          ) : dropped ? (
-            <>
-              <span>About</span>
-              <span className="chat-bar__lecture">{dropped.fileName}</span>
-            </>
-          ) : (
-            <>
-              <label htmlFor="assistant-lecture">Chat about</label>
-              <select
-                id="assistant-lecture"
-                value={pickedLectureId ?? ""}
-                onChange={(event) => setPickedId(event.target.value)}
-                disabled={!usable.length}
-              >
-                {!usable.length && <option value="">No lectures yet</option>}
-                {usable.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
+          <span>About</span>
+          <span className="chat-bar__lecture">{lectureName ?? "Deleted lecture"}</span>
         </div>
       )}
 
@@ -208,6 +188,9 @@ export default function LectureChat({
             onOpen={(id) => {
               chat.openSession(id);
               setView("chat");
+              // Show the chat's lecture in the viewer, so new questions stay in this chat.
+              const lecture = chat.sessions.find((item) => item.id === id)?.lecture;
+              if (lecture && lecture.id !== focusLectureId) onOpenLecture?.(lecture.id);
             }}
           />
         ) : chat.messagesLoading ? (
@@ -222,7 +205,7 @@ export default function LectureChat({
             <p className="assistant__empty-title">Ask about a lecture</p>
             <p className="assistant__empty-text">
               {usable.length
-                ? "Answers come only from the chosen lecture, with the pages they’re based on. Your chats are saved."
+                ? "Answers come only from the lecture open in the viewer, with the pages they’re based on. Your chats are saved."
                 : materials.length
                   ? "Your materials are still being processed. You can ask as soon as one shows Completed."
                   : "Upload PDFs, slides or notebooks, then ask questions about them here."}

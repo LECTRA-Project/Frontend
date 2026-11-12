@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
+import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER, openMaterialsMenu } from "../../test/helpers.jsx";
 
 /*
   Dragging course materials into the Study Assistant composer as context, over the real
@@ -76,7 +76,7 @@ const assistant = () => document.querySelector(".assistant");
 async function openWorkspace() {
   const user = userEvent.setup();
   renderApp("/workspace");
-  await user.click(await screen.findByRole("button", { name: "Show course materials" }));
+  await openMaterialsMenu();
   await within(materialsPanel()).findByText("Search algorithms");
   return user;
 }
@@ -193,9 +193,11 @@ describe("dragging course materials into the Study Assistant", () => {
     expect(chips()).toBeNull();
   });
 
-  it("still opens a material with a plain click on its row", async () => {
+  it("still opens a material with a plain click on its row, closing the menu", async () => {
     const user = await openWorkspace();
     await user.click(row("Game playing"));
+    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
+    await openMaterialsMenu();
     expect(row("Game playing")).toHaveAttribute("aria-current", "true");
     expect(chips()).toBeNull();
   });
@@ -205,7 +207,9 @@ describe("dragging course materials into the Study Assistant", () => {
     within(materialsPanel()).getByRole("button", { name: "Add Week 2 notes to your Study Assistant message" }).focus();
     await user.keyboard("{Enter}");
     expect(within(chips()).getByRole("listitem")).toHaveTextContent("week2.md");
-    expect(intoComposer()).toHaveFocus();
+    // The menu closes so the message box can be used.
+    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
+    await waitFor(() => expect(intoComposer()).toHaveFocus());
     expect(asked).toHaveLength(0);
   });
 
@@ -213,6 +217,7 @@ describe("dragging course materials into the Study Assistant", () => {
     await openWorkspace();
     drag(row("Lab 1"), intoComposer(), { pointerType: "touch" });
     expect(chips()).toBeNull();
+    await openMaterialsMenu(); // the touch on the row opened Lab 1, which closed the menu
 
     const gripButton = within(materialsPanel()).getByRole("button", { name: "Add Lab 1 to your Study Assistant message" });
     drag(gripButton, intoComposer(), { pointerType: "touch" });

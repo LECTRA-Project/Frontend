@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCell, createNotebook } from "../../services/notebook/ipynb.js";
 import { saveNotebook } from "../../services/notebook/notebookStorage.js";
-import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
+import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER, openMaterialsMenu } from "../../test/helpers.jsx";
 
 /*
   The Home / Welcome screen (/workspace/home) and the PDF + notebook split view,
@@ -70,62 +70,71 @@ const slot = (section) => document.querySelector(`[data-section="${section}"]`);
 const gridRow = (section) => slot(section).style.getPropertyValue("--slot-row");
 const gridColumn = (section) => slot(section).style.getPropertyValue("--slot-column");
 
-async function showMaterialsPanel(user) {
-  const panel = screen.getByRole("region", { name: "Course materials" });
-  const show = within(panel).queryByRole("button", { name: "Show course materials" });
-  if (show) await user.click(show);
-  return panel;
-}
+const showMaterialsPanel = openMaterialsMenu;
 
 async function openMaterialFromPanel(user, name) {
   const panel = await showMaterialsPanel(user);
   await user.click(await within(panel).findByRole("button", { name: new RegExp(`^${name}`) }));
 }
 
-describe("Home / Welcome screen", () => {
-  it("shows the welcome message, actions and the empty recent-materials state", async () => {
+describe("Home screen", () => {
+  it("with no uploads, shows the greeting, the introduction and Upload materials, without recent uploads, the assistant or Exam", async () => {
+    const user = userEvent.setup();
     renderApp("/workspace/home");
 
-    expect(await screen.findByRole("heading", { name: "Welcome to LECTRA" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Browse course materials" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Recent study materials" })).toBeInTheDocument();
-    expect(await screen.findByText("No recent study materials")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /^Good (morning|afternoon|evening)/ })).toBeInTheDocument();
+    expect(await screen.findByText(/Your study space for lectures/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Recent uploads" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "LECTRA" })).not.toBeInTheDocument();
 
-    // The rest of the workspace is unchanged.
-    expect(screen.getByRole("region", { name: "Course materials" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Study assistant" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Exam" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
+    // No Study assistant, Exam button or Course materials menu on Home.
+    expect(screen.queryByRole("region", { name: "Study assistant" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exam" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show course materials" })).not.toBeInTheDocument();
+
+    await user.click(within(document.querySelector(".home")).getByRole("button", { name: "Upload materials" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
-  it("lists real lectures newest first, and opening a PDF shows it above the notebook", async () => {
-    lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z"), pdfLecture("l2", "Lecture 2", "2026-11-05T10:00:00Z")];
+  it("groups recent uploads under Today, Yesterday and the date, newest first, and opens one in the workspace", async () => {
+    const at = (daysAgo, hour) => {
+      const date = new Date();
+      date.setDate(date.getDate() - daysAgo);
+      date.setHours(hour, 0, 0, 0);
+      return date.toISOString();
+    };
+    lectures = [
+      pdfLecture("l1", "Old lecture", at(5, 9)),
+      pdfLecture("l2", "Today early", at(0, 0)),
+      pdfLecture("l3", "Yesterday lecture", at(1, 12)),
+      pdfLecture("l4", "Today late", at(0, 1)),
+    ];
     const user = userEvent.setup();
     const { router } = renderApp("/workspace/home");
 
-    const recent = await screen.findByRole("region", { name: "Recent study materials" });
-    const rows = await within(recent).findAllByRole("button");
-    expect(rows.map((row) => row.textContent)).toEqual([expect.stringMatching(/^Lecture 2/), expect.stringMatching(/^Lecture 1/)]);
-    expect(within(recent).queryByText("No recent study materials")).not.toBeInTheDocument();
+    const recent = await screen.findByRole("region", { name: "Recent uploads" });
+    await within(recent).findByText("Today late");
+    // With uploads: no introduction; Upload materials sits in the Recent uploads header.
+    expect(screen.queryByText(/Your study space for lectures/)).not.toBeInTheDocument();
+    expect(within(recent.querySelector(".home__recent-head")).getByRole("button", { name: "Upload materials" })).toBeInTheDocument();
+    const headings = within(recent).getAllByRole("heading", { level: 4 }).map((node) => node.textContent);
+    expect(headings.slice(0, 2)).toEqual(["Today", "Yesterday"]);
+    expect(headings[2]).not.toMatch(/Today|Yesterday/);
+    const todayRows = within(within(recent).getByRole("list", { name: "Today" })).getAllByRole("button");
+    expect(todayRows.map((row) => row.textContent)).toEqual([expect.stringMatching(/^Today late/), expect.stringMatching(/^Today early/)]);
 
-    await user.click(rows[1]);
-
+    await user.click(within(recent).getByRole("button", { name: /^Old lecture/ }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
-    expect(await screen.findByRole("region", { name: "PDF viewer: Lecture 1" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "PDF viewer: Old lecture" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Notebook" })).toBeVisible();
-    expect(slot("pdf")).toBeVisible();
-  });
-
-  it("opens the course-materials panel from “Browse course materials”", async () => {
-    const user = userEvent.setup();
-    renderApp("/workspace/home");
-    await user.click(await screen.findByRole("button", { name: "Browse course materials" }));
-    expect(screen.getByRole("button", { name: "Hide course materials" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("region", { name: "Study assistant" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exam" })).toBeInTheDocument();
   });
 });
 
 describe("PDF + notebook split view", () => {
-  it("shows the PDF above the notebook, keeps the notebook intact, and switches and closes PDFs", async () => {
+  it("shows the PDF beside the notebook, keeps the notebook intact, and switches and closes PDFs", async () => {
     lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z"), pdfLecture("l2", "Lecture 2", "2026-11-05T10:00:00Z")];
     const user = userEvent.setup();
     renderApp("/workspace");
@@ -143,10 +152,13 @@ describe("PDF + notebook split view", () => {
     await waitFor(() => expect(pdfPane.querySelector("iframe")).not.toBeNull()); // file fetched
     const notebookPane = screen.getByRole("region", { name: "Notebook" });
     expect(notebookPane).toBeVisible();
-    // PDF on top, divider, notebook below.
-    expect(gridColumn("pdf")).toBe(gridColumn("notebook"));
-    expect([gridRow("pdf"), gridRow("notebook")]).toEqual(["1 / 2", "2 / 3"]);
-    expect(screen.getByRole("separator", { name: "Resize PDF and notebook" })).toBeInTheDocument();
+    // Side by side: PDF | notebook | assistant, with a divider between each. The materials
+    // menu closed when the PDF was opened, and it is never part of the grid.
+    expect(screen.queryByRole("region", { name: "Course materials" })).not.toBeInTheDocument();
+    expect([gridColumn("pdf"), gridColumn("notebook"), gridColumn("assistant")]).toEqual(["1", "2", "3"]);
+    expect(gridRow("pdf")).toBe(gridRow("notebook"));
+    expect(screen.getByRole("separator", { name: "Resize PDF viewer and Notebook" })).toBeInTheDocument();
+    expect(screen.queryByRole("separator", { name: "Resize PDF and notebook" })).not.toBeInTheDocument();
 
     // The same notebook element is still there: not remounted, cell source unchanged.
     expect(screen.getByRole("group", { name: "Python cell 1" })).toBe(cell);
@@ -169,27 +181,37 @@ describe("PDF + notebook split view", () => {
     await user.click(within(secondPane).getByRole("button", { name: "Close PDF viewer" }));
     expect(screen.queryByRole("region", { name: /PDF viewer/ })).not.toBeInTheDocument();
     expect(slot("pdf")).not.toBeVisible();
-    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+    expect(screen.queryByRole("separator", { name: /PDF/ })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Python cell 1" })).toBe(cell);
   });
 
-  it("resizes the panes with the keyboard on the divider", async () => {
+  it("resizes side-by-side columns by dragging or with the arrow keys on their dividers", async () => {
     lectures = [pdfLecture("l1", "Lecture 1", "2026-11-01T10:00:00Z")];
+    // jsdom has no layout: give each section a width.
+    const widths = { materials: 280, pdf: 500, notebook: 500, assistant: 340 };
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+      const width = widths[this.dataset?.section] ?? 0;
+      return { width, height: 600, top: 0, left: 0, right: width, bottom: 600, x: 0, y: 0 };
+    });
     const user = userEvent.setup();
     renderApp("/workspace");
     await screen.findByRole("group", { name: "Python cell 1" });
     await openMaterialFromPanel(user, "Lecture 1");
+    const columns = () => document.querySelector(".workspace__body").style.getPropertyValue("--ws-columns");
 
-    const divider = screen.getByRole("separator", { name: "Resize PDF and notebook" });
-    expect(divider).toHaveAttribute("aria-valuenow", "50");
-    divider.focus();
-    await user.keyboard("{ArrowDown}{ArrowDown}");
-    expect(divider).toHaveAttribute("aria-valuenow", "60");
-    expect(document.querySelector(".workspace__body").style.getPropertyValue("--ws-rows")).toBe("minmax(0, 0.6fr) minmax(0, 0.4fr)");
-    fireEvent.keyDown(divider, { key: "Home" });
-    expect(divider).toHaveAttribute("aria-valuenow", "20");
-    fireEvent.keyDown(divider, { key: "End" });
-    expect(divider).toHaveAttribute("aria-valuenow", "80");
+    // Notebook | assistant: arrow left makes the assistant wider.
+    const assistantDivider = screen.getByRole("separator", { name: "Resize Notebook and Study assistant" });
+    assistantDivider.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(columns()).toBe("minmax(0, 1fr) minmax(0, 1fr) 364px");
+
+    // PDF | notebook: dragging 100 px right gives the PDF the larger share.
+    const pdfDivider = screen.getByRole("separator", { name: "Resize PDF viewer and Notebook" });
+    fireEvent.pointerDown(pdfDivider, { button: 0, clientX: 800, pointerId: 1 });
+    fireEvent.pointerMove(pdfDivider, { clientX: 900, pointerId: 1 });
+    fireEvent.pointerUp(pdfDivider, { clientX: 900, pointerId: 1 });
+    expect(columns()).toBe("minmax(0, 1.2fr) minmax(0, 0.8fr) 364px");
+    vi.restoreAllMocks();
   });
 
   it("keeps the existing full viewer over the Exam view", async () => {
@@ -202,6 +224,6 @@ describe("PDF + notebook split view", () => {
     expect(screen.getByRole("region", { name: "PDF viewer: Lecture 1" })).toBeInTheDocument();
     expect(slot("pdf")).not.toBeVisible();
     expect(within(slot("notebook")).getByRole("region", { name: "PDF viewer: Lecture 1" })).toBeInTheDocument();
-    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+    expect(screen.queryByRole("separator", { name: /PDF/ })).not.toBeInTheDocument();
   });
 });

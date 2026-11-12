@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
@@ -9,6 +9,7 @@ const CELL_ICONS = { code: "code", markdown: "text", raw: "fileText" };
 /*
   The message box at the bottom of the Study Assistant panel.
   + opens the shared upload dialog; the send button (or Enter) calls onSend(text).
+  Shift+Enter adds a new line; the box grows with its text (up to a few lines).
 
   Notebook cells dropped on the Study Assistant panel (which handles the drop, see
   StudyAssistantPanel) are listed above the input as removable context, separately from
@@ -36,14 +37,35 @@ export default function ChatComposer({
   placeholder = "Ask about your materials…",
 }) {
   const [text, setText] = useState("");
+  const inputRef = useRef(null);
+
+  // Grow the box with its text (CSS max-height caps it, then it scrolls).
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${input.scrollHeight}px`;
+  }, [text]);
   const canSend = text.trim().length > 0 && !disabled;
   const hasContext = cellContext.length > 0 || attachments.length > 0 || materials.length > 0;
 
-  function handleSubmit(event) {
-    event.preventDefault();
+  function submit() {
     if (!canSend) return;
     // onSend may return false to keep the text (e.g. the question is too long to send).
     if (onSend(text.trim()) !== false) setText("");
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    submit();
+  }
+
+  // Enter sends; Shift+Enter (or Enter while composing with an IME) adds a new line.
+  function handleKeyDown(event) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      submit();
+    }
   }
 
   const dropClass = dropOver ? "composer--drop-over" : cellDragActive ? "composer--drop-ready" : "";
@@ -155,12 +177,15 @@ export default function ChatComposer({
         <label className="visually-hidden" htmlFor="composer-input">
           Message to the study assistant
         </label>
-        <input
+        <textarea
+          ref={inputRef}
           id="composer-input"
           className="composer__input"
           placeholder={placeholder}
           value={text}
+          rows={1}
           onChange={(event) => setText(event.target.value)}
+          onKeyDown={handleKeyDown}
           autoComplete="off"
           maxLength={2000}
         />

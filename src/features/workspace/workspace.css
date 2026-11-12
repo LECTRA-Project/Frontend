@@ -13,6 +13,11 @@
   border-bottom: 1px solid var(--border-default);
   background: var(--bg-surface);
 }
+.ws-header__start {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
 .ws-header__home {
   border-radius: var(--radius-sm);
   text-decoration: none;
@@ -299,6 +304,35 @@
 .workspace__body--resizing iframe {
   pointer-events: none;
 }
+/* Sits in the gap to the right of its column, over the full height. */
+.column-divider {
+  grid-column: var(--slot-column);
+  grid-row: 1 / -1;
+  justify-self: end;
+  z-index: 3;
+  margin-right: calc(-1 * var(--space-4));
+  display: grid;
+  place-items: center;
+  width: var(--space-4);
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: var(--radius-sm);
+}
+.column-divider__grip {
+  width: 4px;
+  height: 40px;
+  border-radius: 2px;
+  background: var(--border-strong, var(--border-default));
+}
+.column-divider:hover .column-divider__grip,
+.workspace__body--resizing .column-divider__grip,
+.column-divider:focus-visible .column-divider__grip {
+  background: var(--accent);
+}
+.column-divider:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
 /* Sits in the gap above the lower of the two sections. */
 .split-divider {
   grid-column: var(--slot-column);
@@ -343,28 +377,33 @@
   gap: var(--space-8);
   padding: var(--space-8) var(--space-6);
 }
+.home__greeting {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-primary);
+}
 .home__welcome {
-  max-width: 520px;
-  margin-top: auto;
+  max-width: 560px;
+  margin: auto 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   text-align: center;
 }
-.home__icon {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  margin-bottom: var(--space-2);
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
+.home--has-files .home__content {
+  justify-content: flex-start;
 }
-.home__title {
-  font-size: var(--text-2xl);
-  font-weight: 600;
+.home__recent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.home__recent-head .home__recent-title {
+  margin-bottom: 0;
 }
 .home__text {
   font-size: var(--text-md);
@@ -379,8 +418,7 @@
 }
 .home__recent {
   width: 100%;
-  max-width: 560px;
-  margin-bottom: auto;
+  max-width: 720px;
   padding: var(--space-4);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
@@ -393,6 +431,15 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-tertiary);
+}
+.home__day + .home__day {
+  margin-top: var(--space-3);
+}
+.home__day-title {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 .home__recent-list {
   display: flex;
@@ -407,30 +454,56 @@
 .home__recent-row:hover {
   background: var(--bg-surface);
 }
-.home__recent-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-5) var(--space-3);
-  text-align: center;
-}
-.home__recent-empty-icon {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  margin-bottom: var(--space-1);
-  border-radius: 50%;
-  background: var(--bg-surface);
-  color: var(--text-tertiary);
-}
-.home__recent-empty-title {
-  font-weight: 600;
-}
 .home__recent-message {
   font-size: var(--text-sm);
   color: var(--text-tertiary);
+}
+
+/* ---------- Course materials menu (drawer over the workspace) ---------- */
+.materials-backdrop {
+  position: fixed;
+  inset: var(--header-height) 0 0 0;
+  z-index: 25;
+  background: rgba(20, 24, 20, 0.38);
+  animation: materials-fade 160ms ease-out;
+}
+/* While a material is dragged to the Study assistant: see-through, and lets the drop through. */
+.materials-backdrop--dragging {
+  background: transparent;
+  pointer-events: none;
+}
+.materials-drawer {
+  position: fixed;
+  top: var(--header-height);
+  bottom: 0;
+  left: 0;
+  z-index: 26;
+  display: flex;
+  width: min(var(--ws-materials-w, 300px), calc(100vw - 48px));
+  padding: var(--space-4);
+  animation: materials-slide 180ms ease-out;
+}
+.materials-drawer > .materials {
+  flex: 1;
+  min-width: 0;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+}
+@keyframes materials-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes materials-slide {
+  from {
+    transform: translateX(-24px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .materials-backdrop,
+  .materials-drawer {
+    animation: none;
+  }
 }
 
 /* ---------- Course materials ---------- */
@@ -834,7 +907,7 @@
 }
 .composer__box {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-2);
   padding: 6px;
   border: 1px solid var(--border-default);
@@ -846,10 +919,16 @@
 .composer__input {
   flex: 1;
   min-width: 0;
-  height: 32px;
+  min-height: 32px;
+  max-height: 140px;
+  padding: 7px 0;
   border: none;
   background: transparent;
+  font: inherit;
   font-size: var(--text-sm);
+  line-height: 18px;
+  resize: none;
+  overflow-y: auto;
 }
 .composer__input:focus-visible {
   box-shadow: none;
