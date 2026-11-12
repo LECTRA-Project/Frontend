@@ -8,7 +8,7 @@ const material = (id, name, type, extra = {}) => ({ id, name, type, meta: `${typ
 
 function renderPanel(props) {
   const handlers = {
-    onToggleCollapsed: vi.fn(), onSelect: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn(),
+    onToggleCollapsed: vi.fn(), onSelect: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(),
     onDismissUpload: vi.fn(), onReload: vi.fn(), onUploadClick: vi.fn(),
   };
   render(<CourseMaterialsPanel selectedId={null} collapsed={false} materials={[]} {...handlers} {...props} />);
@@ -72,9 +72,9 @@ describe("CourseMaterialsPanel", () => {
     expect(onDelete).toHaveBeenCalledWith(pdf);
   });
 
-  it("shows processing status, failures with a retry, and upload progress", async () => {
+  it("shows processing status, failures (without a retry: the backend can't reprocess), and upload progress", async () => {
     const failed = material("b", "Scan", "pdf", { status: "failed", error: "No text could be extracted." });
-    const { onRetry, onDismissUpload } = renderPanel({
+    const { onDismissUpload } = renderPanel({
       materials: [material("a", "Week 1", "pdf", { status: "processing" }), failed],
       uploads: [{ id: "u1", name: "big.pdf", progress: 40, error: null }, { id: "u2", name: "bad.pdf", progress: 0, error: "Rejected" }],
     });
@@ -82,8 +82,7 @@ describe("CourseMaterialsPanel", () => {
     expect(screen.getByText("No text could be extracted.")).toBeInTheDocument();
     expect(screen.getByLabelText("Uploading big.pdf: 40%")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Retry processing Scan" }));
-    expect(onRetry).toHaveBeenCalledWith(failed);
+    expect(screen.queryByRole("button", { name: /Retry processing/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Dismiss bad.pdf" }));
     expect(onDismissUpload).toHaveBeenCalledWith("u2");
   });

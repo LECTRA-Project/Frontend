@@ -5,10 +5,10 @@ import { groupOf } from "../../services/materials/materialTypes.js";
   Course materials panel onto the assistant, or added with the keyboard from a row's grip).
 
   The assistant can't take file uploads: it answers from lectures the backend has already
-  stored and processed. So an added material is sent as its lecture id
-  (sendStudyMessage → POST /student_profile/assistant/ask, `lecture_ids`), and the backend
-  answers from that file's real content. Only materials whose processing is completed can
-  be read that way; everything else is refused with a reason instead of being pretended.
+  stored. An added material becomes the lecture the chat is about (LectureChat starts the
+  chat with its lecture id), and the backend answers from that file's text. Types the
+  assistant can't read, and lectures still being processed or failed, are refused with a
+  reason instead of being pretended.
 
   A context item: { id, lectureId, fileName, typeLabel }
 */

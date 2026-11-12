@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  deleteLecture,
-  detectServerFeatures,
-  listAllLectures,
-  reprocessLecture,
-  updateLecture,
-  uploadLecture,
-} from "../../api/services/lectures.js";
+import { deleteLecture, listAllLectures, updateLecture, uploadLecture } from "../../api/services/lectures.js";
 import { detectChat } from "../../api/services/chat.js";
 import { isInProgress, titleFromFileName } from "./materialTypes.js";
 
@@ -26,8 +19,7 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
   const [lectures, setLectures] = useState([]);
   const [uploads, setUploads] = useState([]); // { id, name, progress, error }
   const [loading, setLoading] = useState(true);
-  // { ai, chat } once known: whether the backend has AI processing (and the one-shot
-  // assistant), and whether it has the Lecture Chat API (saved chat sessions).
+  // { chat } once known: whether the backend has the Lecture Chat API (saved chat sessions).
   const [features, setFeatures] = useState(null);
   const [error, setError] = useState(null);
   const mounted = useRef(true);
@@ -58,8 +50,8 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
   // Initial load (state is only set once the request settles, like useApi).
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([detectServerFeatures({ signal: controller.signal }), detectChat({ signal: controller.signal })]).then(
-      ([server, chat]) => setFeatures({ ...server, chat }),
+    detectChat({ signal: controller.signal }).then(
+      (chat) => setFeatures({ chat }),
       () => {}
     );
     listAllLectures({ signal: controller.signal }).then(
@@ -127,14 +119,5 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
     setLectures((list) => list.filter((item) => item.id !== id));
   }, []);
 
-  const retry = useCallback(
-    async (id) => {
-      const updated = await reprocessLecture(id);
-      replaceLecture(updated);
-      return updated;
-    },
-    [replaceLecture]
-  );
-
-  return { lectures, uploads, loading, error, features, refresh, upload, dismissUpload, update, remove, retry };
+  return { lectures, uploads, loading, error, features, refresh, upload, dismissUpload, update, remove };
 }

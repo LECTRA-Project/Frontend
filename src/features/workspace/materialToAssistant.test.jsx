@@ -6,7 +6,8 @@ import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER, openMaterialsM
 
 /*
   Dragging course materials into the Study Assistant composer as context, over the real
-  workspace. The materials are backend lectures; an added material is sent as a lecture id.
+  workspace. The materials are backend lectures; a dropped material becomes the lecture the
+  chat is about (Lecture Chat API: the chat is created with its lecture_id).
 */
 
 function lecture(id, title, fileName, fileType, overrides = {}) {
@@ -47,19 +48,36 @@ const NOTEBOOK = lecture("l-ipynb", "Lab 1", "lab1.ipynb", "application/x-ipynb+
 const PROCESSING = lecture("l-new", "Fresh upload", "fresh.pdf", "application/pdf", { processing_status: "processing" });
 const IMAGE = lecture("l-img", "Whiteboard photo", "board.png", "image/png", { processing_status: "skipped", source_type: null });
 
+const CHAT = "/student_profile/chat/sessions";
+
 let api;
-let asked;
+let asked; // { lectureId, content } of every question sent
+let chatAvailable;
 
 beforeEach(() => {
   api = mockApi();
   asked = [];
+  chatAvailable = true;
   saveToken(makeToken(1800));
   const lectures = [PDF, SLIDES, NOTES, NOTEBOOK, PROCESSING, IMAGE];
   api.onGet("/users/me").reply(200, ok(TEST_USER));
   api.onGet("/student_profile/lectures").reply(200, ok({ lectures, page: 1, page_size: 100, total: lectures.length, total_pages: 1 }));
-  api.onPost("/student_profile/assistant/ask").reply((config) => {
-    asked.push(JSON.parse(config.data));
-    return [200, ok({ answer: "From your materials.", found: true, references: [] })];
+  api.onGet(CHAT).reply(() => (chatAvailable ? [200, ok({ sessions: [], page: 1, page_size: 100, total: 0, total_pages: 0 })] : [404, { detail: "Not Found" }]));
+  let sessionLecture = null;
+  api.onPost(CHAT).reply((config) => {
+    const lec = lectures.find((item) => item.id === JSON.parse(config.data).lecture_id);
+    sessionLecture = { id: lec.id, title: lec.title, file_type: lec.file_type };
+    return [201, ok({ id: "s1", title: "New chat", lecture: sessionLecture, created_at: "2026-11-12T10:00:00Z", updated_at: "2026-11-12T10:00:00Z" })];
+  });
+  api.onPost(/\/chat\/sessions\/[^/]+\/messages$/).reply((config) => {
+    const { content } = JSON.parse(config.data);
+    asked.push({ lectureId: sessionLecture.id, content });
+    const session = { id: "s1", title: content, lecture: sessionLecture, created_at: "2026-11-12T10:00:00Z", updated_at: "2026-11-12T10:00:01Z" };
+    return [201, ok({
+      question: { id: "q1", session_id: "s1", role: "user", content, sources: null, created_at: "2026-11-12T10:00:01Z" },
+      answer: { id: "a1", session_id: "s1", role: "assistant", content: "From your materials.", sources: [], created_at: "2026-11-12T10:00:02Z" },
+      session,
+    })];
   });
 });
 afterEach(() => {
@@ -78,6 +96,8 @@ async function openWorkspace() {
   renderApp("/workspace");
   await openMaterialsMenu();
   await within(materialsPanel()).findByText("Search algorithms");
+  // Wait until the workspace knows whether the server has the chat API.
+  await waitFor(() => expect(screen.queryByText("Connecting…")).not.toBeInTheDocument());
   return user;
 }
 
@@ -136,7 +156,7 @@ describe("dragging course materials into the Study Assistant", () => {
     expect(document.querySelector(".section-ghost")).toBeNull();
   });
 
-  it("keeps several materials, removes one, ignores duplicates, and sends them only on Send", async () => {
+  it("keeps several materials, removes extras, ignores duplicates, and chats about the one left only on Send", async () => {
     const user = await openWorkspace();
     drag(row("Search algorithms"), intoComposer());
     drag(row("Game playing"), intoComposer());
@@ -144,17 +164,18 @@ describe("dragging course materials into the Study Assistant", () => {
     drag(row("Search algorithms"), intoComposer()); // already there
     expect(within(chips()).getAllByRole("listitem")).toHaveLength(3);
     expect(screen.getByText("search.pdf is already in your message to the study assistant.")).toBeInTheDocument();
+    // A chat is about one lecture: with several, the assistant says to keep one.
+    expect(screen.getByText("A chat answers from one lecture at a time. Keep one course material and remove the others.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Remove games.pptx from your message" }));
-    expect(within(chips()).getAllByRole("listitem")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "Remove lab1.ipynb from your message" }));
+    expect(within(chips()).getAllByRole("listitem")).toHaveLength(1);
     expect(asked).toHaveLength(0);
 
-    await user.type(intoComposer(), "Compare these{Enter}");
+    await user.type(intoComposer(), "Explain this{Enter}");
     expect(await screen.findByText("From your materials.")).toBeInTheDocument();
-    expect(asked).toHaveLength(1);
-    expect(asked[0].question).toBe("Compare these");
-    expect(asked[0].lecture_ids).toEqual(["l-pdf", "l-ipynb"]); // answered from these files' content
-    expect(screen.getByText("Materials: search.pdf, lab1.ipynb")).toBeInTheDocument();
+    expect(JSON.parse(api.history.post.find((request) => request.url === CHAT).data)).toEqual({ lecture_id: "l-pdf" });
+    expect(asked).toEqual([{ lectureId: "l-pdf", content: "Explain this" }]); // answered from that lecture
     await waitFor(() => expect(chips()).toBeNull());
   });
 
@@ -225,7 +246,7 @@ describe("dragging course materials into the Study Assistant", () => {
   });
 
   it("lets a draft be prepared when the server has no assistant, without claiming an answer", async () => {
-    api.onGet(/\/student_profile\/lectures\/.+/).reply(405);
+    chatAvailable = false;
     await openWorkspace();
     expect(await screen.findByText("Not available")).toBeInTheDocument();
     drag(row("Search algorithms"), intoComposer());

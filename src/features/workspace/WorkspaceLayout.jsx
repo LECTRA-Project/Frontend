@@ -21,7 +21,6 @@ import {
 } from "./sectionLayout.js";
 import UploadDialog from "../files/UploadDialog.jsx";
 import PdfViewerPanel from "../files/PdfViewerPanel.jsx";
-import MaterialViewerPanel from "../files/MaterialViewerPanel.jsx";
 import TransientStatus from "../../components/ui/TransientStatus.jsx";
 import EditLectureDialog from "../lectures/EditLectureDialog.jsx";
 import DeleteLectureDialog from "../lectures/DeleteLectureDialog.jsx";
@@ -31,15 +30,15 @@ import { useLectureLibrary } from "../lectures/useLectureLibrary.js";
 import { useAuth } from "../auth/authContext.js";
 import { useNotebook } from "../notebook/useNotebook.js";
 import { usePythonKernel } from "../notebook/usePythonKernel.js";
-import { fetchLectureFile } from "../../api/services/lectures.js";
 import { cellContextLabel, isOverCellDropZone, isSameCellContext } from "../../services/notebook/cellContext.js";
 import { fileNameOf, materialContextProblem, toMaterialContext } from "./materialContext.js";
 import "./workspace.css";
 
-// Opened in the centre with their original file (fetched from the backend).
-const FILE_VIEWERS = new Set(["pdf", "notes"]);
-
-/* Basic mode: the stored file's public URL (needs the bucket to allow this origin). */
+/*
+  Stored files are opened from the lecture's public S3 URL (`s3_url`): the backend has no
+  file download endpoint. Reading a file's contents (a notebook) needs the bucket to allow
+  this site's origin; a PDF is shown by the browser straight from the URL.
+*/
 async function downloadFromStorage(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`The file could not be downloaded (HTTP ${response.status}).`);
@@ -67,24 +66,19 @@ async function downloadFromStorage(url) {
   the DOM; only its CSS grid position changes, so moving it never resets its state. When
   the arrangement can't fit the window, the sections stack in one column, in layout order.
 
-  Lecture materials come from the backend (useLectureLibrary). What a click opens:
+  Lecture materials come from the backend (useLectureLibrary). The backend stores files
+  but has no file, content or reprocess endpoints, so files are opened from the lecture's
+  public S3 URL. What a click opens:
     PDF       the PDF viewer (at the cited page when opened from an assistant source)
-    notes     the rendered Markdown (MaterialViewerPanel)
-    slides    the extracted slides (LectureContentPanel); browsers cannot render PowerPoint
     notebook  the runnable notebook in the centre (useNotebook + Pyodide kernel)
-  An assistant source for a slide, notebook cell or notes section opens LectureContentPanel
-  with that place highlighted.
-
-  Basic mode: a backend without AI processing (detected by useLectureLibrary) has no
-  file/content/assistant endpoints and only supports renaming. Files are then opened
-  from the lecture's public S3 URL, and the AI parts say they are not available.
+    other     LectureContentPanel: open / download the stored file
 
   Course materials can be dragged from their panel onto the Study assistant (or added with
-  the keyboard from a row's grip); they are sent with the next message as the lectures to
-  answer from (see materialContext.js). Dropping never opens, moves or changes a material.
+  the keyboard from a row's grip); the dropped material becomes the lecture the chat is
+  about (see LectureChat). Dropping never opens, moves or changes a material.
 
-  This component owns the state shared between the panels: the open lecture, its fetched
-  file, the dialogs, the notebook cells and materials added to the assistant message, and the notebook
+  This component owns the state shared between the panels: the open lecture, the dialogs,
+  the notebook cells and materials added to the assistant message, and the notebook
   with its kernel (so they survive switching to the Exam view and back).
 */
 export default function WorkspaceLayout() {
@@ -94,7 +88,6 @@ export default function WorkspaceLayout() {
   const userKey = user?.id ?? user?.email ?? "signed-in-user";
   const library = useLectureLibrary();
   const materials = library.lectures.map(toMaterial);
-  const basic = library.features?.ai === false;
   const { kernel, kernelState } = usePythonKernel();
   const notebookState = useNotebook(kernel, userKey);
 
@@ -109,7 +102,6 @@ export default function WorkspaceLayout() {
   // the URL is unchanged, so the Exam button or "Back to notebook" leaves it automatically.
   // focus = { sourceType, sourceNumber } from a cited source.
   const [open, setOpen] = useState(null); // { lectureId, path, focus }
-  const [openedFile, setOpenedFile] = useState(null); // { key, url, file, error }
   const [cellContext, setCellContext] = useState([]); // notebook cells added to the next assistant message
   const [cellDragActive, setCellDragActive] = useState(false); // a cell is being dragged
   const [cellDragOver, setCellDragOver] = useState(false); // a touch/pen drag is over the assistant
@@ -143,7 +135,7 @@ export default function WorkspaceLayout() {
       setCellContext((list) => [...list, item]);
       announce(`${label} added to your message to the study assistant.`);
     },
-    [cellContext, announce]
+    [cellContext, announce, setCellContext]
   );
 
   const removeCellFromDraft = useCallback(
@@ -153,7 +145,7 @@ export default function WorkspaceLayout() {
       setCellContext((list) => list.filter((existing) => existing.id !== id));
       announce(`${cellContextLabel(item)} removed from your message.`);
     },
-    [cellContext, announce]
+    [cellContext, announce, setCellContext]
   );
 
   /* ---------- Course materials as assistant context ---------- */
@@ -253,35 +245,6 @@ export default function WorkspaceLayout() {
   const openMaterial =
     open && open.path === location.pathname ? materials.find((item) => item.id === open.lectureId) ?? null : null;
   const showsSource = openMaterial !== null && (open.focus?.sourceType ?? "page") !== "page";
-  const needsFile = openMaterial !== null && FILE_VIEWERS.has(openMaterial.type) && !showsSource && !basic;
-  const fileKey = needsFile ? `${openMaterial.id}:${openMaterial.lecture.content_version}` : null;
-
-  // Fetch the open PDF or notes file (the file endpoint needs the auth header, so an
-  // <iframe src> or a plain link can't load it directly).
-  useEffect(() => {
-    if (!fileKey) return undefined;
-    const lecture = materials.find((item) => `${item.id}:${item.lecture.content_version}` === fileKey)?.lecture;
-    if (!lecture) return undefined;
-    const controller = new AbortController();
-    let url = null;
-    fetchLectureFile(lecture.id, { signal: controller.signal }).then(
-      (blob) => {
-        const file = new File([blob], lecture.original_filename, { type: blob.type || lecture.file_type });
-        url = URL.createObjectURL(file);
-        setOpenedFile({ key: fileKey, url, file, error: null });
-      },
-      (err) => {
-        if (!controller.signal.aborted) setOpenedFile({ key: fileKey, url: null, file: null, error: err.message || "The file could not be loaded." });
-      }
-    );
-    return () => {
-      controller.abort();
-      if (url) URL.revokeObjectURL(url);
-    };
-    // materials changes on every poll; the key captures what matters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileKey]);
-
   function openLecture(lectureId, focus = null) {
     setSelectedId(lectureId);
     // Home only lists materials: opening one goes to the workspace (PDFs open above the notebook).
@@ -298,16 +261,12 @@ export default function WorkspaceLayout() {
     setOpen(null);
     if (location.pathname !== "/workspace") navigate("/workspace");
     try {
-      const blob = basic ? await downloadFromStorage(material.lecture.s3_url) : await fetchLectureFile(material.id);
+      const blob = await downloadFromStorage(material.lecture.s3_url);
       await notebookState.actions.openFile(new File([blob], material.lecture.original_filename, { type: "application/x-ipynb+json" }));
-    } catch (err) {
-      if (basic) {
-        // Usually the bucket's CORS rule does not include this site's origin.
-        setNotice("This notebook can’t be loaded here (the file storage blocks this site). You can download it instead.");
-        openLecture(material.id);
-      } else {
-        setNotice(err.message || "The notebook could not be opened.");
-      }
+    } catch {
+      // Usually the bucket's CORS rule does not include this site's origin.
+      setNotice("This notebook can’t be loaded here (the file storage blocks this site). You can download it instead.");
+      openLecture(material.id);
     }
   }
 
@@ -332,14 +291,6 @@ export default function WorkspaceLayout() {
     if (created.length) setNotice(`${created.length === 1 ? "1 file" : `${created.length} files`} uploaded — processing for the assistant.`);
   }
 
-  async function handleRetry(material) {
-    try {
-      await library.retry(material.id);
-    } catch (err) {
-      setNotice(err.message);
-    }
-  }
-
   async function handleSave(changes) {
     await library.update(editing.id, changes);
     setEditing(null);
@@ -354,7 +305,6 @@ export default function WorkspaceLayout() {
     setNotice("Lecture deleted.");
   }
 
-  const fileState = openedFile?.key === fileKey ? openedFile : null;
   // A cited page can be out of range after the file was replaced with a shorter one.
   const citedPage = open?.focus?.sourceType === "page" ? open.focus.sourceNumber : 1;
   const pdfPage = Math.max(1, Math.min(citedPage, openMaterial?.pages || citedPage));
@@ -380,8 +330,11 @@ export default function WorkspaceLayout() {
     widths: columnWidths,
   });
   const gridKey = JSON.stringify([grid.columns, grid.maxStack]);
+  // The measurement below reads the latest grid; it is updated after render, not during it.
   const gridRef = useRef(grid);
-  gridRef.current = grid;
+  useLayoutEffect(() => {
+    gridRef.current = grid;
+  });
 
   // Stack the sections when the arrangement needs more room than the window has.
   useLayoutEffect(() => {
@@ -593,36 +546,18 @@ export default function WorkspaceLayout() {
   let centre = null;
   if (openMaterial && openMaterial.type === "pdf" && !showsSource) {
     centre = (
-      // `key` resets page and zoom when another PDF, version or cited page is opened.
+      // `key` resets page and zoom when another PDF or cited page is opened.
       <PdfViewerPanel
-        key={`${fileKey}:${pdfPage}`}
-        material={
-          basic
-            ? { ...openMaterial, url: openMaterial.lecture.s3_url, loading: false, loadError: null }
-            : { ...openMaterial, url: fileState?.url ?? null, loading: !fileState, loadError: fileState?.error ?? null }
-        }
+        key={`${openMaterial.id}:${pdfPage}`}
+        material={{ ...openMaterial, url: openMaterial.lecture.s3_url, loading: false, loadError: null }}
         initialPage={pdfPage}
         onCollapse={() => setOpen(null)}
         handle={splitView ? handleFor("pdf") : null}
       />
     );
-  } else if (openMaterial && openMaterial.type === "notes" && !showsSource && fileState?.file) {
-    centre = (
-      <MaterialViewerPanel
-        key={fileKey}
-        material={{ ...openMaterial, name: openMaterial.lecture.original_filename, file: fileState.file, url: fileState.url }}
-        onCollapse={() => setOpen(null)}
-      />
-    );
   } else if (openMaterial) {
     centre = (
-      <LectureContentPanel
-        key={`${openMaterial.id}:${open.focus?.sourceType}:${open.focus?.sourceNumber}`}
-        lecture={openMaterial.lecture}
-        focus={open.focus}
-        onRetry={() => handleRetry(openMaterial)}
-        onClose={() => setOpen(null)}
-      />
+      <LectureContentPanel key={openMaterial.id} lecture={openMaterial.lecture} onClose={() => setOpen(null)} />
     );
   }
 
@@ -702,7 +637,7 @@ export default function WorkspaceLayout() {
               const material = materials.find((item) => item.id === lectureId);
               if (material) handleSelectMaterial(material);
             }}
-            available={library.features ? library.features.ai || library.features.chat : null}
+            available={library.features ? library.features.chat : null}
             onAttachClick={() => setUploadOpen(true)}
             onOpenReference={handleOpenReference}
             cellContext={cellContext}
@@ -771,7 +706,6 @@ export default function WorkspaceLayout() {
               onSelect={handleSelectMaterial}
               onEdit={(item) => setEditing(item.lecture)}
               onDelete={(item) => setDeleting(item.lecture)}
-              onRetry={handleRetry}
               onDismissUpload={library.dismissUpload}
               onReload={() => library.refresh()}
               onUploadClick={() => setUploadOpen(true)}
@@ -796,8 +730,9 @@ export default function WorkspaceLayout() {
         </div>
       )}
 
-      {uploadOpen && <UploadDialog basic={basic} onCancel={() => setUploadOpen(false)} onUpload={handleUpload} />}
-      {editing && <EditLectureDialog lecture={editing} titleOnly={basic} onSave={handleSave} onCancel={() => setEditing(null)} />}
+      {/* The backend's upload takes a title and a file, and its edit only the title. */}
+      {uploadOpen && <UploadDialog basic onCancel={() => setUploadOpen(false)} onUpload={handleUpload} />}
+      {editing && <EditLectureDialog lecture={editing} titleOnly onSave={handleSave} onCancel={() => setEditing(null)} />}
       {deleting && <DeleteLectureDialog lecture={deleting} onConfirm={handleDelete} onCancel={() => setDeleting(null)} />}
     </div>
   );

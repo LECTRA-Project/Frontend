@@ -1,15 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ApiError, setAuthToken } from "../client.js";
-import {
-  askAssistant,
-  deleteLecture,
-  listAllLectures,
-  listLectures,
-  reprocessLecture,
-  updateLecture,
-  uploadLecture,
-} from "./lectures.js";
+import { deleteLecture, listAllLectures, listLectures, updateLecture, uploadLecture } from "./lectures.js";
 import { mockApi, ok } from "../../test/helpers.jsx";
 
 const lecture = (id) => ({ id, title: `Lecture ${id}`, processing_status: "completed", content_version: 1 });
@@ -77,32 +69,26 @@ describe("lectures service", () => {
     expect(result.content_version).toBe(2);
   });
 
-  it("deletes and reprocesses lectures", async () => {
+  it("deletes lectures", async () => {
     api.onDelete("/student_profile/lectures/a").reply(200, ok({ id: "a" }));
-    api.onPost("/student_profile/lectures/a/reprocess").reply(202, ok({ ...lecture("a"), processing_status: "pending" }));
     await expect(deleteLecture("a")).resolves.toEqual({ id: "a" });
-    await expect(reprocessLecture("a")).resolves.toMatchObject({ processing_status: "pending" });
-  });
-
-  it("asks the assistant and omits empty optional fields", async () => {
-    api.onPost("/student_profile/assistant/ask").reply((config) => {
-      expect(JSON.parse(config.data)).toEqual({ question: "What is A*?" });
-      return [200, ok({ answer: "A heuristic search [S1].", found: true, references: [{ id: "S1" }] })];
-    });
-    const data = await askAssistant({ question: "What is A*?" });
-    expect(data.found).toBe(true);
   });
 
   it("turns backend errors into ApiError with the server message", async () => {
-    api.onPost("/student_profile/assistant/ask").reply(503, {
+    api.onGet("/student_profile/lectures").reply(503, {
       status: false,
-      message: "The AI assistant is unavailable right now. Please try again later.",
+      message: "The server is unavailable right now. Please try again later.",
       data: null,
     });
-    await expect(askAssistant({ question: "x" })).rejects.toMatchObject({
+    await expect(listLectures()).rejects.toMatchObject({
       constructor: ApiError,
       status: 503,
-      message: "The AI assistant is unavailable right now. Please try again later.",
+      message: "The server is unavailable right now. Please try again later.",
     });
+  });
+
+  it("offers only the four lecture endpoints the backend has", async () => {
+    const service = await import("./lectures.js");
+    expect(Object.keys(service).sort()).toEqual(["deleteLecture", "listAllLectures", "listLectures", "updateLecture", "uploadLecture"]);
   });
 });

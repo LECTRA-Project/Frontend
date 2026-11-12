@@ -1,18 +1,17 @@
-import { apiClient, ApiError } from "../client.js";
+import { ApiError } from "../client.js";
 import { del, get, patch, post } from "../http.js";
 
 /*
-  LECTURES SERVICE — the four Student Profile lecture APIs plus the AI helpers.
+  LECTURES SERVICE — the four Student Profile lecture APIs the backend provides.
 
     GET    /student_profile/lectures                     listLectures
-    POST   /student_profile/upload-lecture               uploadLecture
-    PATCH  /student_profile/lectures/{id}                updateLecture  (JSON, or multipart with a file)
+    POST   /student_profile/upload-lecture               uploadLecture  (multipart: title, file)
+    PATCH  /student_profile/lectures/{id}                updateLecture  (JSON: title)
     DELETE /student_profile/lectures/{id}                deleteLecture
-    GET    /student_profile/lectures/{id}                getLecture
-    POST   /student_profile/lectures/{id}/reprocess      reprocessLecture
-    GET    /student_profile/lectures/{id}/content        getLectureContent
-    GET    /student_profile/lectures/{id}/file           fetchLectureFile (Blob)
-    POST   /student_profile/assistant/ask                askAssistant
+
+  The backend has no per-lecture GET, file, content, reprocess or "ask" endpoints, so
+  the frontend never calls them: stored files are opened from the lecture's `s3_url`,
+  and the Study Assistant uses the Lecture Chat API (see chat.js).
 */
 const BASE = "/student_profile";
 
@@ -96,57 +95,4 @@ export async function updateLecture(id, { title, description, course, file, onPr
 
 export async function deleteLecture(id) {
   return unwrap(await del(`${BASE}/lectures/${id}`), "delete the lecture");
-}
-
-/*
-  Which backend version are we talking to? One read-only request for a lecture id that
-  cannot exist: the AI-enabled backend answers 404 ("Lecture not found"); a backend
-  without AI processing has no GET route there and answers 405 (Method Not Allowed).
-  Returns { ai: true | false }; ai is false only for that clear 405.
-*/
-const PROBE_ID = "00000000-0000-0000-0000-000000000000";
-
-export async function detectServerFeatures({ signal } = {}) {
-  try {
-    await get(`${BASE}/lectures/${PROBE_ID}`, { signal });
-    return { ai: true };
-  } catch (err) {
-    if (err?.name === "CanceledError") throw err;
-    return { ai: err?.status !== 405 };
-  }
-}
-
-export async function getLecture(id, { signal } = {}) {
-  return unwrap(await get(`${BASE}/lectures/${id}`, { signal }), "load the lecture");
-}
-
-export async function reprocessLecture(id) {
-  return unwrap(await post(`${BASE}/lectures/${id}/reprocess`), "retry processing");
-}
-
-export async function getLectureContent(id, { page = 1, pageSize = 1000, signal } = {}) {
-  const response = await get(`${BASE}/lectures/${id}/content`, { params: { page, page_size: pageSize }, signal });
-  return unwrap(response, "load the lecture content");
-}
-
-/* The original file as a Blob (the request carries the auth token, so a plain link would not work). */
-export async function fetchLectureFile(id, { signal } = {}) {
-  const response = await apiClient.get(`${BASE}/lectures/${id}/file`, {
-    responseType: "blob",
-    timeout: UPLOAD_TIMEOUT_MS,
-    signal,
-  });
-  return response.data;
-}
-
-/*
-  Ask the study assistant. Returns { answer, found, references[], searched_chunks }.
-  history: [{ role: "user" | "assistant", content }] — recent turns, oldest first.
-*/
-export async function askAssistant({ question, lectureIds = [], history = [], signal }) {
-  const body = { question };
-  if (lectureIds.length) body.lecture_ids = lectureIds;
-  if (history.length) body.history = history;
-  const response = await post(`${BASE}/assistant/ask`, body, { timeout: 90000, signal });
-  return unwrap(response, "get an answer");
 }

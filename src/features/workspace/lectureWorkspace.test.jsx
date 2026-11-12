@@ -83,40 +83,6 @@ describe("lecture workspace", () => {
     expect(within(panel).getByText("No text could be extracted from this file.")).toBeInTheDocument();
   });
 
-  it("retries a failed lecture", async () => {
-    api.onPost("/student_profile/lectures/l3/reprocess").reply(() => {
-      return [202, ok({ ...FAILED, processing_status: "pending", processing_error: null })];
-    });
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Retry processing Scanned notes" }));
-    expect(await within(panel).findByText("Processing")).toBeInTheDocument();
-  });
-
-  it("uploads files, shows them as processing and polls until completed", async () => {
-    api.onPost("/student_profile/upload-lecture").reply((config) => {
-      const created = lecture({
-        id: "l9",
-        title: config.data.get("title"),
-        course: config.data.get("course"),
-        original_filename: "neural_nets.pdf",
-        processing_status: "pending",
-        source_count: null,
-      });
-      lectures = [created, ...lectures];
-      return [201, ok(created)];
-    });
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Upload materials" }));
-    const dialog = screen.getByRole("dialog", { name: "Upload lecture materials" });
-    await user.upload(within(dialog).getByTestId("upload-input"), new File(["%PDF-"], "neural_nets.pdf"));
-    await user.type(within(dialog).getByLabelText("Course (optional)"), "Deep Learning");
-    await user.click(within(dialog).getByRole("button", { name: "Upload" }));
-
-    expect(await within(panel).findByText("neural nets")).toBeInTheDocument();
-    expect(within(panel).getByText("Processing")).toBeInTheDocument();
-    expect(within(panel).getByText("PDF · Deep Learning")).toBeInTheDocument();
-  });
-
   it("rejects unsupported file types in the upload dialog", async () => {
     const { user, panel } = await openWorkspace();
     await user.click(within(panel).getByRole("button", { name: "Upload materials" }));
@@ -142,20 +108,6 @@ describe("lecture workspace", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("replaces a lecture file through multipart PATCH", async () => {
-    api.onPatch("/student_profile/lectures/l2").reply((config) => {
-      expect(config.data.get("file").name).toBe("games_v2.pptx");
-      return [200, ok({ ...DECK, original_filename: "games_v2.pptx", processing_status: "pending", content_version: 2 })];
-    });
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Edit Game playing" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit lecture" });
-    await user.upload(within(dialog).getByTestId("replace-file-input"), new File(["x"], "games_v2.pptx"));
-    expect(within(dialog).getByText(/processed again/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(within(panel).getAllByText("Processing").length).toBe(1));
-  });
-
   it("deletes a lecture after confirmation", async () => {
     api.onDelete("/student_profile/lectures/l2").reply(() => {
       lectures = lectures.filter((item) => item.id !== "l2");
@@ -167,73 +119,6 @@ describe("lecture workspace", () => {
     await waitFor(() => expect(within(panel).queryByText("Game playing")).not.toBeInTheDocument());
   });
 
-  it("answers from the materials with sources that open the cited slide", async () => {
-    api.onPost("/student_profile/assistant/ask").reply((config) => {
-      expect(JSON.parse(config.data).question).toBe("How does minimax choose a move?");
-      return [
-        200,
-        ok({
-          found: true,
-          answer: "It picks the move with the best worst case [S1].",
-          references: [
-            {
-              id: "S1", lecture_id: "l2", lecture_title: "Game playing", file_type: DECK.file_type,
-              source_type: "slide", source_number: 2, source_label: null, location: "Slide 2",
-              snippet: "Minimax chooses the move with the best worst case",
-            },
-          ],
-          searched_chunks: 8,
-        }),
-      ];
-    });
-    api.onGet("/student_profile/lectures/l2/content").reply(200, ok({
-      lecture: DECK,
-      sections: [
-        { source_type: "slide", source_number: 1, source_label: null, location: "Slide 1", text: "Games" },
-        { source_type: "slide", source_number: 2, source_label: null, location: "Slide 2", text: "Minimax chooses the move with the best worst case" },
-      ],
-      page: 1, page_size: 1000, total: 2, total_pages: 1,
-    }));
-
-    const { user } = await openWorkspace();
-    const assistant = screen.getByRole("region", { name: "Study assistant" });
-    expect(within(assistant).getByText("2 materials")).toBeInTheDocument();
-    await user.type(within(assistant).getByLabelText("Message to the study assistant"), "How does minimax choose a move?");
-    await user.click(within(assistant).getByRole("button", { name: "Send message" }));
-
-    expect(await within(assistant).findByText(/best worst case/)).toBeInTheDocument();
-    await user.click(within(assistant).getByRole("button", { name: /Game playing — Slide 2/ }));
-
-    const viewer = await screen.findByRole("region", { name: "Lecture: Game playing" });
-    const slide = await within(viewer).findByText("Minimax chooses the move with the best worst case");
-    expect(slide.closest(".source-block")).toHaveClass("source-block--focused");
-  });
-
-  it("says clearly when the materials do not contain the answer", async () => {
-    api.onPost("/student_profile/assistant/ask").reply(200, ok({
-      found: false,
-      answer: "I couldn't find the answer to this in your uploaded lecture materials.",
-      references: [],
-      searched_chunks: 8,
-    }));
-    const { user } = await openWorkspace();
-    const assistant = screen.getByRole("region", { name: "Study assistant" });
-    await user.type(within(assistant).getByLabelText("Message to the study assistant"), "Capital of France?");
-    await user.click(within(assistant).getByRole("button", { name: "Send message" }));
-    expect(await within(assistant).findByText(/couldn't find the answer/)).toBeInTheDocument();
-    expect(within(assistant).queryByRole("list", { name: "Sources" })).not.toBeInTheDocument();
-  });
-
-  it("shows assistant errors from the backend", async () => {
-    api.onPost("/student_profile/assistant/ask").reply(503, {
-      status: false, message: "The AI assistant is not configured on the server (no LLM API key).", data: null,
-    });
-    const { user } = await openWorkspace();
-    const assistant = screen.getByRole("region", { name: "Study assistant" });
-    await user.type(within(assistant).getByLabelText("Message to the study assistant"), "Hi");
-    await user.click(within(assistant).getByRole("button", { name: "Send message" }));
-    expect(await within(assistant).findByText(/not configured on the server/)).toBeInTheDocument();
-  });
 });
 
 describe("lecture workspace on a backend without AI processing (e.g. today's Render deployment)", () => {
@@ -251,7 +136,6 @@ describe("lecture workspace on a backend without AI processing (e.g. today's Ren
   beforeEach(() => {
     api = mockApi();
     api.onGet("/users/me").reply(200, ok(TEST_USER));
-    api.onGet("/student_profile/lectures/00000000-0000-0000-0000-000000000000").reply(405, { status: false, message: "Method Not Allowed", data: null });
     api.onGet("/student_profile/lectures").reply(200, ok({ lectures: [legacy, legacyPdf], page: 1, page_size: 100, total: 2, total_pages: 1 }));
     saveToken(token);
   });
@@ -278,6 +162,18 @@ describe("lecture workspace on a backend without AI processing (e.g. today's Ren
     expect(within(assistant).getByText("Not available")).toBeInTheDocument();
     expect(within(assistant).getByRole("button", { name: "Send message" })).toBeDisabled();
     expect(api.history.post.filter((r) => r.url.includes("assistant"))).toHaveLength(0);
+  });
+
+  it("never calls endpoints the backend doesn't have (probe, file, content, reprocess, ask)", async () => {
+    const { user, panel } = await openWorkspace();
+    await user.click(within(panel).getByRole("button", { name: /^Reading/ }));
+    await screen.findByRole("region", { name: /PDF viewer: Reading/ });
+    await user.click(within(await openMaterialsMenu()).getByRole("button", { name: /^Intro slides/ }));
+    await screen.findByRole("region", { name: "Lecture: Intro slides" });
+
+    const requested = [...api.history.get, ...api.history.post].map((request) => request.url);
+    const missing = /\/lectures\/[^/]+(\/(file|content|reprocess))?$|\/assistant\/ask/;
+    expect(requested.filter((url) => missing.test(url))).toEqual([]);
   });
 
   it("opens a PDF straight from its S3 URL", async () => {

@@ -19,7 +19,7 @@ import { STATUS_LABEL } from "../../lectures/materialTypes.js";
     onToggleCollapsed toggles the materials list (optional)
     onClose           closes the menu (optional; shows a close button)
     onSelect          called with the material when an item is clicked
-    onEdit / onDelete / onRetry   called with the material
+    onEdit / onDelete called with the material
     onDismissUpload   removes a failed upload from the list
     onReload          retries loading after an error
     onUploadClick     called when "Upload materials" is clicked
@@ -93,7 +93,6 @@ export default function CourseMaterialsPanel({
   onSelect,
   onEdit,
   onDelete,
-  onRetry,
   onDismissUpload,
   onReload,
   onUploadClick,
@@ -237,9 +236,6 @@ export default function CourseMaterialsPanel({
                         >
                           <Icon name="grip" size={16} />
                         </button>
-                      )}
-                      {item.status === "failed" && onRetry && (
-                        <IconButton icon="refresh" label={`Retry processing ${item.name}`} onClick={() => onRetry(item)} />
                       )}
                       {onEdit && <IconButton icon="edit" label={`Edit ${item.name}`} onClick={() => onEdit(item)} />}
                       {onDelete && <IconButton icon="trash" label={`Delete ${item.name}`} onClick={() => onDelete(item)} />}

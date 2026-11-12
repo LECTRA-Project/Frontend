@@ -5,13 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCell, createNotebook } from "../../services/notebook/ipynb.js";
 import { saveNotebook } from "../../services/notebook/notebookStorage.js";
 import { CELL_DRAG_TYPE } from "../../services/notebook/cellContext.js";
-import { sendStudyMessage } from "../../services/studyAssistant.js";
-import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
-
-vi.mock("../../services/studyAssistant.js", async (importOriginal) => {
-  const original = await importOriginal();
-  return { ...original, sendStudyMessage: vi.fn(original.sendStudyMessage) };
-});
+import { makeToken, mockApi, ok, openMaterialsMenu, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
 
 /*
   Adding notebook cells to a Study Assistant question by dragging the cell's grip onto
@@ -21,19 +15,54 @@ vi.mock("../../services/studyAssistant.js", async (importOriginal) => {
 const CODE = "def double(x):\n    return x * 2\n\n\tprint(double(3))  # tab kept";
 const MARKDOWN = "# Notes\n\n- first point\n- second point";
 
+// A lecture as the deployed backend returns it; chats are always about one lecture.
+const LECTURE = {
+  id: "l-search",
+  user_id: TEST_USER.id,
+  title: "Search algorithms",
+  original_filename: "search.pdf",
+  file_type: "application/pdf",
+  file_size: 4096,
+  s3_url: "https://bucket.example/search.pdf",
+  uploaded_at: "2026-11-01T10:00:00Z",
+  updated_at: "2026-11-01T10:00:00Z",
+};
+const CHAT = "/student_profile/chat/sessions";
+
 let api;
+let chatAvailable; // whether the server has the Lecture Chat API
+let messageReply; // [status, body] for the next message sent
+let sent; // { session, lectureId, content } of every message sent
 
 beforeEach(() => {
   api = mockApi();
   const token = makeToken(1800);
   saveToken(token);
+  chatAvailable = true;
+  messageReply = null;
+  sent = [];
   api.onGet("/users/me").reply(200, ok(TEST_USER));
-  api.onGet("/student_profile/lectures").reply(200, ok({ lectures: [], page: 1, page_size: 100, total: 0, total_pages: 0 }));
+  api.onGet("/student_profile/lectures").reply(200, ok({ lectures: [LECTURE], page: 1, page_size: 100, total: 1, total_pages: 1 }));
+  api.onGet(CHAT).reply(() => (chatAvailable ? [200, ok({ sessions: [], page: 1, page_size: 100, total: 0, total_pages: 0 })] : [404, { detail: "Not Found" }]));
+  api.onPost(CHAT).reply((config) => {
+    const { lecture_id: lectureId } = JSON.parse(config.data);
+    return [201, ok({ id: "s1", title: "New chat", lecture: { id: lectureId, title: LECTURE.title, file_type: LECTURE.file_type }, created_at: "2026-11-12T10:00:00Z", updated_at: "2026-11-12T10:00:00Z" })];
+  });
+  api.onPost(/\/chat\/sessions\/[^/]+\/messages$/).reply((config) => {
+    const { content } = JSON.parse(config.data);
+    sent.push({ session: config.url.split("/").at(-2), content });
+    if (messageReply) return messageReply;
+    const session = { id: "s1", title: "Notes", lecture: { id: LECTURE.id, title: LECTURE.title, file_type: LECTURE.file_type }, created_at: "2026-11-12T10:00:00Z", updated_at: "2026-11-12T10:00:01Z" };
+    return [201, ok({
+      question: { id: "q1", session_id: "s1", role: "user", content, sources: null, created_at: "2026-11-12T10:00:01Z" },
+      answer: { id: "a1", session_id: "s1", role: "assistant", content: "They are bullet notes.", sources: [], created_at: "2026-11-12T10:00:02Z" },
+      session,
+    })];
+  });
 
   const notebook = createNotebook("Week 3");
   notebook.cells = [{ ...createCell("code"), source: CODE }, { ...createCell("markdown"), source: MARKDOWN }];
   saveNotebook(TEST_USER.id, notebook);
-  vi.mocked(sendStudyMessage).mockClear();
 });
 afterEach(() => api.restore());
 
@@ -64,9 +93,19 @@ function dragCellTo(name, target = composer()) {
   fireEvent.dragEnd(grip(name), { dataTransfer: transfer });
 }
 
+/* Opens the lecture in the viewer: a chat is about the lecture that's open. */
+async function openLecture(user) {
+  const panel = await openMaterialsMenu();
+  await user.click(await within(panel).findByRole("button", { name: /^Search algorithms/ }));
+  await screen.findByRole("region", { name: /PDF viewer: Search algorithms/ });
+}
+
 async function openWorkspace() {
   const result = renderApp("/workspace");
   await screen.findByRole("group", { name: "Python cell 1" });
+  // Wait until the workspace knows whether the server has the chat API (the assistant then
+  // switches from "Connecting…" to the chat or "Not available").
+  await waitFor(() => expect(screen.queryByText("Connecting…")).not.toBeInTheDocument());
   return result;
 }
 
@@ -96,7 +135,7 @@ describe("notebook cells as Study Assistant context", () => {
     expect(screen.queryByText("In [*]:")).not.toBeInTheDocument();
     expect(document.querySelector(".nb-output")).toBeNull();
     expect(screen.getByRole("group", { name: "Python cell 1" })).toHaveTextContent("return x * 2");
-    expect(sendStudyMessage).not.toHaveBeenCalled();
+    expect(sent).toHaveLength(0);
     expect(document.querySelector(".chat-msg")).toBeNull();
 
     // Dropping the same unchanged cell again does not duplicate it.
@@ -120,7 +159,7 @@ describe("notebook cells as Study Assistant context", () => {
     expect(within(cellList()).getByText("Python cell 1")).toBeInTheDocument();
     expect(screen.getByLabelText("Message to the study assistant")).toHaveFocus();
     expect(screen.queryByText("In [*]:")).not.toBeInTheDocument(); // Enter on the grip does not edit or run
-    expect(sendStudyMessage).not.toHaveBeenCalled();
+    expect(sent).toHaveLength(0);
   });
 
   it("supports touch drags on the grip, highlighting the assistant and adding on release over it", async () => {
@@ -145,7 +184,7 @@ describe("notebook cells as Study Assistant context", () => {
     expect(within(cellList()).getByText("Markdown cell 2")).toBeInTheDocument();
     expect(composer()).not.toHaveClass("composer--drop-ready");
     expect(document.querySelector(".nb-cell__drag-ghost")).toBeNull();
-    expect(sendStudyMessage).not.toHaveBeenCalled();
+    expect(sent).toHaveLength(0);
   });
 
   it("does not add a touch drag released outside the assistant, or a tap on the grip", async () => {
@@ -190,7 +229,7 @@ describe("notebook cells as Study Assistant context", () => {
     expect(within(items[1]).getByLabelText("Source of Markdown cell 2").textContent).toBe(MARKDOWN);
     expect(composer()).not.toHaveClass("composer--drop-ready");
     expect(composer()).not.toHaveClass("composer--drop-over");
-    expect(sendStudyMessage).not.toHaveBeenCalled();
+    expect(sent).toHaveLength(0);
   });
 
   it("ignores drops that are not notebook cells", async () => {
@@ -215,35 +254,27 @@ describe("notebook cells as Study Assistant context", () => {
   });
 
   it("sends the cells with the question only when Send is pressed, then clears them", async () => {
-    let asked;
-    api.onPost("/student_profile/assistant/ask").reply((config) => {
-      asked = JSON.parse(config.data);
-      return [200, ok({ answer: "They are bullet notes.", found: true, references: [] })];
-    });
     const user = userEvent.setup();
     await openWorkspace();
+    await openLecture(user);
     dragCellTo("Markdown cell 2");
     dragCellTo("Python cell 1");
-    expect(asked).toBeUndefined();
+    expect(sent).toHaveLength(0);
 
     await user.type(screen.getByLabelText("Message to the study assistant"), "What do these notes mean?{Enter}");
 
-    expect(sendStudyMessage).toHaveBeenCalledTimes(1);
-    expect(sendStudyMessage.mock.calls[0][0].notebookCells).toEqual([
-      { kind: "notebook-cell", cellType: "markdown", position: 2, notebookTitle: "Week 3", source: MARKDOWN },
-      { kind: "notebook-cell", cellType: "code", position: 1, notebookTitle: "Week 3", source: CODE },
-    ]);
     expect(await screen.findByText("They are bullet notes.")).toBeInTheDocument();
-    // The backend has no cell field, so the full sources (indentation kept) follow the question.
-    expect(asked.question.startsWith("What do these notes mean?\n\nNotebook context")).toBe(true);
-    expect(asked.question).toContain(MARKDOWN);
-    expect(asked.question).toContain(CODE);
-    expect(screen.getByText("Notebook context: Markdown cell 2, Python cell 1")).toBeInTheDocument();
+    expect(JSON.parse(api.history.post.find((request) => request.url === CHAT).data)).toEqual({ lecture_id: LECTURE.id });
+    expect(sent).toHaveLength(1);
+    // The chat API has no cell field, so the full sources (indentation kept) follow the question.
+    expect(sent[0].content.startsWith("What do these notes mean?\n\nNotebook context")).toBe(true);
+    expect(sent[0].content).toContain(MARKDOWN);
+    expect(sent[0].content).toContain(CODE);
     await waitFor(() => expect(cellList()).toBeNull());
   });
 
   it("lets a draft with cells be prepared when the server has no assistant, without inventing an answer", async () => {
-    api.onGet(/\/student_profile\/lectures\/.+/).reply(405);
+    chatAvailable = false;
     await openWorkspace();
     expect(await screen.findByText("Not available")).toBeInTheDocument();
     dragCellTo("Python cell 1");
@@ -252,18 +283,19 @@ describe("notebook cells as Study Assistant context", () => {
     expect(screen.getByText(/The assistant isn’t available on this server yet/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
     expect(document.querySelector(".chat-msg--assistant")).toBeNull();
-    expect(sendStudyMessage).not.toHaveBeenCalled();
+    expect(sent).toHaveLength(0);
   });
 
   it("keeps the draft context if sending fails", async () => {
-    vi.mocked(sendStudyMessage).mockRejectedValueOnce(new Error("offline"));
+    messageReply = [503, { status: false, message: "The assistant is offline.", data: null }];
     const user = userEvent.setup();
     await openWorkspace();
+    await openLecture(user);
     dragCellTo("Python cell 1");
 
     await user.type(screen.getByLabelText("Message to the study assistant"), "Why?{Enter}");
 
-    expect(await screen.findByText("offline")).toBeInTheDocument();
+    expect(await screen.findByText(/The assistant is offline/)).toBeInTheDocument();
     expect(within(cellList()).getByText("Python cell 1")).toBeInTheDocument();
   });
 });
