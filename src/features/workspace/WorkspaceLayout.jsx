@@ -96,7 +96,7 @@ function useElementWidth(ref) {
     the chat (left of the viewer), or is pinned beside the chat.
   - At phone width the menu is an overlay and the notebook and viewer open full-screen.
   - The open chat and the material in the viewer are in the URL:
-      /workspace?chat=<session id>&lecture=<lecture id>   (also /workspace/exam?…)
+      /workspace?chat=<session id>&lecture=<lecture id>   (also /workspace/exam?…&exam=<exam id>)
     so a link can be copied, reloaded or shared, Back goes to the previous chat or closes
     the viewer, and a reload keeps both. An id the student doesn't have shows a notice and
     is dropped from the URL. Home has neither.
@@ -165,10 +165,13 @@ export default function WorkspaceLayout() {
   // Home has no chat or viewer: opening one from there goes to the chat.
   const pagePath = isHome ? "/workspace" : location.pathname;
   const currentChatId = isHome ? chat.activeId : urlChatId;
+  const urlExamId = searchParams.get("exam");
   const hrefFor = (path, { chatId = currentChatId, lectureId = null } = {}) => {
     const params = new URLSearchParams();
     if (chatId) params.set("chat", chatId);
     if (lectureId) params.set("lecture", lectureId);
+    // The exam view keeps its exam (?exam=) while chats and materials change around it.
+    if (path === "/workspace/exam" && urlExamId) params.set("exam", urlExamId);
     const search = params.toString();
     return search ? `${path}?${search}` : path;
   };
@@ -533,6 +536,16 @@ export default function WorkspaceLayout() {
     announcement: draftAnnouncement,
   };
 
+  // The exam view: materials of the open chat (preselected) or the library, and whose
+  // answers on this device to use. The open chat is still loading while ?chat= has no session.
+  const examView = {
+    userKey,
+    chatLectures: urlChatId ? chatLectures : [],
+    library: library.lectures,
+    loading: library.loading || (Boolean(urlChatId) && !session && chatAvailable !== false && !chat.sessionsError),
+    sourceType: (id) => findLecture(id)?.source_type ?? "page",
+  };
+
   const home = {
     materials: library.lectures.map(toMaterial),
     uploads: library.uploads,
@@ -681,7 +694,7 @@ export default function WorkspaceLayout() {
         />
 
         <main className="cf__main">
-          <Outlet context={{ chatView, home }} />
+          <Outlet context={{ chatView, home, examView }} />
         </main>
 
         {notebookOpen && (
