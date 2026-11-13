@@ -27,7 +27,10 @@ const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?
   except when opened from a source in an answer: then the slide text is shown with the cited
   slide highlighted, because the Office viewer can't open at a given slide.
 
-  Shows the text Lectra extracted from the file, one block per slide or notebook cell,
+  Images are shown as the picture itself; the text Lectra read from it (which answers cite
+  as "Page 1") is behind a "Show text" toggle, e.g. to copy it.
+
+  Otherwise shows the text Lectra extracted from the file, one block per slide or notebook cell,
   in the same order as the original. The toolbar steps through the blocks and zooms.
   `focus` ({ sourceType, sourceNumber }) scrolls to that slide or cell; with `cited` it is
   also highlighted and a banner says it was opened from a source in an answer, until the
@@ -49,13 +52,16 @@ export default function LectureContentPanel({ lecture, focus, cited = false, onR
   const [current, setCurrent] = useState(null); // index of the block in view
   const [citedActive, setCitedActive] = useState(Boolean(cited && focus));
   const [zoom, setZoom] = useState(100);
+  const [showText, setShowText] = useState(false);
   const bodyRef = useRef(null);
   const scrollFrame = useRef(0);
   const status = displayStatus(lecture.processing_status);
   // A backend without AI processing sends no processing fields and has no file/content
   // endpoints; the stored file is then opened from its S3 URL.
   const basic = lecture.processing_status === undefined;
-  const isImage = basic ? !/(pdf|powerpoint|presentation|ipynb|markdown)/.test(lecture.file_type) : lecture.source_type == null;
+  // The MIME type decides; a lecture without a source type has no pages, so it is an image too.
+  const isImage = /^image\//.test(lecture.file_type ?? "") ||
+    (basic ? !/(pdf|powerpoint|presentation|ipynb|markdown)/.test(lecture.file_type) : lecture.source_type == null);
   const officeSlides = isSlides(lecture) && /^https:\/\//.test(lecture.s3_url ?? "") && !(cited && focus);
 
   useEffect(() => {
@@ -93,6 +99,8 @@ export default function LectureContentPanel({ lecture, focus, cited = false, onR
     if (last && last.number === section.source_number) last.sections.push(section);
     else groups.push({ number: section.source_number, type: section.source_type, sections: [section] });
   }
+  // An image's text is only shown on request; the picture is the content.
+  const textShown = !isImage || showText;
   const focusIndex = focus ? groups.findIndex((group) => group.type === focus.sourceType && group.number === focus.sourceNumber) : -1;
   const shown = current ?? Math.max(0, focusIndex);
   const unit = UNIT[groups[shown]?.type ?? lecture.source_type] ?? "Section";
@@ -161,7 +169,25 @@ export default function LectureContentPanel({ lecture, focus, cited = false, onR
         )}
       </ViewerHead>
 
-      {groups.length > 0 && (
+      {isImage && (imageUrl || groups.length > 0) && (
+        <div className="viewer__toolbar">
+          {groups.length > 0 && (
+            <Button size="sm" icon={showText ? "image" : "text"} onClick={() => setShowText(!showText)} aria-pressed={showText}>
+              {showText ? "Show image" : "Show text"}
+            </Button>
+          )}
+          <span className="viewer__spacer" />
+          <ZoomControls
+            zoom={zoom}
+            canZoomOut={zoom > ZOOM_MIN}
+            canZoomIn={zoom < ZOOM_MAX}
+            onZoomOut={() => setZoom(zoom - 10)}
+            onZoomIn={() => setZoom(zoom + 10)}
+          />
+        </div>
+      )}
+
+      {!isImage && groups.length > 0 && (
         <div className="viewer__toolbar">
           <IconButton icon="chevronLeft" label={`Previous ${unit.toLowerCase()}`} disabled={shown <= 0} onClick={() => goTo(shown - 1)} />
           <span className={`viewer__position ${citedActive && shown === focusIndex ? "viewer__position--cited" : ""}`}>
@@ -184,7 +210,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, onR
         </div>
       )}
 
-      {citedActive && focusIndex >= 0 && (
+      {citedActive && focusIndex >= 0 && !isImage && (
         <ViewerBanner>
           Opened from a source in the answer: {(UNIT[focus.sourceType] ?? "Section").toLowerCase()} {focus.sourceNumber}
         </ViewerBanner>
@@ -192,7 +218,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, onR
 
       <div className="viewer__content lecture-view__body" ref={bodyRef} onScroll={handleScroll} style={{ "--viewer-zoom": zoom / 100 }}>
         <div className="viewer__zoomed">
-          {isImage && (basic ? lecture.s3_url : imageUrl) && (
+          {isImage && !showText && (basic ? lecture.s3_url : imageUrl) && (
             <img className="lecture-view__image" src={basic ? lecture.s3_url : imageUrl} alt={lecture.title} />
           )}
           {officeSlides && (
@@ -232,9 +258,11 @@ export default function LectureContentPanel({ lecture, focus, cited = false, onR
               {error.message}
             </p>
           )}
-          {status === "completed" && !officeSlides && !content && !error && <p className="lecture-view__notice">Loading content…</p>}
+          {status === "completed" && !officeSlides && !content && !error && (!isImage || showText) && (
+            <p className="lecture-view__notice">Loading content…</p>
+          )}
 
-          {groups.map((group, index) => {
+          {textShown && groups.map((group, index) => {
             const highlighted = citedActive && index === focusIndex;
             return (
               <article
