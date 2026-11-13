@@ -305,6 +305,27 @@ export default function WorkspaceLayout() {
     if (id !== currentChatId || !isChatRoute) navigate(hrefFor(path, { chatId: id }));
   }
 
+  // A chat's ⋯ → Remove in the menu. Removing the open chat leaves an empty new chat, with
+  // no chat or material in the URL; removing another chat leaves the open one as it is.
+  async function removeChat(session) {
+    const wasOpen = session.id === chat.activeId;
+    try {
+      await chat.remove(session.id);
+    } catch (err) {
+      setNotice(err.message || "The chat could not be removed.");
+      return false;
+    }
+    if (wasOpen) {
+      setViewer(null);
+      // Mark the URL change as ours, so the "open chat changed" effect doesn't write the
+      // material back into the URL.
+      appliedChat.current = null;
+      if (!isHome) navigate(hrefFor(pagePath, { chatId: null }), { replace: true });
+    }
+    setNotice("Chat removed.");
+    return true;
+  }
+
   function newChat() {
     setTooLong(null);
     closeOverlayMenu();
@@ -644,8 +665,8 @@ export default function WorkspaceLayout() {
           sessionsError={chat.sessionsError}
           onOpenChat={openChat}
           onReloadChats={() => chat.reloadSessions()}
+          onRemoveChat={removeChat}
           available={chatAvailable !== false}
-          user={user}
         />
 
         <main className="cf__main">

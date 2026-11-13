@@ -98,9 +98,11 @@ describe("chat-first workspace: chats and their materials", () => {
 
     const groups = within(menu()).getAllByRole("heading", { level: 3 }).map((node) => node.textContent);
     expect(groups).toEqual(["Today", "Yesterday", "Previous 7 days", "Older"]);
-    expect(within(within(menu()).getByRole("list", { name: "Today" })).getByRole("button")).toHaveTextContent("Hunt's algorithm");
-    expect(within(within(menu()).getByRole("list", { name: "Yesterday" })).getByRole("button")).toHaveTextContent("Exercise 3.1.1 bank loans");
-    expect(within(within(menu()).getByRole("list", { name: "Previous 7 days" })).getByRole("button")).toHaveTextContent("Regression metrics");
+    expect(within(within(menu()).getByRole("list", { name: "Today" })).getByRole("button", { name: "Hunt's algorithm" })).toHaveTextContent("Hunt's algorithm");
+    expect(within(within(menu()).getByRole("list", { name: "Yesterday" })).getByRole("button", { name: "Exercise 3.1.1 bank loans" })).toHaveTextContent("Exercise 3.1.1 bank loans");
+    expect(within(within(menu()).getByRole("list", { name: "Previous 7 days" })).getByRole("button", { name: "Regression metrics" })).toHaveTextContent("Regression metrics");
+    // The menu has no name / Settings footer (Account settings is in the header's profile menu).
+    expect(within(menu()).queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
     // No notebook until it is asked for.
     expect(notebookPanel()).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Notebook" })).toHaveAttribute("aria-pressed", "false");
@@ -264,6 +266,92 @@ describe("chat-first workspace: chats and their materials", () => {
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(within(menu()).queryByRole("button", { name: "Decision trees" })).not.toBeInTheDocument());
     expect(screen.getByRole("heading", { name: "What are we studying today?" })).toBeInTheDocument();
+  });
+
+  describe("removing a chat from its ⋯ menu", () => {
+    const chatRow = (title) => within(menu()).getByRole("button", { name: title });
+    async function chooseRemove(user, title) {
+      await user.click(within(menu()).getByRole("button", { name: `Actions for ${title}` }));
+      await user.click(screen.getByRole("menuitem", { name: "Remove" }));
+      return screen.getByRole("dialog", { name: "Remove chat?" });
+    }
+    const deletes = () => api.history.delete.map((request) => request.url);
+
+    it("asks first, then deletes the chat and takes it off the list", async () => {
+      const { user } = await openWorkspace();
+      const dialog = await chooseRemove(user, "Regression metrics");
+      expect(dialog).toHaveTextContent("“Regression metrics” and all its messages will be deleted. Its materials are kept.");
+      await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+
+      await waitFor(() => expect(within(menu()).queryByRole("button", { name: "Regression metrics" })).not.toBeInTheDocument());
+      expect(deletes()).toEqual(["/student_profile/chat/sessions/s-reg"]);
+      expect(backend.sessions.map((item) => item.id)).not.toContain("s-reg");
+      expect(await screen.findByText("Chat removed.")).toBeInTheDocument();
+      expect(within(menu()).getByRole("button", { name: "New chat" })).toHaveFocus();
+    });
+
+    it("keeps the chat when the dialog is cancelled", async () => {
+      const { user } = await openWorkspace();
+      const dialog = await chooseRemove(user, "Regression metrics");
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(chatRow("Regression metrics")).toBeInTheDocument();
+      expect(deletes()).toEqual([]);
+      expect(within(menu()).getByRole("button", { name: "Actions for Regression metrics" })).toHaveFocus();
+    });
+
+    it("removing the open chat goes to a new chat, with no chat or material in the URL", async () => {
+      const { user, router } = await openWorkspace();
+      await openChat(user, "Hunt's algorithm");
+      await user.click(within(menu()).getByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" }));
+      await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" });
+
+      await user.click(within(await chooseRemove(user, "Hunt's algorithm")).getByRole("button", { name: "Remove" }));
+
+      expect(await screen.findByRole("heading", { level: 1, name: "New chat" })).toBeInTheDocument();
+      await waitFor(() => expect(router.state.location.search).toBe(""));
+      expect(within(menu()).queryByRole("button", { name: "Hunt's algorithm" })).not.toBeInTheDocument();
+      expect(viewer()).toBeNull();
+      expect(materialNames()).toEqual([]);
+    });
+
+    it("removing another chat leaves the open chat, its messages and the viewer as they are", async () => {
+      const { user, router } = await openWorkspace();
+      await openChat(user, "Hunt's algorithm");
+      await user.click(within(menu()).getByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" }));
+      await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" });
+
+      await user.click(within(await chooseRemove(user, "Regression metrics")).getByRole("button", { name: "Remove" }));
+
+      await waitFor(() => expect(within(menu()).queryByRole("button", { name: "Regression metrics" })).not.toBeInTheDocument());
+      expect(screen.getByRole("heading", { level: 1, name: "Hunt's algorithm" })).toBeInTheDocument();
+      expect(screen.getByText("Hunt's algorithm builds a decision tree greedily.")).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "PDF viewer: KI 02 Classification Part1" })).toBeInTheDocument();
+      expect(Object.fromEntries(new URLSearchParams(router.state.location.search))).toEqual({ chat: "s-hunt", lecture: KI02.id });
+    });
+
+    it("clicking ⋯ doesn't open the chat", async () => {
+      const { user, router } = await openWorkspace();
+      await user.click(within(menu()).getByRole("button", { name: "Actions for Regression metrics" }));
+
+      expect(screen.getByRole("menu", { name: "Actions for Regression metrics" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 1, name: "New chat" })).toBeInTheDocument();
+      expect(chatRow("Regression metrics")).not.toHaveAttribute("aria-current");
+      expect(router.state.location.search).toBe("");
+    });
+
+    it("keeps the chat and shows the error when the server can't remove it", async () => {
+      const { user } = await openWorkspace();
+      api.onDelete("/student_profile/chat/sessions/s-reg").replyOnce(500, { success: false, message: "Could not delete the chat." });
+      api.handlers.unshift(api.handlers.pop()); // checked before the fake backend's handler
+      await user.click(within(await chooseRemove(user, "Regression metrics")).getByRole("button", { name: "Remove" }));
+
+      await waitFor(() => expect(deletes()).toHaveLength(1));
+      expect(chatRow("Regression metrics")).toBeInTheDocument();
+      expect(await screen.findByText("Could not delete the chat.")).toBeInTheDocument();
+      expect(screen.queryByText("Chat removed.")).not.toBeInTheDocument();
+    });
   });
 
   it("keeps a failed question with the server's error", async () => {
