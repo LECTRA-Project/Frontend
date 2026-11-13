@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ApiError, setAuthToken } from "../client.js";
-import { deleteExam, getExam, isUnfinished, listAllExams, listExams, startExam } from "./exams.js";
+import { deleteExam, getExam, isUnfinished, listAllExams, listExams, regradeExam, startExam, submitExam } from "./exams.js";
 import { mockApi, ok } from "../../test/helpers.jsx";
 
 const exam = (id, status = "generating") => ({ id, title: "KI 02", status, question_count: 5, questions_ready: 0, lectures: [], error: null });
@@ -67,6 +67,39 @@ describe("exams service", () => {
     api.onDelete("/exams/e-2").reply(409, { status: false, message: "A submitted exam stays in your history and can't be deleted", data: null });
     expect(await deleteExam("e-1")).toEqual({ id: "e-1" });
     await expect(deleteExam("e-2")).rejects.toMatchObject({ status: 409, message: expect.stringMatching(/stays in your history/) });
+  });
+
+  it("submits the given answers in the backend's shape, leaving out empty ones", async () => {
+    const questions = [
+      { id: "q-1", type: "multiple_choice" },
+      { id: "q-2", type: "short_answer" },
+      { id: "q-3", type: "multiple_choice" },
+      { id: "q-4", type: "short_answer" },
+    ];
+    api.onPost("/exams/e-1/submit").reply((config) => {
+      expect(JSON.parse(config.data)).toEqual({
+        answers: [
+          { task_id: "q-1", selected_choice_ids: ["a", "c"] },
+          { task_id: "q-2", answer_text: "A leaf" },
+        ],
+      });
+      expect(config.timeout).toBeGreaterThanOrEqual(300000);
+      return [200, ok({ ...exam("e-1", "submitted"), total_points: 2, max_points: 4, score_percent: 50, questions_ungraded: 0 }, "Exam submitted and graded")];
+    });
+    const submitted = await submitExam("e-1", questions, { "q-1": ["a", "c"], "q-2": "A leaf", "q-3": [], "q-4": "   " });
+    expect(submitted).toMatchObject({ status: "submitted", score_percent: 50 });
+  });
+
+  it("reports 409 and 422 on submit, and regrades", async () => {
+    api.onPost("/exams/e-1/submit").replyOnce(409, { status: false, message: "This exam was already submitted", data: null });
+    api.onPost("/exams/e-1/submit").replyOnce(422, { status: false, message: "Unknown choice ids: z", data: null });
+    await expect(submitExam("e-1", [], {})).rejects.toMatchObject({ status: 409, message: "This exam was already submitted" });
+    await expect(submitExam("e-1", [], {})).rejects.toMatchObject({ status: 422, message: "Unknown choice ids: z" });
+
+    api.onPost("/exams/e-1/regrade").replyOnce(200, ok({ ...exam("e-1", "submitted"), questions_ungraded: 0 }, "Exam graded"));
+    api.onPost("/exams/e-1/regrade").replyOnce(409, { status: false, message: "Every answer of this exam is graded already", data: null });
+    expect(await regradeExam("e-1")).toMatchObject({ questions_ungraded: 0 });
+    await expect(regradeExam("e-1")).rejects.toMatchObject({ status: 409 });
   });
 
   it("throws when the envelope says the call failed", async () => {

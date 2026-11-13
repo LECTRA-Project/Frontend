@@ -27,6 +27,7 @@ import "./files.css";
     initialPage page to open first (e.g. the page an assistant answer cited)
     cited       true when opened from a source in an answer: the banner says so and the
                 page is highlighted until the student moves to another page
+    citedIn     where that source was: "the answer" (default) or "the exam results"
     onCollapse  closes the viewer
     widen       { wide, disabled, onToggle } for the Widen / Restore button (optional)
 
@@ -37,7 +38,7 @@ import "./files.css";
 // The pages sidebar starts open in panels at least this wide.
 const PAGES_OPEN_WIDTH = 600;
 
-export default function PdfViewerPanel({ material, initialPage = 1, cited = false, onCollapse, widen = null }) {
+export default function PdfViewerPanel({ material, initialPage = 1, cited = false, citedIn = "the answer", onCollapse, widen = null }) {
   const usePdfjs = canRenderPdf();
   const ready = Boolean(material.url) && !material.loading && !material.loadError;
 
@@ -232,7 +233,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
 
       {onCitedPage && (
         <ViewerBanner>
-          <span id="pdf-cited">Opened from a source in the answer: page {citedPage}</span>
+          <span id="pdf-cited">Opened from a source in {citedIn}: page {citedPage}</span>
         </ViewerBanner>
       )}
 
@@ -245,6 +246,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
               sizes={drawn.sizes}
               page={page}
               citedPage={citedPage}
+              citedIn={citedIn}
               onSelect={goToPage}
             />
           ) : (
@@ -256,7 +258,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
                       type="button"
                       className={`pdf__page-tile ${number === citedPage ? "pdf__page-tile--cited" : ""}`}
                       aria-current={number === page ? "page" : undefined}
-                      aria-label={`Page ${number}${number === citedPage ? " (cited in the answer)" : ""}`}
+                      aria-label={`Page ${number}${number === citedPage ? ` (cited in ${citedIn})` : ""}`}
                       onClick={() => goToPage(number)}
                     >
                       <span className="pdf__page-sheet" aria-hidden="true" />

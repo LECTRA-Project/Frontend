@@ -1,5 +1,5 @@
 /*
-  Exam view (/workspace/exam): set up, generating, questions and review.
+  Exam view (/workspace/exam): set up, generating, questions, review and results.
   A bar with the title and "Back to chat" on top; under it the steps as white cards in a
   centred column (at most 760 px, like the chat) on the cream canvas.
 */
@@ -643,6 +643,378 @@
   height: 13px;
 }
 
+/* ---------- Submitting ---------- */
+.exam-confirm .confirm__actions {
+  flex-wrap: wrap;
+}
+.exam-confirm__missing {
+  color: var(--warning-strong);
+  font-weight: 500;
+}
+/* While the answers are graded: a short bar sliding along the track. */
+.exam-bar--sweep span {
+  width: 35%;
+  animation: exam-slide 1.4s ease-in-out infinite alternate;
+}
+@keyframes exam-slide {
+  from {
+    transform: translateX(-10%);
+  }
+  to {
+    transform: translateX(195%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .exam-bar--sweep span {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+/* ---------- Results: score ---------- */
+.exam-score {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 28px;
+}
+.exam-ring {
+  width: 120px;
+  height: 120px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) 0 var(--exam-score), var(--border-default) var(--exam-score) 360deg);
+}
+.exam-ring--unknown {
+  background: repeating-conic-gradient(var(--border-default) 0 10deg, var(--bg-subtle) 10deg 20deg);
+}
+.exam-ring__inner {
+  width: 94px;
+  height: 94px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  text-align: center;
+}
+.exam-ring__percent {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.exam-ring__points {
+  padding: 0 6px;
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--text-secondary);
+}
+.exam-score__text {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.exam-score .exam-card__title {
+  margin: 0;
+}
+.exam-score__total {
+  color: var(--text-secondary);
+}
+.exam-score__total strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.exam-score__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.exam-verdicts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exam-verdict {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.exam-verdict--ok {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.exam-verdict--part {
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+}
+.exam-verdict--bad {
+  background: var(--danger-soft);
+  color: var(--danger-strong);
+}
+.exam-verdict--wait {
+  border: 1px dashed var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+/* ---------- Results: one card per question ---------- */
+.exam-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exam-result {
+  gap: 14px;
+  padding: 22px 24px;
+  border-left-width: 4px;
+}
+.exam-result--ok {
+  border-left-color: var(--accent);
+}
+.exam-result--part {
+  border-left-color: var(--warning);
+}
+.exam-result--bad {
+  border-left-color: var(--danger);
+}
+.exam-result--wait {
+  border-left-color: var(--border-strong);
+}
+.exam-result__question {
+  font-size: var(--text-lg);
+}
+.exam-compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.exam-compare__box {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3) 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-canvas);
+  overflow-wrap: anywhere;
+}
+.exam-compare__box--correct {
+  background: var(--accent-soft);
+}
+.exam-compare__label,
+.exam-feedback__label {
+  margin: 0;
+}
+.exam-compare__box p {
+  margin: 0;
+}
+.exam-compare__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.exam-compare__box--correct .exam-compare__label {
+  color: var(--accent-strong);
+}
+.exam-compare__text {
+  white-space: pre-wrap;
+}
+.exam-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exam-pick {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.exam-pick__letter {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-size: 12px;
+  font-weight: 600;
+}
+.exam-compare__box--correct .exam-pick__letter {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.exam-pick__text {
+  flex: 1;
+  min-width: 0;
+}
+.exam-pick__mark {
+  flex: none;
+  display: inline-flex;
+}
+.exam-pick__mark svg {
+  width: 16px;
+  height: 16px;
+}
+.exam-pick--ok .exam-pick__mark {
+  color: var(--accent-strong);
+}
+.exam-pick--bad .exam-pick__mark {
+  color: var(--danger);
+}
+.exam-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.exam-feedback__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.exam-criteria {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+.exam-criteria summary {
+  list-style: none;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.exam-criteria summary::-webkit-details-marker {
+  display: none;
+}
+.exam-criteria summary::before {
+  content: "▸";
+  margin-right: var(--space-2);
+}
+.exam-criteria[open] summary::before {
+  content: "▾";
+}
+.exam-criteria ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 14px var(--space-2);
+  list-style: none;
+}
+.exam-criterion {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-default);
+}
+.exam-criterion__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+.exam-criterion__name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+.exam-criterion__points {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.exam-correction {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  overflow-wrap: anywhere;
+}
+.exam-correction__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.exam-correction__title svg {
+  width: 15px;
+  height: 15px;
+}
+/* The pages a question was written from (and room for more actions per question). */
+.exam-result__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exam-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.exam-sources__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--space-2);
+}
+.exam-sources__doc {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.exam-source {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  color: var(--accent-strong);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+button.exam-source:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.exam-source--gone {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
 /* ---------- Phone width ---------- */
 @media (max-width: 760px) {
   .exam-head {
@@ -699,5 +1071,30 @@
   }
   .exam-review__item .exam-status {
     margin-left: 44px;
+  }
+  .exam-score {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+  .exam-ring {
+    align-self: center;
+  }
+  .exam-score__text {
+    flex-basis: auto;
+    text-align: center;
+  }
+  .exam-verdicts,
+  .exam-score__actions {
+    justify-content: center;
+  }
+  .exam-score__actions .btn {
+    width: 100%;
+  }
+  .exam-result {
+    padding: var(--space-4);
+  }
+  .exam-compare {
+    grid-template-columns: 1fr;
   }
 }

@@ -2,8 +2,9 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { makeToken, mockApi, ok, renderApp, saveToken } from "../../test/helpers.jsx";
-import { daysAgo, installChatBackend, lectureFixture } from "../../test/chatBackend.js";
+import { makeToken, mockApi, renderApp, saveToken } from "../../test/helpers.jsx";
+import { daysAgo, installChatBackend } from "../../test/chatBackend.js";
+import { examFixture, installExamBackend, KI02, KI03, QUESTIONS, SLIDES } from "../../test/examBackend.js";
 
 // Poll quickly, so a generating exam gets ready within a test.
 vi.mock("../../api/services/exams.js", async (importOriginal) => ({ ...(await importOriginal()), POLL_INTERVAL_MS: 15 }));
@@ -14,105 +15,6 @@ vi.mock("../../api/services/exams.js", async (importOriginal) => ({ ...(await im
   the questions (multi-select, short answer, navigation, map, answers kept on the device),
   resume and discard, and the exam in the URL.
 */
-
-const KI02 = lectureFixture("l-ki02", "KI 02 Classification Part1", { count: 65 });
-const KI03 = lectureFixture("l-ki03", "KI 03 Classification Part2", { count: 40 });
-const SLIDES = lectureFixture("l-slides", "Search slides", { fileType: "application/vnd.openxmlformats-officedocument.presentationml.presentation", status: "processing" });
-
-const QUESTIONS = [
-  {
-    id: "q1",
-    position: 1,
-    type: "multiple_choice",
-    question: "Which split does Hunt's algorithm choose at a node?",
-    choices: [
-      { id: "a", text: "The attribute with the most values" },
-      { id: "b", text: "The test that gives the purest subsets" },
-      { id: "c", text: "A random attribute" },
-      { id: "d", text: "A test that lowers the impurity" },
-    ],
-    points: 1,
-    lecture_id: KI02.id,
-    source_pages: [12, 13],
-  },
-  { id: "q2", position: 2, type: "short_answer", question: "When does a node become a leaf?", choices: null, points: 3, lecture_id: KI02.id, source_pages: [11] },
-  {
-    id: "q3",
-    position: 3,
-    type: "multiple_choice",
-    question: "What is the impurity of a pure node?",
-    choices: [
-      { id: "a", text: "0" },
-      { id: "b", text: "1" },
-    ],
-    points: 1,
-    lecture_id: KI02.id,
-    source_pages: [20],
-  },
-];
-
-function examFixture(id, { status = "ready", count = 3, ready, title = KI02.title, error = null, createdAt = daysAgo(0) } = {}) {
-  return {
-    id,
-    title,
-    status,
-    question_count: count,
-    questions_ready: ready ?? (status === "ready" ? count : 0),
-    lectures: [{ lecture_id: KI02.id, title: KI02.title }],
-    error,
-    total_points: null,
-    max_points: null,
-    score_percent: null,
-    questions_ungraded: 0,
-    created_at: createdAt,
-    updated_at: createdAt,
-    submitted_at: null,
-  };
-}
-
-/*
-  A generating exam gets one more question on every read (`failAt`: it fails at that many),
-  then becomes ready with QUESTIONS.
-*/
-function installExamBackend(api, { exams = [], startError = null } = {}) {
-  const state = { exams: exams.map((item) => ({ ...item })), started: [], deleted: [], reads: 0, nextId: 1, startError, failAt: null };
-  const find = (config) => state.exams.find((item) => item.id === config.url.split("/").at(-1));
-  const withQuestions = (exam) => ({ ...exam, questions: exam.status === "ready" ? QUESTIONS.slice(0, exam.question_count) : [] });
-
-  api.onGet("/exams").reply(() => [200, ok({ exams: state.exams, page: 1, page_size: 100, total: state.exams.length, total_pages: 1 })]);
-  api.onGet(/\/exams\/[^/]+$/).reply((config) => {
-    const exam = find(config);
-    if (!exam) return [404, { status: false, message: "Exam not found", data: null }];
-    state.reads += 1;
-    if (exam.status === "generating") {
-      exam.questions_ready += 1;
-      if (state.failAt !== null && exam.questions_ready >= state.failAt) {
-        exam.status = "failed";
-        exam.error = "Not enough questions could be generated. Please try again in a minute";
-      } else if (exam.questions_ready >= exam.question_count) {
-        exam.status = "ready";
-      }
-    }
-    return [200, ok(withQuestions(exam))];
-  });
-  api.onPost("/exams").reply((config) => {
-    const body = JSON.parse(config.data);
-    state.started.push(body);
-    if (state.startError) return state.startError;
-    const exam = examFixture(`e-new-${state.nextId++}`, { status: "generating", count: body.question_count });
-    exam.questions_ready = -1; // the first read after starting still shows 0 ready
-    state.exams.unshift(exam);
-    return [202, ok({ ...exam, questions_ready: 0 }, "The exam is being generated")];
-  });
-  api.onDelete(/\/exams\/[^/]+$/).reply((config) => {
-    const exam = find(config);
-    if (!exam) return [404, { status: false, message: "Exam not found", data: null }];
-    state.deleted.push(exam.id);
-    state.exams = state.exams.filter((item) => item !== exam);
-    return [200, ok({ id: exam.id }, "Exam deleted")];
-  });
-  return state;
-}
 
 let api;
 let exams;
@@ -352,8 +254,9 @@ describe("answering", () => {
       `2${QUESTIONS[1].question}Not answered`,
       `3${QUESTIONS[2].question}Answered`,
     ]);
-    // Submitting comes with grading; nothing here pretends to submit.
-    expect(screen.queryByRole("button", { name: /submit/i })).not.toBeInTheDocument();
+    // Submitting asks first (see examResults.test.jsx); nothing is sent from the review itself.
+    expect(within(review).getByRole("button", { name: "Submit and check" })).toBeInTheDocument();
+    expect(exams.submitted).toEqual([]);
 
     await user.click(items[1]);
     expect(screen.getByRole("heading", { name: QUESTIONS[1].question })).toBeInTheDocument();

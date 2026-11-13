@@ -3,12 +3,13 @@ import { Link, useLocation, useNavigate, useOutletContext } from "react-router-d
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
-import { deleteExam, listAllExams, QUESTION_TYPES, startExam } from "../../../api/services/exams.js";
-import { clearExamProgress, loadExamProgress, updateExamProgress } from "../../../services/exam/examStorage.js";
+import { deleteExam, getExam, listAllExams, QUESTION_TYPES, regradeExam, startExam, submitExam } from "../../../api/services/exams.js";
+import { clearExamProgress, loadExamProgress, saveExamProgress, updateExamProgress } from "../../../services/exam/examStorage.js";
 import { toMaterial } from "../../lectures/materialTypes.js";
 import ExamSetup from "../../exam/components/ExamSetup.jsx";
 import ExamGenerating from "../../exam/components/ExamGenerating.jsx";
 import ExamQuestions from "../../exam/components/ExamQuestions.jsx";
+import ExamResults from "../../exam/components/ExamResults.jsx";
 import { useExam } from "../../exam/useExam.js";
 import { useUnfinishedExams } from "../../exam/useUnfinishedExams.js";
 import "../../exam/exam.css";
@@ -20,19 +21,28 @@ import "../../exam/exam.css";
     ?exam=<id>         generating: "2 of 5 questions ready" (polled), failed: Retry / Back
                                                                              ExamGenerating
                        ready: Step 2, the questions; Finish opens the review  ExamQuestions
+                       "Submit and check" (after a confirmation): "Checking your answers…"
+                       while the backend grades, then the results
+                       submitted: Step 3, the checked answers                 ExamResults
 
   The exam id is in the URL next to the workspace's ?chat= / ?lecture=, so a reload or a
   shared link opens the same exam, and "Back to chat" returns to the same chat. Answers are
   kept on this device (services/exam/examStorage.js) until the exam is submitted.
 
   The data it needs from WorkspaceLayout comes through the Outlet context (`examView`):
-  userKey, the open chat's lectures, the library and whether they are still loading.
+  userKey, the open chat's lectures, the library and whether they are still loading, and
+  onOpenSource to open a question's page in the viewer beside the exam.
+
+  "New exam on the same materials" opens the setup with that exam's lectures, number and
+  types chosen (kept in the history entry's state, so a reload keeps them too).
 */
 const STEPS = {
   setup: "Step 1 of 3 · Set up",
   generating: "Step 1 of 3 · Generating",
   failed: "Step 1 of 3 · Generating",
   ready: "Step 2 of 3 · Answer",
+  grading: "Step 3 of 3 · Checking",
+  submitted: "Step 3 of 3 · Results",
 };
 
 // Lectures without readable text yet: the backend can't write questions from them (422).
@@ -51,7 +61,7 @@ function toExamMaterial(lecture) {
 
 export default function ExamPage() {
   const { examView } = useOutletContext();
-  const { userKey, chatLectures, library, loading: materialsLoading, sourceType } = examView;
+  const { userKey, chatLectures, library, loading: materialsLoading, sourceType, onOpenSource } = examView;
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
@@ -63,6 +73,9 @@ export default function ExamPage() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState(null); // { message, busyId }
   const [notice, setNotice] = useState(null);
+  const [grading, setGrading] = useState(false);
+  // { lectureIds, questionCount, types } for "New exam on the same materials".
+  const [preset, setPreset] = useState(() => location.state?.examPreset ?? null);
 
   /* ---------- URL ---------- */
   const searchWith = (id) => {
@@ -77,13 +90,15 @@ export default function ExamPage() {
   function openExam(id, { replace = false } = {}) {
     setStartError(null);
     setNotice(null);
+    setPreset(null);
     navigate({ pathname: location.pathname, search: searchWith(id) }, { replace });
   }
 
-  function toSetup({ replace = false } = {}) {
+  function toSetup({ replace = false, examPreset = null } = {}) {
     setStartError(null);
+    setPreset(examPreset);
     unfinished.reload();
-    navigate({ pathname: location.pathname, search: searchWith(null) }, { replace });
+    navigate({ pathname: location.pathname, search: searchWith(null) }, { replace, state: examPreset ? { examPreset } : null });
   }
 
   // A link to an exam that isn't the student's (or no longer exists): say so, show the setup.
@@ -141,6 +156,73 @@ export default function ExamPage() {
     deleteExam(failed.id).catch(() => {});
   }
 
+  /* ---------- Submitting ---------- */
+  // The answers on this device are done with; the settings stay for "New exam on the same materials".
+  function forgetAnswers(id) {
+    const { settings } = loadExamProgress(userKey, id);
+    clearExamProgress(userKey, id);
+    if (settings) saveExamProgress(userKey, id, { answers: {}, current: 0, settings });
+  }
+
+  // The results: the exam read again (the submit response has no questions).
+  async function showResults(id) {
+    forgetAnswers(id);
+    try {
+      examState.seed(await getExam(id));
+    } catch {
+      examState.reload();
+    }
+  }
+
+  async function submit(answers) {
+    const target = exam;
+    setGrading(true);
+    setNotice(null);
+    try {
+      const submitted = await submitExam(target.id, target.questions, answers);
+      // Shown until the read with the results lands.
+      examState.seed({ ...target, ...submitted });
+      await showResults(target.id);
+    } catch (err) {
+      // Already submitted (e.g. in another tab), or the response was lost on the way (a
+      // timeout or the network): the exam may be submitted anyway, so look before failing.
+      if (err?.status === 409 || err?.status === null || err?.status === undefined) {
+        const current = await getExam(target.id).catch(() => null);
+        if (current?.status === "submitted") {
+          forgetAnswers(target.id);
+          examState.seed(current);
+          setNotice(err.status === 409 ? "This exam was already submitted. These are its results." : "Your exam was submitted. These are its results.");
+          return;
+        }
+      }
+      throw err;
+    } finally {
+      setGrading(false);
+    }
+  }
+
+  async function regrade() {
+    try {
+      await regradeExam(exam.id);
+    } catch (err) {
+      // 409: nothing is left to grade (it was graded meanwhile), so just show it.
+      if (err?.status !== 409) throw err;
+    }
+    examState.seed(await getExam(exam.id));
+  }
+
+  function newExamFrom(done) {
+    const saved = loadExamProgress(userKey, done.id).settings;
+    const types = QUESTION_TYPES.map((type) => type.value).filter((value) => (done.questions ?? []).some((question) => question.type === value));
+    toSetup({
+      examPreset: {
+        lectureIds: (saved?.lectureIds ?? (done.lectures ?? []).map((item) => item.lecture_id)).filter(Boolean),
+        questionCount: saved?.questionCount ?? done.question_count,
+        types: saved?.types ?? types,
+      },
+    });
+  }
+
   async function discard(target) {
     await unfinished.discard(target.id);
     clearExamProgress(userKey, target.id);
@@ -148,8 +230,11 @@ export default function ExamPage() {
   }
 
   /* ---------- What to show ---------- */
-  const fromChat = chatLectures.length > 0;
+  // A preset whose materials aren't all in this chat is chosen from the library.
+  const presetIds = preset?.lectureIds ?? [];
+  const fromChat = chatLectures.length > 0 && presetIds.every((id) => chatLectures.some((item) => item.id === id));
   const materials = (fromChat ? chatLectures : library).map(toExamMaterial);
+  const presetGone = preset && !materialsLoading ? presetIds.filter((id) => !materials.some((item) => item.id === id)).length : 0;
 
   let step = "setup";
   let body;
@@ -166,8 +251,21 @@ export default function ExamPage() {
         startError={startError}
         onOpenExam={(id) => openExam(id)}
         onDiscard={discard}
+        preset={preset}
       />
     );
+    if (preset && (presetGone > 0 || presetIds.length === 0)) {
+      body = (
+        <>
+          <p className="exam-notice" role="status">
+            {presetIds.length === 0 || presetGone === presetIds.length
+              ? "The materials of that exam were deleted, so pick others."
+              : `${presetGone === 1 ? "1 material" : `${presetGone} materials`} of that exam ${presetGone === 1 ? "was" : "were"} deleted, so ${presetGone === 1 ? "it isn’t" : "they aren’t"} chosen.`}
+          </p>
+          {body}
+        </>
+      );
+    }
     if (!unfinished.available) {
       body = (
         <section className="exam-card exam-card--center">
@@ -209,12 +307,34 @@ export default function ExamPage() {
       />
     );
   } else if (exam.status === "ready" && exam.questions?.length) {
-    step = "ready";
-    body = <ExamQuestions key={exam.id} exam={exam} userKey={userKey} sourceType={sourceType} />;
+    step = grading ? "grading" : "ready";
+    body = <ExamQuestions key={exam.id} exam={exam} userKey={userKey} sourceType={sourceType} onSubmit={submit} grading={grading} />;
+  } else if (exam.status === "submitted" && exam.questions?.length && exam.questions.every((question) => question.result)) {
+    step = "submitted";
+    body = <ExamResults key={exam.id} exam={exam} onOpenSource={onOpenSource} onRegrade={regrade} onNewExam={() => newExamFrom(exam)} />;
+  } else if (exam.status === "submitted") {
+    // Just submitted: the results are still being read (or the read failed).
+    step = "submitted";
+    body = examState.error ? (
+      <section className="exam-card exam-card--center">
+        <p className="exam-error" role="alert">
+          {examState.error.message || "The results could not be loaded."}
+        </p>
+        <div className="exam-actions">
+          <Button variant="primary" onClick={examState.reload}>
+            Try again
+          </Button>
+        </div>
+      </section>
+    ) : (
+      <p className="exam-muted exam-loading" role="status">
+        Loading the results…
+      </p>
+    );
   } else {
     body = (
       <section className="exam-card exam-card--center">
-        <h3 className="exam-card__title">{exam.status === "submitted" ? "This exam was submitted" : "This exam has no questions"}</h3>
+        <h3 className="exam-card__title">This exam has no questions</h3>
         <div className="exam-actions">
           <Button onClick={() => toSetup()}>New exam</Button>
         </div>
