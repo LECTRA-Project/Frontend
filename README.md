@@ -38,12 +38,14 @@ src/
 ├── data/                Illustrative statistics
 ├── features/
 │   ├── auth/            Sign-in, registration, reset-password, auth state and schemas
+│   ├── exam/            Exam setup, generating progress, questions and review
 │   ├── files/           Upload dialog and the PDF / notes viewers
 │   ├── notebook/        Notebook cells, editor, outputs, toolbar, notebook state and kernel hooks
 │   ├── profile/         Profile and account settings
 │   ├── statistics/      Sample performance display
 │   └── workspace/       Chat-first workspace: chats, materials menu, viewer and notebook panels, exam
 ├── services/
+│   ├── exam/            Exam answers kept on the device (localStorage)
 │   ├── materials/       Supported material types (one list for the whole app)
 │   ├── notebook/        .ipynb import/export, browser storage, Markdown rendering
 │   └── python/          Python kernel: Pyodide Web Worker and its main-thread client
@@ -56,6 +58,8 @@ The app entry point is `src/main.jsx`. Routes and access guards live in `src/app
 The notebook (an optional panel, opened with the header's Notebook button) runs real Python 3.14 in the browser through Pyodide, inside a Web Worker, with one shared namespace per kernel (variables persist across cells until Restart). It supports code and Markdown cells, Run / Run all / Stop / Restart, rich outputs (text, errors with tracebacks, pandas tables, matplotlib figures), and .ipynb import and download. Packages from the Pyodide distribution load automatically on import, and `%pip install name` (or `!pip install name`) installs compatible packages — this is a LECTRA convenience backed by Pyodide/micropip, not a system shell, and packages that need native code without a Pyodide build (such as `torch`) are reported as unavailable. Cells can be dragged by their grip into the chat as context for the next question; this never runs them. Python is downloaded from the jsDelivr CDN the first time the notebook opens, so it needs internet access (or a self-hosted copy via `VITE_PYODIDE_INDEX_URL`). **Notebooks are saved in the browser's local storage only, per signed-in user — not on the server.** See [`INSTRUCTIONS.md`](INSTRUCTIONS.md#9-python-notebook) for details and limitations.
 
 The workspace is chat-first: the chat is always in the centre, the left menu lists the chats and the materials of the open chat, and a material opens in a viewer docked at the right edge. Every chat has its own materials (`/student_profile/chat/sessions` with several lectures each); answers cite them as page / slide / cell chips, and answers from general knowledge are marked "Not from your materials". Lectures are uploaded as PDF, PPTX, IPYNB or an image (PNG, JPG, JPEG, GIF, WEBP) — exactly the types the backend accepts. Each material's ⋯ menu renames it (only the title is stored) or deletes it from the library. The open chat and material are in the URL (`/workspace?chat=<id>&lecture=<id>`), so links can be shared and survive a reload. When the backend runs AI lecture processing, materials also show their processing status (with retry), and slides and notebooks show their extracted text; against a backend without it (e.g. the current Render deployment) PDFs open from S3 and slides open in the Office Online viewer.
+
+The header's *Exam* opens an exam generated from the student's own materials (`/workspace/exam`, Exams API). The setup step preselects the open chat's materials (or offers the library when the chat has none), and takes the number of questions (3, 5, 7 or 10) and the question types; it also lists unfinished exams to continue or discard. While the questions are written the page shows "2 of 5 questions ready" (polling `GET /api/exams/{id}` every 2 s). Multiple-choice questions take any number of choices; short answers up to 4000 characters. The exam id is in the URL (`?exam=<id>`, next to `?chat=` / `?lecture=`). **Answers are kept in the browser's local storage, per user and exam, until the exam is submitted** (submitting and the results are not built yet: *Finish* opens a review of what is answered). See [`INSTRUCTIONS.md`](INSTRUCTIONS.md#the-exam).
 
 The workspace includes demo/sample-only behavior in some areas: account preferences are local-only because the backend has no preferences endpoint, statistics are illustrative, and the study assistant only works when the backend provides it (see above). Profile details and password changes use the backend user endpoints; changing a password signs the user out and returns them to sign-in. Uploaded PDFs fit the viewer's width until the user changes the zoom. Success and action-confirmation messages dismiss after three seconds; validation and error messages remain visible.
 
