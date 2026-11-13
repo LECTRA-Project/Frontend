@@ -13,17 +13,19 @@ const ZOOM_MIN = 50;
 const ZOOM_MAX = 200;
 
 /*
-  PowerPoint can't be drawn by the browser. On the basic backend (no slide text) the slides
-  are shown with Microsoft's Office Online viewer, which loads the file's public S3 URL on
-  Microsoft's side — so no CORS rule on the bucket is needed. The file must stay publicly
-  readable for this to work.
+  PowerPoint can't be drawn by the browser. Slides are shown with Microsoft's Office Online
+  viewer, which loads the file's public S3 URL on Microsoft's side — so no CORS rule on the
+  bucket is needed. The file must stay publicly readable for this to work; without a public
+  https URL the extracted slide text is shown.
 */
 export const OFFICE_VIEWER = "https://view.officeapps.live.com/op/embed.aspx?src=";
 const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?? "") || /\.pptx?$/i.test(lecture.original_filename ?? "");
 
 /*
-  Viewer for slides, notebooks and images beside the chat (PDFs use PdfViewerPanel). On the
-  basic backend, PowerPoint slides are shown in the Office Online viewer (see OFFICE_VIEWER).
+  Viewer for slides, notebooks and images beside the chat (PDFs use PdfViewerPanel).
+  PowerPoint slides are shown as real slides in the Office Online viewer (see OFFICE_VIEWER),
+  except when opened from a source in an answer: then the slide text is shown with the cited
+  slide highlighted, because the Office viewer can't open at a given slide.
 
   Shows the text Lectra extracted from the file, one block per slide or notebook cell,
   in the same order as the original. The toolbar steps through the blocks and zooms.
@@ -54,16 +56,16 @@ export default function LectureContentPanel({ lecture, focus, cited = false, onR
   // endpoints; the stored file is then opened from its S3 URL.
   const basic = lecture.processing_status === undefined;
   const isImage = basic ? !/(pdf|powerpoint|presentation|ipynb|markdown)/.test(lecture.file_type) : lecture.source_type == null;
-  const officeSlides = basic && isSlides(lecture) && /^https:\/\//.test(lecture.s3_url ?? "");
+  const officeSlides = isSlides(lecture) && /^https:\/\//.test(lecture.s3_url ?? "") && !(cited && focus);
 
   useEffect(() => {
-    if (status !== "completed") return undefined;
+    if (status !== "completed" || officeSlides) return undefined;
     const controller = new AbortController();
     getLectureContent(lecture.id, { signal: controller.signal }).then(setContent, (err) => {
       if (!controller.signal.aborted) setError(err);
     });
     return () => controller.abort();
-  }, [lecture.id, lecture.content_version, status]);
+  }, [lecture.id, lecture.content_version, status, officeSlides]);
 
   useEffect(() => {
     if (!isImage || basic) return undefined;
@@ -230,7 +232,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, onR
               {error.message}
             </p>
           )}
-          {status === "completed" && !content && !error && <p className="lecture-view__notice">Loading content…</p>}
+          {status === "completed" && !officeSlides && !content && !error && <p className="lecture-view__notice">Loading content…</p>}
 
           {groups.map((group, index) => {
             const highlighted = citedActive && index === focusIndex;

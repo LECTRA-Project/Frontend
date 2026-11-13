@@ -104,7 +104,7 @@
   }
 }
 
-/* PowerPoint slides in the Office Online viewer (basic backend): fills the viewer. */
+/* PowerPoint slides in the Office Online viewer: fills the viewer. */
 .lecture-view__body:has(.lecture-view__slides) > .viewer__zoomed {
   height: 100%;
 }

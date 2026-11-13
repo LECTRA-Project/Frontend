@@ -476,7 +476,7 @@ describe("session", () => {
 
     const menu = await screen.findByRole("navigation", { name: "Chats and this chat's materials" });
     expect(within(menu).getByRole("heading", { name: "Materials in this chat" })).toBeInTheDocument();
-    expect(within(menu).getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(within(menu).queryByText("Ada Lovelace")).not.toBeInTheDocument(); // no name / Settings footer
     // On a wide screen the header has no menu button; the menu has its own.
     expect(screen.queryByRole("button", { name: "Open menu", expanded: false })).not.toBeInTheDocument();
 

@@ -732,16 +732,21 @@ button.cf-material__open:hover {
   white-space: normal;
 }
 .cf-material__remove,
-.cf-material__actions {
+.cf-material__actions,
+.cf-chat__actions {
   flex: none;
 }
-.cf-material__actions {
+.cf-material__actions,
+.cf-chat__actions {
   display: flex;
   align-items: center;
   gap: 2px;
 }
 .cf-material__more .menu__list {
   min-width: 190px;
+}
+.cf-chat__more .menu__list {
+  min-width: 150px;
 }
 /* With a mouse, ⋯ and × show over the end of the row on hover or keyboard focus. */
 @media (hover: hover) and (pointer: fine) {
@@ -755,7 +760,8 @@ button.cf-material__open:hover {
   button.cf-material__open:hover {
     background: transparent;
   }
-  .cf-material__actions {
+  .cf-material__actions,
+  .cf-chat__actions {
     position: absolute;
     top: 2px;
     right: 2px;
@@ -766,9 +772,38 @@ button.cf-material__open:hover {
     opacity: 0;
   }
   .cf-material:hover .cf-material__actions,
-  .cf-material:focus-within .cf-material__actions {
+  .cf-material:focus-within .cf-material__actions,
+  .cf-chat-row:hover .cf-chat__actions,
+  .cf-chat-row:focus-within .cf-chat__actions {
     opacity: 1;
   }
+  /* A chat row keeps its own hover colour; the ⋯ fades into it. */
+  .cf-chat-row {
+    position: relative;
+  }
+  .cf-chat-row:hover .cf-chat,
+  .cf-chat-row:focus-within .cf-chat {
+    background: var(--accent-soft);
+  }
+  .cf-chat__actions {
+    background: linear-gradient(to right, transparent, var(--accent-soft) 22px);
+  }
+  .cf-chat-row--current:hover .cf-chat,
+  .cf-chat-row--current:focus-within .cf-chat {
+    background: var(--accent-hover);
+  }
+  .cf-chat-row--current .cf-chat__actions {
+    background: linear-gradient(to right, transparent, var(--accent-hover) 22px);
+  }
+}
+/* Touch: the ⋯ is always shown at the end of the chat row. */
+.cf-chat-row {
+  display: flex;
+  align-items: center;
+}
+.cf-chat-row .cf-chat {
+  flex: 1;
+  min-width: 0;
 }
 .cf-progress {
   display: block;
@@ -850,37 +885,6 @@ button.cf-material__open:hover {
   color: var(--accent-strong);
   text-decoration: underline;
 }
-.cf-side__user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px var(--space-3);
-  border-top: 1px solid var(--border-default);
-}
-.cf-side__avatar {
-  width: 34px;
-  height: 34px;
-  font-size: var(--text-sm);
-}
-.cf-side__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-md);
-  font-weight: 500;
-}
-.cf-side__settings {
-  padding: 10px 8px;
-  font-size: var(--text-sm);
-  color: var(--accent-strong);
-  text-decoration: none;
-}
-.cf-side__settings:hover {
-  text-decoration: underline;
-}
-
 /* Collapsed: the icon rail. */
 .cf-rail {
   width: 64px;
@@ -1024,8 +1028,17 @@ button.cf-material__open:hover {
   align-self: flex-end;
   max-width: 80%;
   padding: 10px 16px;
-  border-radius: 18px;
+  border-radius: 18px 18px 6px 18px;
   background: var(--accent-hover);
+}
+/* An answer: its own calm, full-width block on the left, below the question. */
+.chat-msg--assistant {
+  align-self: stretch;
+  min-width: 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-default);
+  border-radius: 18px 18px 18px 6px;
+  background: var(--bg-surface);
 }
 .chat-msg--pending {
   opacity: 0.75;
@@ -1053,8 +1066,96 @@ button.cf-material__open:hover {
 }
 .chat-answer .chat-msg__md {
   align-self: stretch;
+  min-width: 0;
   font-size: 15px;
   line-height: 1.6;
+}
+/* Answer content: readable spacing, headings, lists, code, tables and math inside the block. */
+.chat-answer .chat-msg__md h1,
+.chat-answer .chat-msg__md h2,
+.chat-answer .chat-msg__md h3,
+.chat-answer .chat-msg__md h4 {
+  margin: var(--space-4) 0 var(--space-2);
+}
+.chat-answer .chat-msg__md h1 {
+  font-size: var(--text-xl);
+}
+.chat-answer .chat-msg__md h2 {
+  font-size: 18px;
+}
+.chat-answer .chat-msg__md h3,
+.chat-answer .chat-msg__md h4 {
+  font-size: var(--text-lg);
+}
+.chat-answer .chat-msg__md p,
+.chat-answer .chat-msg__md ul,
+.chat-answer .chat-msg__md ol,
+.chat-answer .chat-msg__md blockquote,
+.chat-answer .chat-msg__md pre,
+.chat-answer .chat-msg__md table,
+.chat-answer .chat-msg__md .katex-display {
+  margin: 0 0 var(--space-3);
+}
+.chat-answer .chat-msg__md > :first-child {
+  margin-top: 0;
+}
+.chat-answer .chat-msg__md li + li {
+  margin-top: 4px;
+}
+.chat-answer .chat-msg__md li > ul,
+.chat-answer .chat-msg__md li > ol {
+  margin: 4px 0 0;
+}
+.chat-answer .chat-msg__md code {
+  padding: 1px 5px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-subtle);
+  overflow-wrap: anywhere;
+}
+.chat-answer .chat-msg__md pre {
+  max-width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  overflow-x: auto;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.chat-answer .chat-msg__md pre code {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+/* Wide tables scroll inside the answer instead of widening the page. */
+.chat-answer .chat-msg__md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--text-md);
+}
+.chat-answer .chat-msg__md th,
+.chat-answer .chat-msg__md td {
+  padding: 6px 12px;
+  border: 1px solid var(--border-default);
+  text-align: left;
+  vertical-align: top;
+}
+.chat-answer .chat-msg__md th {
+  background: var(--bg-subtle);
+  font-weight: 600;
+}
+.chat-answer .chat-msg__md hr {
+  margin: var(--space-4) 0;
+  border: none;
+  border-top: 1px solid var(--border-default);
+}
+.chat-answer .chat-msg__md .katex-display {
+  max-width: 100%;
 }
 .chat-answer__general {
   display: inline-flex;
@@ -1457,6 +1558,9 @@ button.cf-material__open:hover {
   }
   .chat-msg--student {
     max-width: 90%;
+  }
+  .chat-msg--assistant {
+    padding: var(--space-3) var(--space-4);
   }
 }
 
