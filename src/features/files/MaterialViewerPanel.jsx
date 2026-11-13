@@ -19,7 +19,7 @@ const ZOOM_MAX = 200;
     material    { name, type: "notes", size, file, url }
     onCollapse  closes the viewer
 */
-export default function MaterialViewerPanel({ material, onCollapse }) {
+export default function MaterialViewerPanel({ material, onCollapse, widen = null }) {
   const group = groupOf(material.type);
   const [markdown, setMarkdown] = useState({ html: null, error: null });
   const [zoom, setZoom] = useState(100);
@@ -42,6 +42,7 @@ export default function MaterialViewerPanel({ material, onCollapse }) {
         title={material.name}
         meta={`${group.short} · ${formatFileSize(material.size)}`}
         newTabUrl={material.url}
+        widen={widen}
         onClose={onCollapse}
       >
         <a className="icon-btn" href={material.url} download={material.name} aria-label={`Download ${material.name}`} title="Download">

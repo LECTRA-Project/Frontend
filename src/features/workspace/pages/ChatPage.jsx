@@ -7,7 +7,14 @@ import Menu from "../../../components/ui/Menu.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
 import ChatComposer from "../components/ChatComposer.jsx";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
-import { CELL_DROP_ZONE_ATTR, isCellDrag, readCellDrag } from "../../../services/notebook/cellContext.js";
+import {
+  CELL_DROP_ZONE_ATTR,
+  isCellDrag,
+  lineCount,
+  displayChatTitle,
+  parseNotebookContext,
+  readCellDrag,
+} from "../../../services/notebook/cellContext.js";
 import { sourceChips } from "../chatLayout.js";
 
 // The backend's fixed answer when a chat's lectures have no extracted text saved.
@@ -59,7 +66,7 @@ export function ChatView({
   const scrollRef = useRef(null);
   const slow = useSlow(busy, 15000);
   const dropOver = nativeDragOver || cellDragOver;
-  const title = session?.title ?? "New chat";
+  const title = displayChatTitle(session?.title) ?? "New chat";
   const count = materials.length;
   const empty = !loading && messages.length === 0;
 
@@ -151,7 +158,7 @@ export function ChatView({
           <Menu
             label="Chat actions"
             items={[
-              { label: "Rename chat", icon: "edit", onSelect: () => setRenaming(session.title) },
+              { label: "Rename chat", icon: "edit", onSelect: () => setRenaming(title) },
               { label: "Delete chat", icon: "trash", danger: true, onSelect: () => setDeleting(true) },
             ]}
           />
@@ -241,9 +248,18 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
     );
   }
   if (message.role === "user") {
+    // Notebook cells added to the question are shown as code cards, not as the raw text block.
+    const { text, cells } = parseNotebookContext(message.content);
     return (
       <li className={`chat-msg chat-msg--student ${message.pending ? "chat-msg--pending" : ""}`}>
-        <span className="chat-msg__text">{message.content}</span>
+        <span className="chat-msg__text">{text}</span>
+        {cells.length > 0 && (
+          <ul className="chat-cells" aria-label="Notebook cells added to this question">
+            {cells.map((cell, index) => (
+              <ChatCell key={`${cell.label}-${index}`} cell={cell} />
+            ))}
+          </ul>
+        )}
         {message.extras?.map((extra) => (
           <span key={extra} className="chat-msg__files">
             {extra}
@@ -311,4 +327,29 @@ function useSlow(active, afterMs) {
     };
   }, [active, afterMs]);
   return slow;
+}
+
+// Cells longer than this start folded, so a long cell doesn't push the answer out of view.
+const OPEN_CELL_LINES = 12;
+
+/* A notebook cell added to a question: its label and full source, foldable. */
+function ChatCell({ cell }) {
+  const lines = lineCount(cell.source);
+  return (
+    <li className={`chat-cell chat-cell--${cell.cellType}`}>
+      <details open={lines <= OPEN_CELL_LINES}>
+        <summary className="chat-cell__head">
+          <Icon name={cell.cellType === "code" ? "code" : "text"} size={14} />
+          <span className="chat-cell__label">{cell.label}</span>
+          {cell.notebookTitle && <span className="chat-cell__meta">· {cell.notebookTitle}</span>}
+          <span className="chat-cell__meta chat-cell__lines">
+            {lines} {lines === 1 ? "line" : "lines"}
+          </span>
+        </summary>
+        <pre className="chat-cell__code">
+          <code>{cell.source}</code>
+        </pre>
+      </details>
+    </li>
+  );
 }

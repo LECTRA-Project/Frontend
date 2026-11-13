@@ -1046,6 +1046,75 @@ button.cf-material__open:hover {
 .chat-msg__text {
   white-space: pre-wrap;
 }
+/* Notebook cells added to a question: code cards inside the student's bubble. */
+.chat-cells {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  min-width: min(420px, 60vw);
+}
+.chat-cell {
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+.chat-cell__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.chat-cell__head::-webkit-details-marker {
+  display: none;
+}
+.chat-cell__head::after {
+  content: "▸";
+  margin-left: 4px;
+  color: var(--text-tertiary);
+  transition: transform 120ms ease;
+}
+.chat-cell details[open] .chat-cell__head::after {
+  transform: rotate(90deg);
+}
+.chat-cell__head:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.chat-cell--code .chat-cell__head > svg {
+  color: var(--accent);
+}
+.chat-cell__label {
+  color: var(--text-primary);
+}
+.chat-cell__meta {
+  font-weight: 400;
+}
+.chat-cell__lines {
+  margin-left: auto;
+}
+.chat-cell__code {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-default);
+  background: var(--bg-subtle);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+}
 .chat-msg__files {
   margin-top: var(--space-1);
   font-size: 12px;

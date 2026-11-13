@@ -8,6 +8,7 @@ import Menu from "../../../components/ui/Menu.jsx";
 import { groupOf } from "../../../services/materials/materialTypes.js";
 import { STATUS_LABEL } from "../../lectures/materialTypes.js";
 import { groupChats } from "../chatLayout.js";
+import { displayChatTitle } from "../../../services/notebook/cellContext.js";
 
 /*
   The collapsible left menu of the chat-first workspace (272 px; a 64 px icon rail when
@@ -257,15 +258,15 @@ export default function ChatSidebar({
                             type="button"
                             className={`cf-chat ${current ? "cf-chat--current" : ""}`}
                             aria-current={current ? "page" : undefined}
-                            title={session.title}
+                            title={displayChatTitle(session.title)}
                             onClick={() => onOpenChat(session.id)}
                           >
-                            {session.title}
+                            {displayChatTitle(session.title)}
                           </button>
                           {/* Like the material rows: with a mouse, ⋯ shows on hover or focus. It never opens the chat. */}
                           <span className="cf-chat__actions" onClick={(event) => event.stopPropagation()}>
                             <Menu
-                              label={`Actions for ${session.title}`}
+                              label={`Actions for ${displayChatTitle(session.title)}`}
                               className="cf-chat__more"
                               items={[{ label: "Remove", icon: "trash", danger: true, onSelect: () => setRemoving(session) }]}
                             />
@@ -282,7 +283,7 @@ export default function ChatSidebar({
 
         {removing && (
           <ConfirmDialog title="Remove chat?" confirmLabel="Remove" danger onConfirm={confirmRemove} onCancel={() => setRemoving(null)}>
-            “{removing.title}” and all its messages will be deleted. Its materials are kept.
+            “{displayChatTitle(removing.title)}” and all its messages will be deleted. Its materials are kept.
           </ConfirmDialog>
         )}
       </nav>

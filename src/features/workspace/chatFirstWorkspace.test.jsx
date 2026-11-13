@@ -443,16 +443,30 @@ describe("chat-first workspace: notebook and viewer panels", () => {
     await openChat(user, "Hunt's algorithm");
     await user.click(within(menu()).getByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" }));
     await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" });
-    expect(viewer().style.width).toBe("560px");
+    // Until resized, the viewer takes 55% of the room beside the menu: 0.55 × (1440 − 272).
+    expect(viewer().style.width).toBe("642px");
 
     await user.click(screen.getByRole("button", { name: "Notebook" }));
     const panel = notebookPanel();
-    expect(panel.style.right).toBe("560px");
+    expect(panel.style.right).toBe("642px");
 
     await user.click(within(panel).getByRole("button", { name: "Pin beside the chat" }));
     // The viewer gives way to its minimum; the notebook takes what leaves the chat 380 px.
     expect(viewer().style.width).toBe("360px");
     expect(panel.style.width).toBe(`${1440 - 272 - 360 - 380}px`);
+  });
+
+  it("widens the viewer with its Widen button and restores the automatic width", async () => {
+    const { user } = await openWorkspace();
+    await openChat(user, "Hunt's algorithm");
+    await user.click(within(menu()).getByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" }));
+    await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" });
+    expect(viewer().style.width).toBe("642px");
+
+    await user.click(within(viewer()).getByRole("button", { name: "Widen viewer" }));
+    expect(viewer().style.width).toBe(`${1440 - 272 - 380}px`); // the chat keeps 380 px
+    await user.click(within(viewer()).getByRole("button", { name: "Restore viewer width" }));
+    expect(viewer().style.width).toBe("642px");
   });
 
   it("resizes the viewer by dragging, with the arrow keys and back with a double-click, leaving the chat at least 380 px", async () => {
@@ -477,8 +491,8 @@ describe("chat-first workspace: notebook and viewer panels", () => {
     expect(viewer().style.width).toBe("424px");
     await user.keyboard("{ArrowRight}");
     expect(viewer().style.width).toBe("392px");
-    await user.dblClick(handle);
-    expect(viewer().style.width).toBe("560px");
+    await user.dblClick(handle); // back to the automatic width
+    expect(viewer().style.width).toBe("642px");
   });
 
   it("collapses the menu to the icon rail, which gives the viewer more room", async () => {
