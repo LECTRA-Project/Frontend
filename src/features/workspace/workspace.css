@@ -995,11 +995,6 @@ button.cf-material__open:hover {
   max-width: 520px;
   color: var(--text-secondary);
 }
-.chat__empty-upload {
-  min-height: 48px;
-  padding: 0 var(--space-5);
-  border-radius: var(--radius-lg);
-}
 .chat__empty-status {
   font-size: var(--text-sm);
   color: var(--text-secondary);
@@ -1156,6 +1151,61 @@ button.cf-material__open:hover {
 }
 .chat-answer .chat-msg__md .katex-display {
   max-width: 100%;
+}
+/* Copy: a code block's button sits in its top-right corner, above the code (not over it). */
+.chat-answer .chat-code {
+  position: relative;
+  margin: 0 0 var(--space-3);
+}
+.chat-answer .chat-code > pre {
+  margin: 0;
+  padding-top: 40px;
+}
+.chat-code__copy {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.chat-code__copy:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.chat-code__copy[data-copied] {
+  color: var(--accent-strong);
+}
+.chat-code__copy:focus-visible,
+.chat-answer__copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.chat-answer__actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-left: -8px;
+}
+.chat-answer__copy {
+  gap: 6px;
+  color: var(--text-secondary);
+}
+.chat-copy-fallback {
+  width: 100%;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  resize: vertical;
 }
 .chat-answer__general {
   display: inline-flex;

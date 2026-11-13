@@ -5,10 +5,12 @@ import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
 import Menu from "../../../components/ui/Menu.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
+import Modal from "../../../components/ui/Modal.jsx";
 import ChatComposer from "../components/ChatComposer.jsx";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
 import { CELL_DROP_ZONE_ATTR, isCellDrag, readCellDrag } from "../../../services/notebook/cellContext.js";
 import { sourceChips } from "../chatLayout.js";
+import { copyText } from "../../../services/clipboard.js";
 
 // The backend's fixed answer when a chat's lectures have no extracted text saved.
 export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
@@ -18,11 +20,14 @@ export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
   width under it. The state lives in WorkspaceLayout (passed in as `chatView` through the
   Outlet context), so it survives switching to the Exam view and back.
 
-  - A new or empty chat shows "What are we studying today?" with Upload materials.
+  - A new or empty chat shows "What are we studying today?"; materials are added from the menu.
   - Answers that cite the chat's materials list them as chips ("p. 12 · KI 02 …",
     "Slide 3 · …", "Cell 16 · …"); a chip opens that place in the viewer.
   - Answers without sources come from general knowledge and say "Not from your materials".
   - Notebook cells can be dropped anywhere on the chat; they are sent with the next question.
+  - Every code block in an answer has a Copy button (just that code), and every answer has a
+    Copy button under it (the whole answer as Markdown, with its sources). When the
+    clipboard can't be used, a dialog shows the text selected for copying by hand.
 */
 export default function ChatPage() {
   const { chatView } = useOutletContext();
@@ -56,6 +61,8 @@ export function ChatView({
   const [renaming, setRenaming] = useState(null); // the title being typed
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [copyFallback, setCopyFallback] = useState(null); // text to copy by hand
+  const [copyNote, setCopyNote] = useState({ text: "", seq: 0 }); // for screen readers
   const scrollRef = useRef(null);
   const slow = useSlow(busy, 15000);
   const dropOver = nativeDragOver || cellDragOver;
@@ -101,6 +108,14 @@ export function ChatView({
     }
   }
 
+  // Copies text; on failure shows it in a dialog for copying by hand. Resolves to success.
+  async function copy(text, what) {
+    const copied = await copyText(text);
+    if (copied) setCopyNote((note) => ({ text: `${what} copied.`, seq: note.seq + 1 }));
+    else setCopyFallback(text);
+    return copied;
+  }
+
   async function confirmDelete() {
     setDeleting(false);
     try {
@@ -111,7 +126,7 @@ export function ChatView({
     }
   }
 
-  const scopeLabel = count === 0 ? "No materials yet" : count === 1 ? materials[0].name : `${count} materials`;
+  const scopeLabel = count === 1 ? materials[0].name : `${count} materials`;
   const status =
     count === 0 ? "No materials in this chat yet." : count === 1 ? "1 material ready in this chat." : `${count} materials ready in this chat.`;
 
@@ -176,10 +191,6 @@ export function ChatView({
                 ? "This server has no chat assistant yet, so questions can’t be answered here."
                 : "Each chat has its own materials. Upload the lectures for this chat and the answers will come from them, with the pages they are based on."}
             </p>
-            <button type="button" className="btn btn--primary chat__empty-upload" onClick={onUploadClick} disabled={available === false}>
-              <Icon name="upload" />
-              Upload materials
-            </button>
             <span className="chat__empty-status">{status}</span>
           </div>
         ) : (
@@ -192,6 +203,7 @@ export function ChatView({
                 lectureTitle={lectureTitle}
                 onOpenSource={onOpenSource}
                 onUploadAgain={onUploadClick}
+                onCopy={copy}
               />
             ))}
             {busy && (
@@ -214,7 +226,7 @@ export function ChatView({
           attachDisabled={available === false}
           onRemoveCell={onRemoveCell}
           disabled={busy || available !== true}
-          scope={{ label: scopeLabel, onClick: onOpenMenu }}
+          scope={count > 0 ? { label: scopeLabel, onClick: onOpenMenu } : null}
         />
         <p className="chat__disclaimer">Answers cite this chat’s materials. General answers are marked “Not from your materials”.</p>
       </div>
@@ -222,6 +234,11 @@ export function ChatView({
       <p className="visually-hidden" role="status">
         <span key={announcement.seq}>{announcement.text}</span>
       </p>
+      <p className="visually-hidden" role="status">
+        <span key={copyNote.seq}>{copyNote.text}</span>
+      </p>
+
+      {copyFallback !== null && <CopyFallbackDialog text={copyFallback} onClose={() => setCopyFallback(null)} />}
 
       {deleting && (
         <ConfirmDialog title="Delete chat?" confirmLabel="Delete" danger onConfirm={confirmDelete} onCancel={() => setDeleting(false)}>
@@ -232,7 +249,7 @@ export function ChatView({
   );
 }
 
-function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain }) {
+function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy }) {
   if (message.role === "system") {
     return (
       <li className="chat-msg chat-msg--system" role="alert">
@@ -267,6 +284,24 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
     );
   }
   const chips = sourceChips(message.sources, materialType, lectureTitle);
+
+  // A code block's Copy button (in the answer's HTML): copies only that block's code.
+  async function handleAnswerClick(event) {
+    const button = event.target.closest?.("[data-copy-code]");
+    if (!button) return;
+    // Without the line break Markdown adds after the last line.
+    const code = (button.parentElement.querySelector("pre")?.textContent ?? "").replace(/\n$/, "");
+    const copied = await onCopy(code, "Code");
+    if (!copied) return;
+    button.textContent = "Copied";
+    button.dataset.copied = "";
+    clearTimeout(button.copyTimer);
+    button.copyTimer = setTimeout(() => {
+      button.textContent = "Copy";
+      delete button.dataset.copied;
+    }, COPIED_MS);
+  }
+
   return (
     <li className="chat-msg chat-msg--assistant">
       <article className="chat-answer">
@@ -276,7 +311,12 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
             Not from your materials
           </span>
         )}
-        <div className="chat-msg__md markdown-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />
+        {/* The click handler only serves the code blocks' Copy buttons (native buttons, so keyboard works). */}
+        <div
+          className="chat-msg__md markdown-body"
+          onClick={handleAnswerClick}
+          dangerouslySetInnerHTML={{ __html: withCodeCopyButtons(renderMarkdown(message.content)) }}
+        />
         {chips.length > 0 && (
           <ul className="chat-sources" aria-label="Sources">
             {chips.map((chip) => (
@@ -294,8 +334,89 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
             ))}
           </ul>
         )}
+        <div className="chat-answer__actions">
+          <CopyAnswerButton text={answerText(message.content, chips)} onCopy={onCopy} />
+        </div>
       </article>
     </li>
+  );
+}
+
+const COPIED_MS = 2000;
+
+/* Wraps each code block so it gets a Copy button in its top-right corner. */
+function withCodeCopyButtons(html) {
+  if (!html.includes("<pre")) return html;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  for (const pre of template.content.querySelectorAll("pre")) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "chat-code";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chat-code__copy";
+    button.setAttribute("data-copy-code", "");
+    button.setAttribute("aria-label", "Copy code");
+    button.title = "Copy code";
+    button.textContent = "Copy";
+    pre.replaceWith(wrapper);
+    wrapper.append(button, pre);
+  }
+  return template.innerHTML;
+}
+
+/* The whole answer for the clipboard: its Markdown, then its sources (if any). */
+function answerText(content, chips) {
+  if (chips.length === 0) return content;
+  return `${content}\n\nSources:\n${chips.map((chip) => `- ${chip.loc} · ${chip.doc}`).join("\n")}`;
+}
+
+function CopyAnswerButton({ text, onCopy }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = setTimeout(() => setCopied(false), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  return (
+    <button
+      type="button"
+      className="btn btn--ghost btn--sm chat-answer__copy"
+      aria-label={copied ? "Answer copied" : "Copy answer"}
+      title="Copy answer"
+      onClick={async () => setCopied(await onCopy(text, "Answer"))}
+    >
+      <Icon name={copied ? "check" : "copy"} size={14} />
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+/* Shown when the clipboard can't be used: the text, selected, to copy with ⌘C / Ctrl+C. */
+function CopyFallbackDialog({ text, onClose }) {
+  return (
+    <Modal title="Copy manually" width={560} onClose={onClose}>
+      <div className="confirm">
+        <p className="confirm__text" id="copy-fallback-hint">
+          Copying to the clipboard isn’t available here. The text is selected below — press ⌘C (Mac) or Ctrl+C to copy it.
+        </p>
+        <textarea
+          className="chat-copy-fallback"
+          aria-label="Text to copy"
+          aria-describedby="copy-fallback-hint"
+          readOnly
+          value={text}
+          rows={10}
+          ref={(node) => node?.select()}
+        />
+        <div className="confirm__actions">
+          <button type="button" className="btn btn--secondary" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
