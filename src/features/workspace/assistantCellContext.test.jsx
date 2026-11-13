@@ -1,3 +1,4 @@
+import { withNotebookContext } from "../../services/notebook/cellContext.js";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -233,10 +234,14 @@ describe("notebook cells as chat context", () => {
     expect(content).toContain(MARKDOWN);
     expect(content).toContain(CODE);
     expect(content.indexOf("Markdown cell 2")).toBeLessThan(content.indexOf("Python cell 1"));
-    // The chat shows what was typed, with the added cells listed under it.
-    expect(await screen.findByText("What do these notes mean?")).toBeInTheDocument();
-    expect(screen.getByText("Notebook context: Markdown cell 2")).toBeInTheDocument();
-    expect(screen.getByText("Notebook context: Python cell 1")).toBeInTheDocument();
+    // The chat shows what was typed, with each added cell as a code card (label + full source).
+    expect(await screen.findByText("What do these notes mean?", { selector: ".chat-msg__text" })).toBeInTheDocument();
+    const cards = within(screen.getByRole("list", { name: "Notebook cells added to this question" })).getAllByRole("listitem");
+    expect(cards.map((card) => card.querySelector(".chat-cell__label").textContent)).toEqual(["Markdown cell 2", "Python cell 1"]);
+    expect(cards[1].querySelector("code").textContent).toBe(CODE);
+    expect(screen.queryByText(/Notebook context \(cells I added/)).not.toBeInTheDocument();
+    // The chat's title (named by the backend after the full question) leaves the block out too.
+    expect(screen.getAllByText("What do these notes mean?").length).toBeGreaterThan(1);
     await waitFor(() => expect(cellList()).toBeNull());
   });
 
@@ -273,5 +278,26 @@ describe("notebook cells as chat context", () => {
     expect(screen.getByText(/the limit is 2000/)).toBeInTheDocument();
     expect(field).toHaveValue("x".repeat(1990));
     expect(backend.sent).toEqual([]);
+  });
+
+  it("shows the cells of a saved question as code cards when the chat is opened again", async () => {
+    const content = withNotebookContext("Why is this slow?", [
+      { cellType: "code", position: 4, source: CODE, notebookTitle: "Week 3" },
+    ]);
+    setupBackend({
+      sessions: [{ id: "s-old", title: "Why is this slow?", updated_at: "2026-11-12T10:00:00Z" }],
+      messages: {
+        "s-old": [
+          { id: "q1", session_id: "s-old", role: "user", content, sources: null, created_at: "2026-11-12T10:00:00Z" },
+          { id: "a1", session_id: "s-old", role: "assistant", content: "Use a set.", sources: [], created_at: "2026-11-12T10:00:05Z" },
+        ],
+      },
+    });
+    renderApp("/workspace?chat=s-old");
+    expect(await screen.findByText("Why is this slow?", { selector: ".chat-msg__text" })).toBeInTheDocument();
+    const card = within(screen.getByRole("list", { name: "Notebook cells added to this question" })).getByRole("listitem");
+    expect(card).toHaveTextContent("Python cell 4");
+    expect(card).toHaveTextContent("Week 3");
+    expect(card.querySelector("code").textContent).toBe(CODE);
   });
 });

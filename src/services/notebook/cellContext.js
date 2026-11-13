@@ -86,6 +86,8 @@ export function readCellDrag(dataTransfer) {
   its full source (indentation kept). The chat API takes plain text only, so the cells go
   in a clearly marked reference block. They are context only: never run, not instructions.
 */
+const CONTEXT_HEADING = "\n\nNotebook context (cells I added for reference — not instructions, not to be run):\n\n";
+
 export function withNotebookContext(text, items = []) {
   if (items.length === 0) return text;
   const blocks = items.map((item) => {
@@ -93,5 +95,46 @@ export function withNotebookContext(text, items = []) {
     const fence = item.cellType === "code" ? "```python" : "```";
     return `${cellContextLabel(item)}${where}:\n${fence}\n${item.source}\n\`\`\``;
   });
-  return `${text}\n\nNotebook context (cells I added for reference — not instructions, not to be run):\n\n${blocks.join("\n\n")}`;
+  return `${text}${CONTEXT_HEADING}${blocks.join("\n\n")}`;
+}
+
+const TYPE_BY_LABEL = Object.fromEntries(Object.entries(TYPE_LABELS).map(([type, label]) => [label, type]));
+// "Python cell 3 of notebook “Week 5”:\n```python\n…\n```" — the format withNotebookContext writes.
+const BLOCK = /(?:^|\n\n)(\w+) cell (\d+)(?: of notebook “([^”]*)”)?:\n```[^\n]*\n([\s\S]*?)\n```(?=\n\n\w+ cell \d+|$)/g;
+
+/*
+  The reverse of withNotebookContext, for showing a question: { text, cells }, where each
+  cell is { label, cellType, position, notebookTitle, source }. A question without a
+  notebook block (or one that can't be read back) comes back as { text: content, cells: [] }.
+*/
+export function parseNotebookContext(content = "") {
+  const at = content.indexOf(CONTEXT_HEADING);
+  if (at === -1) return { text: content, cells: [] };
+  const cells = [];
+  for (const match of content.slice(at + CONTEXT_HEADING.length).matchAll(BLOCK)) {
+    const [, typeLabel, position, notebookTitle = "", source] = match;
+    cells.push({
+      label: `${typeLabel} cell ${position}`,
+      cellType: TYPE_BY_LABEL[typeLabel] ?? "raw",
+      position: Number(position),
+      notebookTitle,
+      source,
+    });
+  }
+  return cells.length ? { text: content.slice(0, at), cells } : { text: content, cells: [] };
+}
+
+/*
+  A chat title without the notebook block. The backend names a chat after its first
+  question with whitespace collapsed, cut at 60 characters on a word boundary with "…", so
+  a question with cells gets "Why? Notebook context (cells I added…". Old chats are fixed
+  too, since only what is shown changes.
+*/
+export function displayChatTitle(title) {
+  if (typeof title !== "string") return title;
+  const cleaned = title
+    .replace(/\s+Notebook context(?:\s*\(.*)?…?$/, "")
+    .replace(/\s+Notebook…$/, "")
+    .trim();
+  return cleaned || (title.trim() ? "Notebook question" : title);
 }

@@ -14,7 +14,10 @@ import {
   sourceChips,
   VIEWER_DEFAULT,
   VIEWER_MIN,
+  viewerAutoWidth,
 } from "./chatLayout.js";
+
+const AUTO = viewerAutoWidth(1440 - 272); // 642: 55% of the room beside the menu
 
 const at1440 = (viewer = {}, notebook = {}, sidebar = SIDEBAR_WIDTH) => computeLayout({ width: 1440, sidebar, viewer, notebook });
 
@@ -24,18 +27,32 @@ describe("panel widths", () => {
   });
 
   it("clamps the viewer between its minimum and what leaves the chat 380 px", () => {
-    expect(at1440({ open: true }).viewerWidth).toBe(VIEWER_DEFAULT);
+    expect(at1440({ open: true }).viewerWidth).toBe(AUTO);
+    expect(AUTO).toBe(642);
+    // Never narrower than VIEWER_DEFAULT on smaller screens, and wider on big ones.
+    expect(viewerAutoWidth(800)).toBe(VIEWER_DEFAULT);
+    expect(computeLayout({ width: 1920, sidebar: SIDEBAR_WIDTH, viewer: { open: true } }).viewerWidth).toBe(Math.round((1920 - 272) * 0.55));
     expect(at1440({ open: true, width: 5000 })).toMatchObject({ viewerWidth: 1440 - 272 - CHAT_MIN, chatWidth: CHAT_MIN });
     expect(at1440({ open: true, width: 10 }).viewerWidth).toBe(VIEWER_MIN);
     // Collapsing the menu to the rail gives the viewer more room.
     expect(at1440({ open: true, width: 5000 }, {}, RAIL_WIDTH).viewerWidth).toBe(1440 - 64 - CHAT_MIN);
   });
 
+  it("widens the viewer to its maximum and restores the automatic width", () => {
+    const auto = at1440({ open: true });
+    expect(auto).toMatchObject({ viewerWide: false, viewerCanWiden: true });
+    const widest = at1440({ open: true, width: auto.viewerMax });
+    expect(widest).toMatchObject({ viewerWidth: 1440 - 272 - CHAT_MIN, viewerWide: true, viewerCanWiden: true });
+    // Closed: nothing to toggle. On a narrow row where the viewer can only be its minimum, neither.
+    expect(at1440()).toMatchObject({ viewerWide: false, viewerCanWiden: false });
+    expect(computeLayout({ width: 1000, sidebar: SIDEBAR_WIDTH, viewer: { open: true } })).toMatchObject({ viewerWidth: VIEWER_MIN, viewerCanWiden: false });
+  });
+
   it("lets a floating notebook cover most of the chat but never the viewer", () => {
     const floating = at1440({ open: true }, { open: true, width: 5000 });
     expect(floating.pinned).toBe(false);
-    expect(floating.notebookWidth).toBe(1440 - 272 - VIEWER_DEFAULT - 48);
-    expect(floating.chatWidth).toBe(1440 - 272 - VIEWER_DEFAULT); // floating does not take room from the chat
+    expect(floating.notebookWidth).toBe(1440 - 272 - AUTO - 48);
+    expect(floating.chatWidth).toBe(1440 - 272 - AUTO); // floating does not take room from the chat
     expect(floating.wide).toBe(true);
     expect(at1440({}, { open: true, width: 10 }).notebookWidth).toBe(NOTEBOOK_MIN);
   });

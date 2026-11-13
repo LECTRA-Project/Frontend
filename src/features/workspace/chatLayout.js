@@ -17,6 +17,14 @@ export const NOTEBOOK_MIN = 340;
 export const NOTEBOOK_DEFAULT = 480;
 export const VIEWER_MIN = 360;
 export const VIEWER_DEFAULT = 560;
+// Until the student resizes it, the viewer takes this share of the room beside the menu
+// (never less than VIEWER_DEFAULT), so lecture pages are readable on wide screens too.
+export const VIEWER_SHARE = 0.55;
+
+/* The viewer's width before the student resizes it, for `room` px beside the menu. */
+export function viewerAutoWidth(room) {
+  return Math.max(VIEWER_DEFAULT, Math.round(room * VIEWER_SHARE));
+}
 export const RESIZE_STEP = 32;
 // A floating notebook leaves this much of the chat visible at its left.
 const FLOAT_GAP = 48;
@@ -32,6 +40,9 @@ const clamp = (value, min, max) => Math.round(Math.min(max, Math.max(min, value)
     pinned                         the notebook is pinned (asked for, and there is room)
     canPin                         there is room to pin it beside the chat
     wide                           the notebook is at its widest
+    viewerWide, viewerCanWiden     the viewer's Widen / Restore toggle: whether it is at its
+                                   widest, and whether widening can change anything (Widen
+                                   sets viewerMax; Restore goes back to the automatic width)
     canWiden, toggledWidth         the Widen / Restore toggle: whether it can change anything,
                                    and the width it sets
     chatWidth                      what is left for the chat column
@@ -44,6 +55,7 @@ export function computeLayout({ width, sidebar, viewer = {}, notebook = {} }) {
   const pinned = Boolean(notebook.pinned) && canPin;
   let viewerMax;
   let viewerWidth;
+  let viewerAuto = 0; // the automatic width, for the Widen / Restore toggle
   let notebookMax;
   let notebookWidth;
   if (pinned) {
@@ -52,11 +64,13 @@ export function computeLayout({ width, sidebar, viewer = {}, notebook = {} }) {
     notebookMax = Math.max(NOTEBOOK_MIN, room - (viewerOpen ? VIEWER_MIN : 0) - CHAT_MIN);
     notebookWidth = clamp(notebook.width ?? NOTEBOOK_DEFAULT, NOTEBOOK_MIN, notebookMax);
     viewerMax = viewerOpen ? Math.max(VIEWER_MIN, room - CHAT_MIN - notebookWidth) : 0;
-    viewerWidth = viewerOpen ? clamp(viewer.width ?? VIEWER_DEFAULT, VIEWER_MIN, viewerMax) : 0;
+    viewerAuto = viewerOpen ? clamp(viewerAutoWidth(room - notebookWidth), VIEWER_MIN, viewerMax) : 0;
+    viewerWidth = viewerOpen ? clamp(viewer.width ?? viewerAuto, VIEWER_MIN, viewerMax) : 0;
   } else {
     // Floating, it never covers the viewer and leaves a strip of the chat visible.
     viewerMax = viewerOpen ? Math.max(VIEWER_MIN, room - CHAT_MIN) : 0;
-    viewerWidth = viewerOpen ? clamp(viewer.width ?? VIEWER_DEFAULT, VIEWER_MIN, viewerMax) : 0;
+    viewerAuto = viewerOpen ? clamp(viewerAutoWidth(room), VIEWER_MIN, viewerMax) : 0;
+    viewerWidth = viewerOpen ? clamp(viewer.width ?? viewerAuto, VIEWER_MIN, viewerMax) : 0;
     notebookMax = Math.max(NOTEBOOK_MIN, room - viewerWidth - FLOAT_GAP);
     notebookWidth = clamp(notebook.width ?? NOTEBOOK_DEFAULT, NOTEBOOK_MIN, notebookMax);
   }
@@ -64,6 +78,9 @@ export function computeLayout({ width, sidebar, viewer = {}, notebook = {} }) {
   return {
     viewerWidth,
     viewerMax,
+    viewerWide: viewerOpen && viewerWidth >= viewerMax - 4,
+    // Something to toggle: it can grow, or restoring would make it narrower.
+    viewerCanWiden: viewerOpen && (viewerWidth < viewerMax - 4 || viewerAuto < viewerMax - 4),
     notebookWidth,
     notebookMax,
     pinned,

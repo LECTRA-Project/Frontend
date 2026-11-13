@@ -20,7 +20,7 @@ import { useNotebook } from "../notebook/useNotebook.js";
 import { usePythonKernel } from "../notebook/usePythonKernel.js";
 import { fetchLectureFile } from "../../api/services/lectures.js";
 import { MAX_MESSAGE_LENGTH } from "../../api/services/chat.js";
-import { cellContextLabel, isSameCellContext, withNotebookContext } from "../../services/notebook/cellContext.js";
+import { cellContextLabel, displayChatTitle, isSameCellContext, withNotebookContext } from "../../services/notebook/cellContext.js";
 import { useLectureChat } from "./useLectureChat.js";
 import {
   computeLayout,
@@ -30,7 +30,6 @@ import {
   RAIL_WIDTH,
   SIDEBAR_WIDTH,
   sidebarFits,
-  VIEWER_DEFAULT,
   VIEWER_MIN,
 } from "./chatLayout.js";
 import "./workspace.css";
@@ -139,7 +138,8 @@ export default function WorkspaceLayout() {
   // Where the material in the viewer was opened (its id is in the URL):
   // { lectureId, focus: { sourceType, sourceNumber } | null, cited, seq }
   const [viewer, setViewer] = useState(null);
-  const [viewerWidth, setViewerWidth] = useState(VIEWER_DEFAULT);
+  // null: the automatic width (viewerAutoWidth) until the student resizes the viewer.
+  const [viewerWidth, setViewerWidth] = useState(null);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notebookPinned, setNotebookPinned] = useState(false);
   const [notebookWidth, setNotebookWidth] = useState(NOTEBOOK_DEFAULT);
@@ -478,8 +478,9 @@ export default function WorkspaceLayout() {
       return false;
     }
     setTooLong(null);
-    const extras = cells.map((cell) => `Notebook context: ${cellContextLabel(cell)}`);
-    chat.send({ question: text, content, extras }).then((ok) => {
+    // The question shown is the full message: the chat shows the added cells as code cards
+    // (parseNotebookContext), the same way it shows them when the chat is opened again.
+    chat.send({ question: content, content }).then((ok) => {
       // Clear the sent cells only once answered; on failure they stay in the draft.
       if (ok) setCellContext((list) => list.filter((item) => !cells.some((cell) => cell.id === item.id)));
     });
@@ -542,6 +543,13 @@ export default function WorkspaceLayout() {
   };
 
   /* ---------- Viewer content ---------- */
+  // Widen / Restore, like the notebook's: to the widest the chat allows, or back to the automatic width.
+  const viewerWiden = {
+    wide: layout.viewerWide,
+    disabled: !layout.viewerCanWiden,
+    onToggle: () => setViewerWidth(layout.viewerWide ? null : layout.viewerMax),
+  };
+
   const fileState = openedFile?.key === fileKey ? openedFile : null;
   let viewerContent = null;
   if (viewerMaterial) {
@@ -561,6 +569,7 @@ export default function WorkspaceLayout() {
           initialPage={pdfPage}
           cited={opened.cited && opened.focus?.sourceType === "page"}
           onCollapse={() => closeViewer()}
+          widen={viewerWiden}
         />
       );
     } else if (viewerMaterial.type === "notes" && !showsSource && fileState?.file) {
@@ -569,6 +578,7 @@ export default function WorkspaceLayout() {
           key={fileKey}
           material={{ ...viewerMaterial, name: viewerMaterial.lecture.original_filename, file: fileState.file, url: fileState.url }}
           onCollapse={() => closeViewer()}
+          widen={viewerWiden}
         />
       );
     } else {
@@ -580,6 +590,7 @@ export default function WorkspaceLayout() {
           cited={opened.cited}
           onRetry={() => handleRetry(viewerMaterial)}
           onClose={() => closeViewer()}
+          widen={viewerWiden}
           onOpenInNotebook={viewerMaterial.type === "notebook" ? () => openInNotebook(viewerMaterial) : null}
         />
       );
@@ -642,7 +653,7 @@ export default function WorkspaceLayout() {
           mode={sidebarMode}
           onToggle={() => setSidebarOpen((value) => !value)}
           onNewChat={newChat}
-          chatTitle={session?.title ?? "New chat"}
+          chatTitle={displayChatTitle(session?.title) ?? "New chat"}
           materials={chatMaterials}
           // Only the files being uploaded into this chat (not those from Home or for another chat).
           uploads={library.uploads.filter((item) => item.chatId !== undefined && item.chatId === (session?.id ?? null))}
@@ -702,7 +713,7 @@ export default function WorkspaceLayout() {
               label="Resize the material viewer (drag, or use the left and right arrow keys)"
               onResize={(x) => setViewerWidth(clampViewer(rowRight() - x))}
               onStep={(step) => setViewerWidth(clampViewer(layout.viewerWidth + step))}
-              onReset={() => setViewerWidth(VIEWER_DEFAULT)}
+              onReset={() => setViewerWidth(null)}
               onResizing={setResizing}
             />
             {viewerContent}

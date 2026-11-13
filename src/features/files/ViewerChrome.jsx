@@ -4,13 +4,14 @@ import IconButton from "../../components/ui/IconButton.jsx";
 /*
   The parts every material viewer shares (PDF, notes, slides and notebooks):
 
-  ViewerHead     icon, title and meta; then the actions (open in a new tab, download, …)
-                 and the close button.
+  ViewerHead     icon, title and meta; then the actions (open in a new tab, download, …),
+                 the optional Widen / Restore button (`widen`: { wide, disabled, onToggle },
+                 like the notebook's) and the close button.
   ViewerBanner   "Opened from a source in the answer: page 12", shown while the viewer is
                  on the place an answer cited.
   ZoomControls   − 100% +  (`label` replaces the percentage, e.g. "Fit")
 */
-export function ViewerHead({ icon = "fileText", title, meta, newTabUrl = null, children = null, onClose }) {
+export function ViewerHead({ icon = "fileText", title, meta, newTabUrl = null, children = null, widen = null, onClose }) {
   return (
     <div className="viewer__head">
       <span className="viewer__icon">
@@ -34,6 +35,14 @@ export function ViewerHead({ icon = "fileText", title, meta, newTabUrl = null, c
         >
           <Icon name="external" />
         </a>
+      )}
+      {widen && (
+        <IconButton
+          icon={widen.wide ? "collapse" : "expand"}
+          label={widen.wide ? "Restore viewer width" : "Widen viewer"}
+          disabled={widen.disabled}
+          onClick={widen.onToggle}
+        />
       )}
       {onClose && <IconButton icon="close" label="Close the material viewer" onClick={onClose} />}
     </div>
