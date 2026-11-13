@@ -30,8 +30,9 @@ import "../../exam/exam.css";
   kept on this device (services/exam/examStorage.js) until the exam is submitted.
 
   The data it needs from WorkspaceLayout comes through the Outlet context (`examView`):
-  userKey, the open chat's lectures, the library and whether they are still loading, and
-  onOpenSource to open a question's page in the viewer beside the exam.
+  userKey, the open chat's lectures, the library and whether they are still loading,
+  onOpenSource to open a question's page in the viewer beside the exam, and onAskAbout for
+  "Ask about this" on a checked answer (it opens a chat, see WorkspaceLayout).
 
   "New exam on the same materials" opens the setup with that exam's lectures, number and
   types chosen (kept in the history entry's state, so a reload keeps them too).
@@ -61,7 +62,7 @@ function toExamMaterial(lecture) {
 
 export default function ExamPage() {
   const { examView } = useOutletContext();
-  const { userKey, chatLectures, library, loading: materialsLoading, sourceType, onOpenSource } = examView;
+  const { userKey, chatLectures, library, loading: materialsLoading, sourceType, onOpenSource, onAskAbout } = examView;
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
@@ -311,7 +312,16 @@ export default function ExamPage() {
     body = <ExamQuestions key={exam.id} exam={exam} userKey={userKey} sourceType={sourceType} onSubmit={submit} grading={grading} />;
   } else if (exam.status === "submitted" && exam.questions?.length && exam.questions.every((question) => question.result)) {
     step = "submitted";
-    body = <ExamResults key={exam.id} exam={exam} onOpenSource={onOpenSource} onRegrade={regrade} onNewExam={() => newExamFrom(exam)} />;
+    body = (
+      <ExamResults
+        key={exam.id}
+        exam={exam}
+        onOpenSource={onOpenSource}
+        onRegrade={regrade}
+        onNewExam={() => newExamFrom(exam)}
+        onAsk={onAskAbout ? (question) => onAskAbout(exam, question) : null}
+      />
+    );
   } else if (exam.status === "submitted") {
     // Just submitted: the results are still being read (or the read failed).
     step = "submitted";

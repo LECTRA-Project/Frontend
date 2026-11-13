@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { Link, useOutletContext } from "react-router-dom";
 
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
@@ -7,7 +7,8 @@ import Menu from "../../../components/ui/Menu.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
 import Modal from "../../../components/ui/Modal.jsx";
 import ChatComposer from "../components/ChatComposer.jsx";
-import { renderAnswerMarkdown } from "../../../services/notebook/markdown.js";
+import { renderAnswerMarkdown, renderMarkdown } from "../../../services/notebook/markdown.js";
+import { LABELS as EXAM_LABELS, parseExamQuestionMessage } from "../../exam/askAboutAnswer.js";
 import {
   CELL_DROP_ZONE_ATTR,
   isCellDrag,
@@ -32,6 +33,9 @@ export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
     "Slide 3 · …", "Cell 16 · …"); a chip opens that place in the viewer.
   - Answers without sources come from general knowledge and say "Not from your materials".
   - Notebook cells can be dropped anywhere on the chat; they are sent with the next question.
+  - A question asked from the exam results ("Ask about this") shows as its heading line with
+    the question, choices, answer and feedback quoted under it; while the chat is opened
+    from there (?exam= in the URL) the bar has "Back to exam results".
   - Every code block in an answer has a Copy button (just that code), and every answer has a
     Copy button under it (the whole answer as Markdown, with its sources). When the
     clipboard can't be used, a dialog shows the text selected for copying by hand.
@@ -63,6 +67,7 @@ export function ChatView({
   onAddCell,
   onRemoveCell,
   announcement,
+  examLink = null,
 }) {
   const [nativeDragOver, setNativeDragOver] = useState(false);
   const [renaming, setRenaming] = useState(null); // the title being typed
@@ -169,6 +174,15 @@ export function ChatView({
             {title}
           </h1>
         )}
+        {examLink && renaming === null && (
+          <Link to={examLink} className="btn btn--secondary btn--sm chat__exam-link" aria-label="Back to exam results">
+            <Icon name="arrowLeft" size={14} />
+            <span className="chat__exam-link-long">Back to exam results</span>
+            <span className="chat__exam-link-short" aria-hidden="true">
+              Exam results
+            </span>
+          </Link>
+        )}
         {session && renaming === null && (
           <Menu
             label="Chat actions"
@@ -265,6 +279,8 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
     );
   }
   if (message.role === "user") {
+    const exam = parseExamQuestionMessage(message.content);
+    if (exam) return <ExamQuestionMessage message={message} exam={exam} />;
     // Notebook cells added to the question are shown as code cards, not as the raw text block.
     const { text, cells } = parseNotebookContext(message.content);
     return (
@@ -356,6 +372,60 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
       </article>
     </li>
   );
+}
+
+/*
+  A question asked from the exam results: the heading line, then each part under its label,
+  quoted. The exam's texts (question, choices, feedback) are Markdown, as in the results;
+  the student's own answer is plain text.
+*/
+function ExamQuestionMessage({ message, exam }) {
+  return (
+    <li className={`chat-msg chat-msg--student chat-msg--exam ${message.pending ? "chat-msg--pending" : ""}`}>
+      <span className="chat-exam__from">
+        <Icon name="graduation" size={14} />
+        From your exam results
+      </span>
+      <span className="chat-msg__text chat-exam__heading">{exam.heading}</span>
+      <dl className="chat-exam">
+        {exam.parts.map((part, index) => (
+          <div key={`${part.label}-${index}`} className={part.quote === undefined ? "chat-exam__row" : "chat-exam__part"}>
+            <dt className="chat-exam__label">{part.label}</dt>
+            {part.quote === undefined ? (
+              <dd className="chat-exam__value">{part.value}</dd>
+            ) : part.label === EXAM_LABELS.answer ? (
+              <dd className="chat-exam__quote chat-msg__text">{part.quote}</dd>
+            ) : part.label === EXAM_LABELS.choices ? (
+              <dd className="chat-exam__quote">
+                <ul className="chat-exam__choices">
+                  {choiceItems(part.quote).map((choice) => (
+                    <li key={choice.letter}>
+                      <span className="chat-exam__letter">{choice.letter}</span>
+                      <span className="chat-exam__md" dangerouslySetInnerHTML={{ __html: renderMarkdown(choice.text) }} />
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            ) : (
+              <dd className="chat-exam__quote chat-exam__md" dangerouslySetInnerHTML={{ __html: renderMarkdown(part.quote) }} />
+            )}
+          </div>
+        ))}
+      </dl>
+    </li>
+  );
+}
+
+/* "A. text" lines (a choice may run over several lines) → [{ letter, text }]. */
+function choiceItems(quote) {
+  const items = [];
+  for (const line of quote.split("\n")) {
+    const match = /^([A-Z])\. (.*)$/.exec(line);
+    if (match) items.push({ letter: match[1], text: match[2] });
+    else if (items.length) items.at(-1).text += `\n${line}`;
+    else items.push({ letter: "", text: line });
+  }
+  return items;
 }
 
 const COPIED_MS = 2000;
