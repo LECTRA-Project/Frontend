@@ -48,13 +48,24 @@ describe("panel widths", () => {
     expect(computeLayout({ width: 1000, sidebar: SIDEBAR_WIDTH, viewer: { open: true } })).toMatchObject({ viewerWidth: VIEWER_MIN, viewerCanWiden: false });
   });
 
-  it("lets a floating notebook cover most of the chat but never the viewer", () => {
-    const floating = at1440({ open: true }, { open: true, width: 5000 });
-    expect(floating.pinned).toBe(false);
-    expect(floating.notebookWidth).toBe(1440 - 272 - AUTO - 48);
-    expect(floating.chatWidth).toBe(1440 - 272 - AUTO); // floating does not take room from the chat
-    expect(floating.wide).toBe(true);
+  it("puts a floating notebook beside the chat when there is room, and the chat reserves its width", () => {
+    const floating = at1440({}, { open: true, width: NOTEBOOK_DEFAULT });
+    expect(floating).toMatchObject({ pinned: false, notebookWidth: NOTEBOOK_DEFAULT, chatInset: NOTEBOOK_DEFAULT });
+    expect(floating.chatWidth).toBe(1440 - 272 - NOTEBOOK_DEFAULT);
+    // Widened, it still leaves the chat 380 px; with the viewer open, the viewer gives way first.
+    expect(at1440({}, { open: true, width: 5000 })).toMatchObject({ notebookWidth: 1440 - 272 - CHAT_MIN, chatWidth: CHAT_MIN, wide: true });
+    const withViewer = at1440({ open: true }, { open: true, width: NOTEBOOK_DEFAULT });
+    expect(withViewer).toMatchObject({ viewerWidth: VIEWER_MIN, notebookWidth: 1440 - 272 - VIEWER_MIN - CHAT_MIN, chatWidth: CHAT_MIN });
+    expect(withViewer.chatInset).toBe(withViewer.notebookWidth);
     expect(at1440({}, { open: true, width: 10 }).notebookWidth).toBe(NOTEBOOK_MIN);
+    // Pinned or closed, nothing is reserved (pinned takes its room in the row itself).
+    expect(at1440({}, { open: true, pinned: true }).chatInset).toBe(0);
+    expect(at1440().chatInset).toBe(0);
+  });
+
+  it("only lets a floating notebook lie over the chat when the row is too narrow for both", () => {
+    const narrow = computeLayout({ width: 1000, sidebar: SIDEBAR_WIDTH, viewer: { open: true }, notebook: { open: true, width: 5000 } });
+    expect(narrow).toMatchObject({ canPin: false, pinned: false, chatInset: 0, viewerWidth: VIEWER_MIN, notebookWidth: NOTEBOOK_MIN });
   });
 
   it("pins the notebook between chat and viewer, leaving the chat 380 px; the viewer gives way first", () => {

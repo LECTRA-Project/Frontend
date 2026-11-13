@@ -491,11 +491,15 @@ describe("chat-first workspace: notebook and viewer panels", () => {
     expect(panel).toHaveClass("cf-notebook--floating");
     expect(panel.style.width).toBe("480px");
     expect(await within(panel).findByRole("region", { name: "Notebook" })).toBeInTheDocument();
+    // The chat leaves the notebook's width free, so nothing of it is covered.
+    const main = document.querySelector(".cf__main");
+    expect(main.style.paddingRight).toBe("480px");
 
     const pin = within(panel).getByRole("button", { name: "Pin beside the chat" });
     expect(pin).toHaveAttribute("aria-pressed", "false");
     await user.click(pin);
     expect(panel).toHaveClass("cf-notebook--pinned");
+    expect(main.style.paddingRight).toBe(""); // pinned, it takes its room in the row
     expect(within(panel).getByRole("button", { name: "Float over the chat" })).toHaveAttribute("aria-pressed", "true");
 
     // Widest pinned: 1440 − 272 (menu) − 380 (chat) = 788.
@@ -506,12 +510,14 @@ describe("chat-first workspace: notebook and viewer panels", () => {
 
     await user.click(within(panel).getByRole("button", { name: "Float over the chat" }));
     expect(panel).toHaveClass("cf-notebook--floating");
+    expect(main.style.paddingRight).toBe("480px");
     await user.click(within(panel).getByRole("button", { name: "Close notebook" }));
     expect(notebookPanel()).not.toBeInTheDocument();
+    expect(main.style.paddingRight).toBe(""); // the chat takes its room back
     expect(screen.getByRole("button", { name: "Notebook" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("floats the notebook left of an open viewer, and pinning it makes room between chat and viewer", async () => {
+  it("puts the notebook left of an open viewer without covering the chat, floating or pinned", async () => {
     const { user } = await openWorkspace();
     await openChat(user, "Hunt's algorithm");
     await user.click(within(menu()).getByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" }));
@@ -521,10 +527,14 @@ describe("chat-first workspace: notebook and viewer panels", () => {
 
     await user.click(screen.getByRole("button", { name: "Notebook" }));
     const panel = notebookPanel();
-    expect(panel.style.right).toBe("642px");
+    // The viewer gives way to its minimum; the notebook takes what leaves the chat 380 px,
+    // and the chat reserves that width.
+    expect(viewer().style.width).toBe("360px");
+    expect(panel.style.right).toBe("360px");
+    expect(panel.style.width).toBe(`${1440 - 272 - 360 - 380}px`);
+    expect(document.querySelector(".cf__main").style.paddingRight).toBe(panel.style.width);
 
     await user.click(within(panel).getByRole("button", { name: "Pin beside the chat" }));
-    // The viewer gives way to its minimum; the notebook takes what leaves the chat 380 px.
     expect(viewer().style.width).toBe("360px");
     expect(panel.style.width).toBe(`${1440 - 272 - 360 - 380}px`);
   });
@@ -566,6 +576,27 @@ describe("chat-first workspace: notebook and viewer panels", () => {
     expect(viewer().style.width).toBe("392px");
     await user.dblClick(handle); // back to the automatic width
     expect(viewer().style.width).toBe("642px");
+  });
+
+  it("reflows the chat while the floating notebook is being resized, and keeps the draft and messages", async () => {
+    const { user } = await openWorkspace();
+    await openChat(user, "Hunt's algorithm");
+    await user.type(input(), "half-typed question");
+    await user.click(screen.getByRole("button", { name: "Notebook" }));
+    const main = document.querySelector(".cf__main");
+    const handle = within(notebookPanel()).getByRole("button", { name: /^Resize notebook/ });
+
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 960 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 900 });
+    expect(notebookPanel().style.width).toBe("540px");
+    expect(main.style.paddingRight).toBe("540px"); // during the drag, not only after it
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10 }); // far left: the chat keeps 380 px
+    expect(notebookPanel().style.width).toBe(`${1440 - 272 - 380}px`);
+    expect(main.style.paddingRight).toBe(`${1440 - 272 - 380}px`);
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10 });
+
+    expect(input()).toHaveValue("half-typed question");
+    expect(screen.getByText("Hunt's algorithm builds a decision tree greedily.")).toBeInTheDocument();
   });
 
   it("collapses the menu to the icon rail, which gives the viewer more room", async () => {

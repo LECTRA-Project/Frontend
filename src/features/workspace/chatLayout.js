@@ -5,9 +5,12 @@
     menu (272 px, or a 64 px rail) | chat (always centred, max 760 px) | [notebook] | [viewer]
   - The material viewer is docked at the right edge. Its width is the student's choice,
     clamped so the chat keeps at least CHAT_MIN.
-  - The notebook floats over the chat by default (left of the viewer) and may cover most
-    of it. Pinned, it sits between the chat and the viewer, again leaving CHAT_MIN.
-    Pinning is only offered when there is room for that.
+  - The notebook floats by default (left of the viewer). Pinned, it sits between the chat
+    and the viewer, leaving CHAT_MIN. Pinning is only offered when there is room for that.
+  - Whenever there is that room, a floating notebook doesn't cover the chat either: it gets
+    the same widths as pinned and the chat reserves its width (`chatInset`), so the chat's
+    messages and composer reflow beside it — also while it is being resized. Only when the
+    row is too narrow for both does the floating notebook lie over the chat.
   All widths are in CSS pixels; `width` is the width of the whole row.
 */
 export const SIDEBAR_WIDTH = 272;
@@ -46,6 +49,7 @@ const clamp = (value, min, max) => Math.round(Math.min(max, Math.max(min, value)
     canWiden, toggledWidth         the Widen / Restore toggle: whether it can change anything,
                                    and the width it sets
     chatWidth                      what is left for the chat column
+    chatInset                      room the chat leaves at its right for a floating notebook
 */
 export function computeLayout({ width, sidebar, viewer = {}, notebook = {} }) {
   const viewerOpen = Boolean(viewer.open);
@@ -53,13 +57,15 @@ export function computeLayout({ width, sidebar, viewer = {}, notebook = {} }) {
   const room = width - sidebar;
   const canPin = notebookOpen && room - (viewerOpen ? VIEWER_MIN : 0) - NOTEBOOK_MIN >= CHAT_MIN;
   const pinned = Boolean(notebook.pinned) && canPin;
+  // Beside the chat (pinned, or floating with room for both): the chat is never covered.
+  const beside = notebookOpen && canPin;
   let viewerMax;
   let viewerWidth;
   let viewerAuto = 0; // the automatic width, for the Widen / Restore toggle
   let notebookMax;
   let notebookWidth;
-  if (pinned) {
-    // A pinned notebook takes its room first (the viewer at its minimum, the chat at
+  if (beside) {
+    // A notebook beside the chat takes its room first (the viewer at its minimum, the chat at
     // CHAT_MIN); the viewer gets what the notebook leaves.
     notebookMax = Math.max(NOTEBOOK_MIN, room - (viewerOpen ? VIEWER_MIN : 0) - CHAT_MIN);
     notebookWidth = clamp(notebook.width ?? NOTEBOOK_DEFAULT, NOTEBOOK_MIN, notebookMax);
@@ -67,7 +73,7 @@ export function computeLayout({ width, sidebar, viewer = {}, notebook = {} }) {
     viewerAuto = viewerOpen ? clamp(viewerAutoWidth(room - notebookWidth), VIEWER_MIN, viewerMax) : 0;
     viewerWidth = viewerOpen ? clamp(viewer.width ?? viewerAuto, VIEWER_MIN, viewerMax) : 0;
   } else {
-    // Floating, it never covers the viewer and leaves a strip of the chat visible.
+    // No room for both: floating, it never covers the viewer and leaves a strip of the chat visible.
     viewerMax = viewerOpen ? Math.max(VIEWER_MIN, room - CHAT_MIN) : 0;
     viewerAuto = viewerOpen ? clamp(viewerAutoWidth(room), VIEWER_MIN, viewerMax) : 0;
     viewerWidth = viewerOpen ? clamp(viewer.width ?? viewerAuto, VIEWER_MIN, viewerMax) : 0;
@@ -90,7 +96,8 @@ export function computeLayout({ width, sidebar, viewer = {}, notebook = {} }) {
     // default does not fit). Nothing to toggle when the widest is the minimum.
     canWiden: notebookMax - 4 > NOTEBOOK_MIN,
     toggledWidth: wide ? (NOTEBOOK_DEFAULT < notebookMax - 4 ? NOTEBOOK_DEFAULT : NOTEBOOK_MIN) : notebookMax,
-    chatWidth: room - viewerWidth - (pinned && notebookOpen ? notebookWidth : 0),
+    chatWidth: room - viewerWidth - (beside ? notebookWidth : 0),
+    chatInset: beside && !pinned ? notebookWidth : 0,
   };
 }
 
