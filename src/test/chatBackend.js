@@ -47,6 +47,8 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     messages: { ...messages },
     sent: [],
     requests: [], // { key: "sessions" | "messages", page, size } for each list request
+    // A promise the list of chats waits for (to act before the chats are loaded).
+    sessionsGate: null,
     nextId: 1,
   };
   const lecture = (id) => state.lectures.find((item) => item.id === id);
@@ -132,7 +134,9 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     state.requests.push({ key, page, size });
     return { [key]: items.slice((page - 1) * size, page * size), page, page_size: size, total: items.length, total_pages: Math.ceil(items.length / size) };
   };
-  api.onGet(SESSIONS).reply((config) => {
+  api.onGet(SESSIONS).reply(async (config) => {
+    // (Not the one-item check whether the server has chats.)
+    if (state.sessionsGate && config.params?.page_size !== 1) await state.sessionsGate;
     const list = [...state.sessions].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(payload);
     return [200, ok(pageOf(list, config, "sessions"))];
   });

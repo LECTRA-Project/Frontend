@@ -34,6 +34,8 @@ export const MESSAGES_PAGE_SIZE = 100;
     which is created with them); detachLecture removes one from a chat.
   - updateLecture / forgetLecture keep the chats' materials in step after a lecture is
     renamed or deleted from the library.
+  - createChat(ids, title) creates a chat with those materials (none is fine) without
+    opening it; askIn(id, payload) opens a chat (loading its messages) and sends there.
   - send() shows the question at once, then replaces it with the saved question and the
     answer. The backend saves nothing when answering fails, so a failed question stays
     visible with the error and can simply be asked again.
@@ -337,6 +339,30 @@ export function useLectureChat({ enabled }) {
     [putSession, select]
   );
 
+  /* A new chat with these lectures (and a title), listed first but not opened. */
+  const createChat = useCallback(
+    async (lectureIds, title) => {
+      const created = await createChatSession({ lectureIds, title });
+      putSession(created, { toTop: true });
+      return created;
+    },
+    [putSession]
+  );
+
+  /*
+    Opens chat `sessionId` (unless it is open already) and asks there, once its messages are
+    loaded, so the question isn't replaced by the loaded list. Resolves like send(); false
+    without sending if the student opened another chat meanwhile.
+  */
+  const askIn = useCallback(
+    async (sessionId, payload) => {
+      if (activeRef.current !== sessionId) await openSession(sessionId);
+      if (activeRef.current !== sessionId) return false;
+      return send(payload);
+    },
+    [openSession, send]
+  );
+
   /* A lecture was renamed: show the new title in every chat that has it. */
   const updateLecture = useCallback((lecture) => {
     const swap = (list) => list.map((item) => (item.id === lecture.id ? { ...item, ...lecture } : item));
@@ -402,6 +428,8 @@ export function useLectureChat({ enabled }) {
     attachLectures,
     detachLecture,
     send,
+    createChat,
+    askIn,
     rename,
     remove,
     updateLecture,

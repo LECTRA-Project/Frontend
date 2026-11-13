@@ -92,6 +92,9 @@ describe("chat-first workspace: chats and their materials", () => {
     await openWorkspace();
     expect(screen.getByRole("heading", { name: "What are we studying today?" })).toBeInTheDocument();
     expect(screen.getByText("No materials in this chat yet.")).toBeInTheDocument();
+    // No upload button in the chat and no "No materials yet" chip in the composer; uploads are in the menu.
+    expect(screen.queryByRole("button", { name: "Upload materials" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "No materials yet" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "New chat" })).toBeInTheDocument();
     expect(materialNames()).toEqual([]);
     expect(within(menu()).getByRole("button", { name: "Upload a PDF, slides or a notebook for this chat" })).toBeInTheDocument();
@@ -187,7 +190,7 @@ describe("chat-first workspace: chats and their materials", () => {
 
   it("uploads into a new chat: the chat is created with the new lecture", async () => {
     const { user } = await openWorkspace();
-    await user.click(screen.getByRole("button", { name: "Upload materials" }));
+    await user.click(within(menu()).getByRole("button", { name: "Upload a material to this chat" }));
     const dialog = await screen.findByRole("dialog");
     await user.upload(within(dialog).getByTestId("upload-input"), new File(["%PDF-1.4"], "qa-Lecture 05.pdf", { type: "application/pdf" }));
     await user.click(within(dialog).getByRole("button", { name: "Upload" }));
@@ -354,6 +357,76 @@ describe("chat-first workspace: chats and their materials", () => {
     });
   });
 
+  describe("copying answers", () => {
+    const CODE = 'def area(r):\n    return 3.14 * r * r\n\nprint(area(2))';
+    const ANSWER = `Use a function:\n\n\`\`\`python\n${CODE}\n\`\`\`\n\n- one\n- two`;
+
+    beforeEach(() => {
+      backend.messages["s-old"] = [
+        message("q1", "s-old", "user", "Show me code"),
+        message("a1", "s-old", "assistant", ANSWER, [page(KI02, 4)]),
+      ];
+    });
+
+    async function openCodeChat() {
+      const result = await openWorkspace();
+      await openChat(result.user, "Last month");
+      await screen.findByText("Use a function:");
+      return result;
+    }
+
+    it("copies only a code block's code, with its indentation, and says so", async () => {
+      const { user } = await openCodeChat();
+      const button = screen.getByRole("button", { name: "Copy code" });
+      expect(button).toHaveTextContent("Copy");
+      button.focus();
+      await user.keyboard("{Enter}");
+
+      expect(await navigator.clipboard.readText()).toBe(CODE);
+      await waitFor(() => expect(button).toHaveTextContent("Copied"));
+      expect(screen.getByText("Code copied.")).toBeInTheDocument();
+      // The code shown is unchanged, and user messages have no copy buttons.
+      expect(document.querySelector(".chat-code pre").textContent).toBe(CODE + "\n");
+      expect(within(screen.getByText("Show me code").closest("li")).queryByRole("button")).toBeNull();
+    });
+
+    it("copies the whole answer as Markdown with its sources, without the question or labels", async () => {
+      const { user } = await openCodeChat();
+      expect(screen.getAllByRole("button", { name: "Copy answer" })).toHaveLength(1);
+      await user.click(screen.getByRole("button", { name: "Copy answer" }));
+
+      const copied = await navigator.clipboard.readText();
+      expect(copied).toBe(`${ANSWER}\n\nSources:\n- p. 4 · KI 02 Classification Part1`);
+      expect(copied).not.toContain("Show me code");
+      expect(await screen.findByRole("button", { name: "Answer copied" })).toHaveTextContent("Copied");
+    });
+
+    it("doesn't show a copy button while the answer is still coming", async () => {
+      const { user } = await openWorkspace();
+      api.delayResponse = 300; // time to look while the answer is on its way
+      await user.type(input(), "What is 1+1?{Enter}");
+      expect(await screen.findByText("Reading your materials…")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Copy answer" })).not.toBeInTheDocument();
+      expect(await screen.findByText(/1 \+ 1 equals 2/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Copy answer" })).toBeInTheDocument();
+    });
+
+    it("when the clipboard can't be used, says nothing was copied and shows the text to copy by hand", async () => {
+      const { user } = await openCodeChat();
+      vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+      document.execCommand = () => false;
+      await user.click(screen.getByRole("button", { name: "Copy code" }));
+
+      const dialog = await screen.findByRole("dialog", { name: "Copy manually" });
+      expect(within(dialog).getByLabelText("Text to copy")).toHaveValue(CODE);
+      expect(screen.getByRole("button", { name: "Copy code" })).toHaveTextContent("Copy");
+      expect(screen.queryByText("Code copied.")).not.toBeInTheDocument();
+      await user.click(within(dialog).getByRole("button", { name: "Done" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      delete document.execCommand;
+    });
+  });
+
   it("keeps a failed question with the server's error", async () => {
     // Same matcher as the fake backend's, so it replaces that handler.
     api.onPost(/\/chat\/sessions\/[^/]+\/messages$/).reply(503, { detail: "The AI assistant is currently unavailable. Please try again later" });
@@ -418,11 +491,15 @@ describe("chat-first workspace: notebook and viewer panels", () => {
     expect(panel).toHaveClass("cf-notebook--floating");
     expect(panel.style.width).toBe("480px");
     expect(await within(panel).findByRole("region", { name: "Notebook" })).toBeInTheDocument();
+    // The chat leaves the notebook's width free, so nothing of it is covered.
+    const main = document.querySelector(".cf__main");
+    expect(main.style.paddingRight).toBe("480px");
 
     const pin = within(panel).getByRole("button", { name: "Pin beside the chat" });
     expect(pin).toHaveAttribute("aria-pressed", "false");
     await user.click(pin);
     expect(panel).toHaveClass("cf-notebook--pinned");
+    expect(main.style.paddingRight).toBe(""); // pinned, it takes its room in the row
     expect(within(panel).getByRole("button", { name: "Float over the chat" })).toHaveAttribute("aria-pressed", "true");
 
     // Widest pinned: 1440 − 272 (menu) − 380 (chat) = 788.
@@ -433,12 +510,14 @@ describe("chat-first workspace: notebook and viewer panels", () => {
 
     await user.click(within(panel).getByRole("button", { name: "Float over the chat" }));
     expect(panel).toHaveClass("cf-notebook--floating");
+    expect(main.style.paddingRight).toBe("480px");
     await user.click(within(panel).getByRole("button", { name: "Close notebook" }));
     expect(notebookPanel()).not.toBeInTheDocument();
+    expect(main.style.paddingRight).toBe(""); // the chat takes its room back
     expect(screen.getByRole("button", { name: "Notebook" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("floats the notebook left of an open viewer, and pinning it makes room between chat and viewer", async () => {
+  it("puts the notebook left of an open viewer without covering the chat, floating or pinned", async () => {
     const { user } = await openWorkspace();
     await openChat(user, "Hunt's algorithm");
     await user.click(within(menu()).getByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" }));
@@ -448,10 +527,14 @@ describe("chat-first workspace: notebook and viewer panels", () => {
 
     await user.click(screen.getByRole("button", { name: "Notebook" }));
     const panel = notebookPanel();
-    expect(panel.style.right).toBe("642px");
+    // The viewer gives way to its minimum; the notebook takes what leaves the chat 380 px,
+    // and the chat reserves that width.
+    expect(viewer().style.width).toBe("360px");
+    expect(panel.style.right).toBe("360px");
+    expect(panel.style.width).toBe(`${1440 - 272 - 360 - 380}px`);
+    expect(document.querySelector(".cf__main").style.paddingRight).toBe(panel.style.width);
 
     await user.click(within(panel).getByRole("button", { name: "Pin beside the chat" }));
-    // The viewer gives way to its minimum; the notebook takes what leaves the chat 380 px.
     expect(viewer().style.width).toBe("360px");
     expect(panel.style.width).toBe(`${1440 - 272 - 360 - 380}px`);
   });
@@ -493,6 +576,27 @@ describe("chat-first workspace: notebook and viewer panels", () => {
     expect(viewer().style.width).toBe("392px");
     await user.dblClick(handle); // back to the automatic width
     expect(viewer().style.width).toBe("642px");
+  });
+
+  it("reflows the chat while the floating notebook is being resized, and keeps the draft and messages", async () => {
+    const { user } = await openWorkspace();
+    await openChat(user, "Hunt's algorithm");
+    await user.type(input(), "half-typed question");
+    await user.click(screen.getByRole("button", { name: "Notebook" }));
+    const main = document.querySelector(".cf__main");
+    const handle = within(notebookPanel()).getByRole("button", { name: /^Resize notebook/ });
+
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 960 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 900 });
+    expect(notebookPanel().style.width).toBe("540px");
+    expect(main.style.paddingRight).toBe("540px"); // during the drag, not only after it
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 10 }); // far left: the chat keeps 380 px
+    expect(notebookPanel().style.width).toBe(`${1440 - 272 - 380}px`);
+    expect(main.style.paddingRight).toBe(`${1440 - 272 - 380}px`);
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 10 });
+
+    expect(input()).toHaveValue("half-typed question");
+    expect(screen.getByText("Hunt's algorithm builds a decision tree greedily.")).toBeInTheDocument();
   });
 
   it("collapses the menu to the icon rail, which gives the viewer more room", async () => {
@@ -546,7 +650,7 @@ describe("chat-first workspace without the chat API", () => {
     renderApp("/workspace");
     expect(await screen.findByText("This server has no chat assistant yet.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Upload materials" })).toBeDisabled();
+    expect(within(menu()).getByRole("button", { name: "Upload a material to this chat" })).toBeDisabled();
   });
 });
 

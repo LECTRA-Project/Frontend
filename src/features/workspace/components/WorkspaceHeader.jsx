@@ -18,6 +18,13 @@ import { getInitials, useAuth } from "../../auth/authContext.js";
                                     where the menu is an overlay)
     notebookOpen, onToggleNotebook  shows / hides the notebook panel
 */
+function withoutExam(search) {
+  const params = new URLSearchParams(search);
+  params.delete("exam");
+  const rest = params.toString();
+  return rest ? `?${rest}` : "";
+}
+
 export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null, notebookOpen = false, onToggleNotebook = null }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -58,8 +65,9 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
             className="ws-header__exam"
             active={isExamOpen}
             aria-pressed={isExamOpen}
-            // The open chat and material (?chat=…&lecture=…) stay open across the Exam view.
-            onClick={() => navigate({ pathname: isExamOpen ? "/workspace" : "/workspace/exam", search: location.search })}
+            // The open chat and material (?chat=…&lecture=…) stay open across the Exam view;
+            // the exam (?exam=…) belongs to the Exam view only, which opens on its setup step.
+            onClick={() => navigate({ pathname: isExamOpen ? "/workspace" : "/workspace/exam", search: withoutExam(location.search) })}
           >
             <span className="ws-header__label">Exam</span>
           </Button>

@@ -20,9 +20,10 @@ import { useAuth } from "../auth/authContext.js";
 import { useNotebook } from "../notebook/useNotebook.js";
 import { usePythonKernel } from "../notebook/usePythonKernel.js";
 import { fetchLectureFile } from "../../api/services/lectures.js";
-import { MAX_MESSAGE_LENGTH } from "../../api/services/chat.js";
+import { getChatSession, MAX_MESSAGE_LENGTH } from "../../api/services/chat.js";
 import { cellContextLabel, displayChatTitle, isSameCellContext, withNotebookContext } from "../../services/notebook/cellContext.js";
 import { useLectureChat } from "./useLectureChat.js";
+import { examChatTitle, examQuestionMessage } from "../exam/askAboutAnswer.js";
 import {
   computeLayout,
   NOTEBOOK_DEFAULT,
@@ -97,7 +98,7 @@ function useElementWidth(ref) {
     the chat (left of the viewer), or is pinned beside the chat.
   - At phone width the menu is an overlay and the notebook and viewer open full-screen.
   - The open chat and the material in the viewer are in the URL:
-      /workspace?chat=<session id>&lecture=<lecture id>   (also /workspace/exam?…)
+      /workspace?chat=<session id>&lecture=<lecture id>   (also /workspace/exam?…&exam=<exam id>)
     so a link can be copied, reloaded or shared, Back goes to the previous chat or closes
     the viewer, and a reload keeps both. An id the student doesn't have shows a notice and
     is dropped from the URL. Home has neither.
@@ -137,7 +138,7 @@ export default function WorkspaceLayout() {
 
   const [sidebarOpen, setSidebarOpen] = useState(() => !matches(PHONE_QUERY));
   // Where the material in the viewer was opened (its id is in the URL):
-  // { lectureId, focus: { sourceType, sourceNumber } | null, cited, seq }
+  // { lectureId, focus: { sourceType, sourceNumber } | null, cited, citedIn, seq }
   const [viewer, setViewer] = useState(null);
   // null: the automatic width (viewerAutoWidth) until the student resizes the viewer.
   const [viewerWidth, setViewerWidth] = useState(null);
@@ -168,10 +169,16 @@ export default function WorkspaceLayout() {
   // Home has no chat or viewer: opening one from there goes to the chat.
   const pagePath = isHome ? "/workspace" : location.pathname;
   const currentChatId = isHome ? chat.activeId : urlChatId;
+  const urlExamId = searchParams.get("exam");
   const hrefFor = (path, { chatId = currentChatId, lectureId = null } = {}) => {
     const params = new URLSearchParams();
     if (chatId) params.set("chat", chatId);
     if (lectureId) params.set("lecture", lectureId);
+    // The exam view keeps its exam (?exam=) while chats and materials change around it. A
+    // chat opened from the exam results keeps it while that chat stays open, for "Back to
+    // exam results"; another chat drops it.
+    const keepExam = path === "/workspace/exam" || (path === "/workspace" && isChatRoute && chatId === urlChatId);
+    if (keepExam && urlExamId) params.set("exam", urlExamId);
     const search = params.toString();
     return search ? `${path}?${search}` : path;
   };
@@ -215,8 +222,8 @@ export default function WorkspaceLayout() {
   const clampNotebook = (width) => Math.round(Math.min(layout.notebookMax, Math.max(NOTEBOOK_MIN, width)));
 
   /* ---------- Viewer ---------- */
-  function openViewer(lectureId, focus = null, cited = false) {
-    setViewer((previous) => ({ lectureId, focus, cited, seq: (previous?.seq ?? 0) + 1 }));
+  function openViewer(lectureId, focus = null, cited = false, citedIn = "the answer") {
+    setViewer((previous) => ({ lectureId, focus, cited, citedIn, seq: (previous?.seq ?? 0) + 1 }));
     // Make room: the full menu does not fit beside the chat and the viewer on small screens.
     if (phone || !sidebarFits(rowWidth, true)) setSidebarOpen(false);
     // Another place in the same lecture doesn't add a history entry.
@@ -396,12 +403,13 @@ export default function WorkspaceLayout() {
     openViewer(material.id);
   }
 
-  function openSource(chip) {
+  // `citedIn` names where the source was cited, for the viewer's "Opened from a source in …".
+  function openSource(chip, citedIn = "the answer") {
     if (!findLecture(chip.lectureId)) {
       setNotice("That lecture is no longer in your materials.");
       return;
     }
-    openViewer(chip.lectureId, { sourceType: chip.sourceType, sourceNumber: chip.number }, true);
+    openViewer(chip.lectureId, { sourceType: chip.sourceType, sourceNumber: chip.number }, true, citedIn);
   }
 
   async function openInNotebook(material) {
@@ -502,6 +510,34 @@ export default function WorkspaceLayout() {
     return true;
   }
 
+  /* ---------- Asking about an exam answer ---------- */
+  /*
+    "Ask about this" on a checked exam answer: opens a chat and asks the prepared question.
+    The open chat (?chat=) is used when it has all of the exam's lectures (the student came
+    from it); otherwise a new chat is created with the exam's lectures, leaving out deleted
+    ones (lecture_id null). With none left the chat has no materials and the assistant
+    answers from general knowledge (marked as such). The chat keeps ?exam= for "Back to exam
+    results". Rejects with the error to show on the card when the chat can't be created.
+  */
+  async function askAboutExamAnswer(exam, question) {
+    const content = examQuestionMessage(question);
+    if (content.length > MAX_MESSAGE_LENGTH) throw new Error("This question is too long to send to the chat.");
+    const lectureIds = [...new Set((exam.lectures ?? []).map((item) => item.lecture_id).filter(Boolean))];
+    // The open chat; read from the server if it isn't loaded yet (clicked right after a reload).
+    let open = urlChatId && session?.id === urlChatId ? session : null;
+    if (urlChatId && !open) open = await getChatSession(urlChatId).catch(() => null);
+    const reuse = open && lectureIds.length > 0 && lectureIds.every((id) => open.lectures?.some((item) => item.id === id));
+    const target = reuse ? open : await chat.createChat(lectureIds, examChatTitle(question));
+    setTooLong(null);
+    // The URL is set here, so the "?chat= changed" effect doesn't open the chat a second time.
+    appliedChat.current = target.id;
+    const params = new URLSearchParams({ chat: target.id });
+    if (reuse && urlLectureId) params.set("lecture", urlLectureId);
+    params.set("exam", exam.id);
+    navigate(`/workspace?${params}`);
+    chat.askIn(target.id, { question: content, content });
+  }
+
   /* ---------- Keyboard ---------- */
   // Escape closes the overlay menu (not while a dialog is open — Escape is theirs then).
   useEffect(() => {
@@ -524,7 +560,7 @@ export default function WorkspaceLayout() {
     materials: chatMaterials,
     materialType,
     lectureTitle: (id) => findLecture(id)?.title,
-    onOpenSource: openSource,
+    onOpenSource: (chip) => openSource(chip),
     onUploadClick: () => setUploadTarget("chat"),
     // The scope chip: show the chat's materials (opening the menu if needed).
     onOpenMenu: () => {
@@ -549,6 +585,23 @@ export default function WorkspaceLayout() {
     onAddCell: addCellToDraft,
     onRemoveCell: removeCellFromDraft,
     announcement: draftAnnouncement,
+    // Opened from the exam results ("Ask about this"): the way back to them.
+    examLink: isChatRoute && urlExamId ? hrefFor("/workspace/exam", { lectureId: urlLectureId }) : null,
+  };
+
+  // The exam view: materials of the open chat (preselected) or the library, and whose
+  // answers on this device to use. The open chat is still loading while ?chat= has no session.
+  const examView = {
+    userKey,
+    chatLectures: urlChatId ? chatLectures : [],
+    library: library.lectures,
+    loading: library.loading || (Boolean(urlChatId) && !session && chatAvailable !== false && !chat.sessionsError),
+    sourceType: (id) => findLecture(id)?.source_type ?? "page",
+    // A source of a checked exam question ({ lecture_id, page_number, source_type }).
+    onOpenSource: (source) =>
+      openSource({ lectureId: source.lecture_id, sourceType: source.source_type ?? "page", number: source.page_number }, "the exam results"),
+    // "Ask about this" on a checked answer (only with the chat assistant).
+    onAskAbout: chatAvailable === true ? askAboutExamAnswer : null,
   };
 
   const home = {
@@ -623,6 +676,7 @@ export default function WorkspaceLayout() {
           }
           initialPage={pdfPage}
           cited={opened.cited && opened.focus?.sourceType === "page"}
+          citedIn={opened.citedIn}
           onCollapse={() => closeViewer()}
           widen={viewerWiden}
           switcher={notebookOpen && !phone ? switcher("notebook") : null}
@@ -645,6 +699,7 @@ export default function WorkspaceLayout() {
           lecture={viewerMaterial.lecture}
           focus={opened.focus}
           cited={opened.cited}
+          citedIn={opened.citedIn}
           onRetry={() => handleRetry(viewerMaterial)}
           onClose={() => closeViewer()}
           widen={viewerWiden}
@@ -757,8 +812,9 @@ export default function WorkspaceLayout() {
           available={chatAvailable !== false}
         />
 
-        <main className="cf__main">
-          <Outlet context={{ chatView, home }} />
+        {/* A floating notebook beside the chat: the chat reflows into the room left of it. */}
+        <main className="cf__main" style={layout.chatInset && !phone ? { paddingRight: layout.chatInset } : undefined}>
+          <Outlet context={{ chatView, home, examView }} />
         </main>
 
         {notebookOpen && (
