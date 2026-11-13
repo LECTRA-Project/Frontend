@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import MockAdapter from "axios-mock-adapter";
 
@@ -48,15 +48,4 @@ export function renderApp(path = "/") {
     </AuthProvider>
   );
   return { router, ...utils };
-}
-
-/*
-  Opens the Course materials menu (a drawer, closed by default) from the header's menu
-  button, unless it is already open. Returns the menu's region.
-*/
-export async function openMaterialsMenu() {
-  const open = screen.queryByRole("region", { name: "Course materials" });
-  if (open) return open;
-  fireEvent.click(await screen.findByRole("button", { name: "Show course materials" }));
-  return screen.findByRole("region", { name: "Course materials" });
 }

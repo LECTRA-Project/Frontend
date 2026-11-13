@@ -9,22 +9,21 @@ import { getInitials, useAuth } from "../../auth/authContext.js";
 
 /*
   The top bar shown on the workspace and on the profile pages:
-  menu button (workspace only) and LECTRA logo on the left, Exam button and the student
-  avatar on the right. The logo goes to Home; Home has no Exam button.
+  menu button (workspace, phone width only) and LECTRA logo on the left; the Notebook
+  toggle (workspace only), the Exam button and the student avatar on the right. The logo
+  goes to Home; Home has no Exam button.
 
   Props (workspace only):
-    materialsOpen      whether the Course materials menu is shown
-    onToggleMaterials  shows / hides it (no menu button without it)
+    menuOpen, onToggleMenu          the chat menu (the button is only shown on phones,
+                                    where the menu is an overlay)
+    notebookOpen, onToggleNotebook  shows / hides the notebook panel
 */
-export default function WorkspaceHeader({
-  materialsOpen = false,
-  onToggleMaterials = null,
-}) {
+export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null, notebookOpen = false, onToggleNotebook = null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const [menuOpenProfile, setProfileOpen] = useState(false);
+  const closeMenu = useCallback(() => setProfileOpen(false), []);
 
   const isExamOpen = location.pathname === "/workspace/exam";
   const isHome = location.pathname === "/workspace/home";
@@ -32,37 +31,37 @@ export default function WorkspaceHeader({
   return (
     <header className="ws-header">
       <div className="ws-header__start">
-        {onToggleMaterials && (
+        {onToggleMenu && (
           <IconButton
             icon="menu"
-            label={
-              materialsOpen ? "Hide course materials" : "Show course materials"
-            }
-            aria-expanded={materialsOpen}
-            aria-controls="course-materials"
-            onClick={onToggleMaterials}
+            className="ws-header__menu"
+            label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            aria-controls="chat-menu"
+            onClick={onToggleMenu}
           />
         )}
-        <Link
-          to="/workspace/home"
-          className="ws-header__home"
-          aria-label="LECTRA — go to home"
-        >
+        <Link to="/workspace/home" className="ws-header__home" aria-label="LECTRA — go to home">
           <Brand />
         </Link>
       </div>
 
       <div className="ws-header__actions">
+        {onToggleNotebook && (
+          <Button icon="code" active={notebookOpen} aria-pressed={notebookOpen} onClick={onToggleNotebook}>
+            <span className="ws-header__label">Notebook</span>
+          </Button>
+        )}
         {!isHome && (
           <Button
             icon="graduation"
+            className="ws-header__exam"
             active={isExamOpen}
             aria-pressed={isExamOpen}
-            onClick={() =>
-              navigate(isExamOpen ? "/workspace" : "/workspace/exam")
-            }
+            // The open chat and material (?chat=…&lecture=…) stay open across the Exam view.
+            onClick={() => navigate({ pathname: isExamOpen ? "/workspace" : "/workspace/exam", search: location.search })}
           >
-            Exam
+            <span className="ws-header__label">Exam</span>
           </Button>
         )}
 
@@ -72,12 +71,12 @@ export default function WorkspaceHeader({
             className="avatar ws-header__avatar"
             aria-label="Open profile menu"
             aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
+            aria-expanded={menuOpenProfile}
+            onClick={() => setProfileOpen((open) => !open)}
           >
             {getInitials(user)}
           </button>
-          {menuOpen && <ProfileMenu onClose={closeMenu} />}
+          {menuOpenProfile && <ProfileMenu onClose={closeMenu} />}
         </div>
       </div>
     </header>

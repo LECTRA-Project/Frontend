@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useOutletContext } from "react-router-dom";
-
 import Button from "../../../components/ui/Button.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
@@ -12,23 +10,16 @@ import { createCellContext, writeCellDrag } from "../../../services/notebook/cel
 import "../../notebook/notebook.css";
 
 /*
-  Centre view (default): the Jupyter-style Python notebook.
+  The Jupyter-style Python notebook, shown in the workspace's notebook panel (opened with
+  the Notebook button in the header).
 
-  The notebook state, its run queue and the Python kernel live in WorkspaceLayout
-  (passed in through the Outlet context), so cells, outputs and variables survive
-  switching to the Exam view and back. Python runs for real, in a Web Worker
-  (services/python/), and the notebook is saved in this browser only.
+  The notebook state, its run queue and the Python kernel live in WorkspaceLayout, so
+  cells, outputs and variables survive closing the panel and switching to the Exam view
+  and back. Python runs for real, in a Web Worker (services/python/), and the notebook is
+  saved in this browser only. `panelActions` are the panel's own buttons (pin, widen,
+  close), shown in the toolbar.
 */
-export default function NotebookPage() {
-  const {
-    notebookState,
-    kernel,
-    kernelState,
-    assistantDraft,
-    notebookHandle = null,
-    notebookCollapse = null, // { collapsed, mode: "rail" | "bar", onToggle } from the workspace
-  } = useOutletContext();
-  const collapsed = Boolean(notebookCollapse?.collapsed);
+export default function NotebookPage({ notebookState, kernel, kernelState, assistantDraft, panelActions = null }) {
   const { notebook, runState, saveInfo, notice, lastRunFailed, pendingOpen, actions } = notebookState;
   const { cells } = notebook;
 
@@ -225,20 +216,7 @@ export default function NotebookPage() {
   const kernelUnavailable = kernelState.status === "unavailable";
 
   return (
-    /*
-      Collapsing only hides the cells: everything stays mounted, so code, outputs, editor
-      state, the run queue and the Python kernel are exactly as they were when expanded.
-    */
-    <section
-      className={[
-        "panel center-panel notebook",
-        collapsed ? "notebook--collapsed" : "",
-        collapsed && notebookCollapse.mode === "rail" ? "notebook--rail" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      aria-label="Notebook"
-    >
+    <section className="panel center-panel notebook" aria-label="Notebook">
       <NotebookToolbar
         title={notebook.title}
         saveInfo={saveInfo}
@@ -257,8 +235,7 @@ export default function NotebookPage() {
         onNew={() => (cells.length > 0 ? setConfirm({ kind: "new" }) : actions.newNotebook())}
         onImport={() => fileInputRef.current?.click()}
         onDownload={download}
-        handle={notebookHandle}
-        collapse={notebookCollapse}
+        actions={panelActions}
       />
       <input
         ref={fileInputRef}
@@ -273,7 +250,7 @@ export default function NotebookPage() {
         }}
       />
 
-      <div className="notebook__body" id="notebook-content" hidden={collapsed}>
+      <div className="notebook__body">
         {kernelUnavailable && (
           <div className="notebook__notice notebook__notice--error" role="alert">
             <span>{kernelState.error}</span>

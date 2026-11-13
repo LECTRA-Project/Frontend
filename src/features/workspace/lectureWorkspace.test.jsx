@@ -1,242 +1,169 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER, openMaterialsMenu } from "../../test/helpers.jsx";
+import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
+import { daysAgo, installChatBackend, lectureFixture } from "../../test/chatBackend.js";
 
+/*
+  Lecture materials in the chat-first workspace: the chat's materials in the menu, their
+  processing status, uploads, managing them in the library (rename, delete), and what the
+  viewer shows for each type — on the AI backend and on a backend without AI processing.
+*/
 const token = makeToken();
 
-function lecture(overrides) {
-  return {
-    id: "l1",
-    user_id: TEST_USER.id,
-    title: "Search algorithms",
-    original_filename: "search.pdf",
-    file_type: "application/pdf",
-    file_size: 100,
-    s3_url: "local://lectures/u/1/search.pdf",
-    uploaded_at: "2026-11-01T10:00:00Z",
-    updated_at: "2026-11-01T10:00:00Z",
-    description: null,
-    course: "AI Basics",
-    processing_status: "completed",
-    processing_error: null,
-    processing_attempts: 1,
-    processed_at: "2026-11-01T10:00:05Z",
-    content_version: 1,
-    chunk_count: 4,
-    source_count: 12,
-    source_type: "page",
-    ...overrides,
-  };
-}
-
-const DECK = lecture({
-  id: "l2",
-  title: "Game playing",
-  original_filename: "games.pptx",
-  file_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  source_type: "slide",
-  source_count: 3,
+const PDF = lectureFixture("l1", "Search algorithms", { count: 12 });
+const DECK = lectureFixture("l2", "Game playing", {
+  fileType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  count: 3,
 });
-const FAILED = lecture({
-  id: "l3",
-  title: "Scanned notes",
-  original_filename: "scan.pdf",
-  processing_status: "failed",
-  processing_error: "No text could be extracted from this file.",
-});
+const FAILED = lectureFixture("l3", "Scanned notes", { status: "failed", count: 0 });
 
-describe("lecture workspace", () => {
+describe("lecture materials in a chat", () => {
   let api;
-  let lectures;
+  let backend;
 
   beforeEach(() => {
     api = mockApi();
-    lectures = [lecture(), DECK, FAILED];
-    api.onGet("/users/me").reply(200, ok(TEST_USER));
-    api.onGet("/student_profile/lectures").reply(() => [
-      200,
-      ok({ lectures, page: 1, page_size: 100, total: lectures.length, total_pages: 1 }),
-    ]);
+    backend = installChatBackend(api, {
+      lectures: [PDF, DECK, FAILED],
+      sessions: [{ id: "s-1", title: "Week 2", lectureIds: [PDF.id, DECK.id, FAILED.id], updated_at: daysAgo(0) }],
+    });
     saveToken(token);
   });
 
-  afterEach(() => {
-    api.restore();
-    localStorage.clear();
-  });
+  afterEach(() => api.restore());
 
-  async function openWorkspace() {
+  async function openChat() {
     const user = userEvent.setup();
     renderApp("/workspace");
-    const panel = await openMaterialsMenu();
-    await within(panel).findByText("Search algorithms");
-    return { user, panel };
+    const menu = await screen.findByRole("navigation", { name: "Chats and this chat's materials" });
+    await user.click(await within(menu).findByRole("button", { name: "Week 2" }));
+    const list = within(menu).getByRole("list", { name: "Materials in this chat" });
+    await within(list).findByText("Search algorithms");
+    return { user, menu, list };
   }
 
-  it("lists backend lectures with their type, size and processing status", async () => {
-    const { panel } = await openWorkspace();
-    expect(within(panel).getAllByText("PDF · 12 pages · AI Basics")).toHaveLength(2);
-    expect(within(panel).getByText("PPTX · 3 slides · AI Basics")).toBeInTheDocument();
-    expect(within(panel).getByText("Failed")).toBeInTheDocument();
-    expect(within(panel).getByText("No text could be extracted from this file.")).toBeInTheDocument();
+  it("lists the chat's materials with their type, size and processing status", async () => {
+    const { list } = await openChat();
+    expect(within(list).getByText("PDF · 12 pages")).toBeInTheDocument();
+    expect(within(list).getByText("PPTX · 3 slides")).toBeInTheDocument();
+    expect(within(list).getByText(/Failed/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "3 materials" })).toBeInTheDocument(); // the composer's scope chip
   });
 
-  it("retries a failed lecture", async () => {
-    api.onPost("/student_profile/lectures/l3/reprocess").reply(() => {
-      return [202, ok({ ...FAILED, processing_status: "pending", processing_error: null })];
-    });
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Retry processing Scanned notes" }));
-    expect(await within(panel).findByText("Processing")).toBeInTheDocument();
+  it("retries a failed lecture from its row in the menu", async () => {
+    const { user, list } = await openChat();
+    await user.click(within(list).getByRole("button", { name: "Retry processing Scanned notes" }));
+    await waitFor(() => expect(within(list).queryByText(/Failed/)).not.toBeInTheDocument());
+    expect(within(list).queryByRole("button", { name: /^Retry processing/ })).not.toBeInTheDocument();
+    expect(api.history.post.map((request) => request.url)).toContain("/student_profile/lectures/l3/reprocess");
   });
 
-  it("uploads files, shows them as processing and polls until completed", async () => {
+  it("uploads into the chat with progress, then shows the new lecture as processing", async () => {
     api.onPost("/student_profile/upload-lecture").reply((config) => {
-      const created = lecture({
-        id: "l9",
-        title: config.data.get("title"),
-        course: config.data.get("course"),
-        original_filename: "neural_nets.pdf",
-        processing_status: "pending",
-        source_count: null,
-      });
-      lectures = [created, ...lectures];
+      expect([...config.data.keys()]).toEqual(["title", "file"]); // no course or description
+      const created = lectureFixture("l9", config.data.get("title"), { status: "pending", count: 0 });
+      backend.lectures = [created, ...backend.lectures];
       return [201, ok(created)];
     });
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Upload materials" }));
+    const { user, menu, list } = await openChat();
+    await user.click(within(menu).getByRole("button", { name: "Upload a material to this chat" }));
     const dialog = screen.getByRole("dialog", { name: "Upload lecture materials" });
+    expect(within(dialog).getByText(/added to this chat/)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/Course/)).not.toBeInTheDocument();
     await user.upload(within(dialog).getByTestId("upload-input"), new File(["%PDF-"], "neural_nets.pdf"));
-    await user.type(within(dialog).getByLabelText("Course (optional)"), "Deep Learning");
     await user.click(within(dialog).getByRole("button", { name: "Upload" }));
 
-    expect(await within(panel).findByText("neural nets")).toBeInTheDocument();
-    expect(within(panel).getByText("Processing")).toBeInTheDocument();
-    expect(within(panel).getByText("PDF · Deep Learning")).toBeInTheDocument();
+    expect(await within(list).findByText("neural nets")).toBeInTheDocument();
+    expect(within(list).getByText(/Processing/)).toBeInTheDocument();
+    expect(JSON.parse(api.history.post.find((request) => request.url.endsWith("/s-1/lectures")).data)).toEqual({ lecture_id: "l9" });
   });
 
-  it("rejects unsupported file types in the upload dialog", async () => {
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Upload materials" }));
+  it("offers exactly the file types the backend accepts: PDF, PPTX, IPYNB and images, not Markdown", async () => {
+    const { user, menu } = await openChat();
+    await user.click(within(menu).getByRole("button", { name: "Upload a material to this chat" }));
     const dialog = screen.getByRole("dialog", { name: "Upload lecture materials" });
-    await userEvent.setup({ applyAccept: false }).upload(within(dialog).getByTestId("upload-input"), new File(["x"], "virus.exe"));
-    expect(within(dialog).getByRole("alert")).toHaveTextContent("virus.exe");
+    const input = within(dialog).getByTestId("upload-input");
+    expect(input).toHaveAttribute("accept", ".pdf,.pptx,.ipynb,.png,.jpg,.jpeg,.gif,.webp");
+    expect(within(dialog).getByText(/Supported: PDF, PPTX, IPYNB and images/)).toBeInTheDocument();
+
+    await userEvent.setup({ applyAccept: false }).upload(input, [new File(["x"], "virus.exe"), new File(["# x"], "notes.md")]);
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("virus.exe, notes.md");
     expect(within(dialog).getByRole("button", { name: "Upload" })).toBeDisabled();
+
+    await user.upload(input, new File(["png"], "whiteboard.png", { type: "image/png" }));
+    expect(within(dialog).getByRole("list", { name: "Selected files" })).toHaveTextContent("whiteboard.png");
+    expect(within(dialog).getByRole("button", { name: "Upload" })).toBeEnabled();
   });
 
-  it("edits only the changed metadata", async () => {
-    api.onPatch("/student_profile/lectures/l1").reply((config) => {
-      expect(JSON.parse(config.data)).toEqual({ title: "Search (week 3)" });
-      return [200, ok(lecture({ title: "Search (week 3)" }))];
-    });
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Edit Search algorithms" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit lecture" });
-    const title = within(dialog).getByLabelText("Title");
-    await user.clear(title);
-    await user.type(title, "Search (week 3)");
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    expect(await within(panel).findByText("Search (week 3)")).toBeInTheDocument();
+  it("renames a material from its ⋯ menu, sending only the new title", async () => {
+    const { user, list } = await openChat();
+    await user.click(within(list).getByRole("button", { name: "More actions for Search algorithms" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename lecture" });
+    const field = within(dialog).getByLabelText("Title");
+    expect(field).toHaveValue("Search algorithms");
+    await user.clear(field);
+    await user.type(field, "  Uninformed search  ");
+    await user.click(within(dialog).getByRole("button", { name: "Rename" }));
+
+    expect(await within(list).findByText("Uninformed search")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const patch = api.history.patch.find((request) => request.url === "/student_profile/lectures/l1");
+    expect(JSON.parse(patch.data)).toEqual({ title: "Uninformed search" });
   });
 
-  it("replaces a lecture file through multipart PATCH", async () => {
-    api.onPatch("/student_profile/lectures/l2").reply((config) => {
-      expect(config.data.get("file").name).toBe("games_v2.pptx");
-      return [200, ok({ ...DECK, original_filename: "games_v2.pptx", processing_status: "pending", content_version: 2 })];
-    });
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Edit Game playing" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit lecture" });
-    await user.upload(within(dialog).getByTestId("replace-file-input"), new File(["x"], "games_v2.pptx"));
-    expect(within(dialog).getByText(/processed again/)).toBeInTheDocument();
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(within(panel).getAllByText("Processing").length).toBe(1));
+  it("keeps the rename dialog open with the server's error", async () => {
+    api.onPatch(/\/student_profile\/lectures\/[^/]+$/).reply(500, { status: false, message: "The lecture could not be renamed.", data: null });
+    const { user, list } = await openChat();
+    await user.click(within(list).getByRole("button", { name: "More actions for Search algorithms" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename lecture" });
+    await user.type(within(dialog).getByLabelText("Title"), " 2");
+    await user.click(within(dialog).getByRole("button", { name: "Rename" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("The lecture could not be renamed.");
+    expect(within(list).getByText("Search algorithms")).toBeInTheDocument();
   });
 
-  it("deletes a lecture after confirmation", async () => {
-    api.onDelete("/student_profile/lectures/l2").reply(() => {
-      lectures = lectures.filter((item) => item.id !== "l2");
-      return [200, ok({ id: "l2" })];
-    });
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Delete Game playing" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Delete lecture?" })).getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(within(panel).queryByText("Game playing")).not.toBeInTheDocument());
+  it("deletes a material from the library after confirmation: it leaves the chat and the viewer", async () => {
+    const { user, list } = await openChat();
+    await user.click(within(list).getByRole("button", { name: "Open Game playing beside the chat" }));
+    await screen.findByRole("region", { name: "Lecture: Game playing" });
+
+    await user.click(within(list).getByRole("button", { name: "More actions for Game playing" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete from library" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete from library?" });
+    expect(dialog).toHaveTextContent("removed from every chat that uses it");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(api.history.delete).toHaveLength(0);
+
+    await user.click(within(list).getByRole("button", { name: "More actions for Game playing" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete from library" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete from library" }));
+
+    await waitFor(() => expect(within(list).queryByText("Game playing")).not.toBeInTheDocument());
+    expect(screen.queryByRole("region", { name: "Lecture: Game playing" })).not.toBeInTheDocument();
+    expect(api.history.delete.map((request) => request.url)).toEqual(["/student_profile/lectures/l2"]);
+    expect(screen.getByText("Lecture deleted.")).toBeInTheDocument();
+    expect(backend.lectures.map((item) => item.id)).toEqual(["l1", "l3"]);
   });
 
-  it("answers from the materials with sources that open the cited slide", async () => {
-    api.onPost("/student_profile/assistant/ask").reply((config) => {
-      expect(JSON.parse(config.data).question).toBe("How does minimax choose a move?");
-      return [
-        200,
-        ok({
-          found: true,
-          answer: "It picks the move with the best worst case [S1].",
-          references: [
-            {
-              id: "S1", lecture_id: "l2", lecture_title: "Game playing", file_type: DECK.file_type,
-              source_type: "slide", source_number: 2, source_label: null, location: "Slide 2",
-              snippet: "Minimax chooses the move with the best worst case",
-            },
-          ],
-          searched_chunks: 8,
-        }),
-      ];
-    });
-    api.onGet("/student_profile/lectures/l2/content").reply(200, ok({
-      lecture: DECK,
-      sections: [
-        { source_type: "slide", source_number: 1, source_label: null, location: "Slide 1", text: "Games" },
-        { source_type: "slide", source_number: 2, source_label: null, location: "Slide 2", text: "Minimax chooses the move with the best worst case" },
-      ],
-      page: 1, page_size: 1000, total: 2, total_pages: 1,
-    }));
-
-    const { user } = await openWorkspace();
-    const assistant = screen.getByRole("region", { name: "Study assistant" });
-    expect(within(assistant).getByText("2 materials")).toBeInTheDocument();
-    await user.type(within(assistant).getByLabelText("Message to the study assistant"), "How does minimax choose a move?");
-    await user.click(within(assistant).getByRole("button", { name: "Send message" }));
-
-    expect(await within(assistant).findByText(/best worst case/)).toBeInTheDocument();
-    await user.click(within(assistant).getByRole("button", { name: /Game playing — Slide 2/ }));
-
-    const viewer = await screen.findByRole("region", { name: "Lecture: Game playing" });
-    const slide = await within(viewer).findByText("Minimax chooses the move with the best worst case");
-    expect(slide.closest(".source-block")).toHaveClass("source-block--focused");
-  });
-
-  it("says clearly when the materials do not contain the answer", async () => {
-    api.onPost("/student_profile/assistant/ask").reply(200, ok({
-      found: false,
-      answer: "I couldn't find the answer to this in your uploaded lecture materials.",
-      references: [],
-      searched_chunks: 8,
-    }));
-    const { user } = await openWorkspace();
-    const assistant = screen.getByRole("region", { name: "Study assistant" });
-    await user.type(within(assistant).getByLabelText("Message to the study assistant"), "Capital of France?");
-    await user.click(within(assistant).getByRole("button", { name: "Send message" }));
-    expect(await within(assistant).findByText(/couldn't find the answer/)).toBeInTheDocument();
-    expect(within(assistant).queryByRole("list", { name: "Sources" })).not.toBeInTheDocument();
-  });
-
-  it("shows assistant errors from the backend", async () => {
-    api.onPost("/student_profile/assistant/ask").reply(503, {
-      status: false, message: "The AI assistant is not configured on the server (no LLM API key).", data: null,
-    });
-    const { user } = await openWorkspace();
-    const assistant = screen.getByRole("region", { name: "Study assistant" });
-    await user.type(within(assistant).getByLabelText("Message to the study assistant"), "Hi");
-    await user.click(within(assistant).getByRole("button", { name: "Send message" }));
-    expect(await within(assistant).findByText(/not configured on the server/)).toBeInTheDocument();
+  it("shows slides as their extracted text, slide by slide", async () => {
+    const { user, list } = await openChat();
+    await user.click(within(list).getByRole("button", { name: "Open Game playing beside the chat" }));
+    const view = await screen.findByRole("region", { name: "Lecture: Game playing" });
+    expect(await within(view).findByText("Slide 2 of Game playing")).toBeInTheDocument();
+    expect(view.querySelector(".viewer__position")).toHaveTextContent("Slide 1");
+    expect(within(view).getByRole("button", { name: "Previous slide" })).toBeDisabled();
+    await user.click(within(view).getByRole("button", { name: "Next slide" }));
+    expect(view.querySelector(".viewer__position")).toHaveTextContent("Slide 2");
+    // No banner: it was opened from the menu, not from a source.
+    expect(within(view).queryByText(/Opened from a source/)).not.toBeInTheDocument();
   });
 });
 
-describe("lecture workspace on a backend without AI processing (e.g. today's Render deployment)", () => {
+describe("lecture materials on a backend without AI processing (e.g. today's Render deployment)", () => {
   let api;
   // Exactly what that backend returns: no processing fields, a public S3 URL.
   const legacy = {
@@ -253,87 +180,57 @@ describe("lecture workspace on a backend without AI processing (e.g. today's Ren
     api.onGet("/users/me").reply(200, ok(TEST_USER));
     api.onGet("/student_profile/lectures/00000000-0000-0000-0000-000000000000").reply(405, { status: false, message: "Method Not Allowed", data: null });
     api.onGet("/student_profile/lectures").reply(200, ok({ lectures: [legacy, legacyPdf], page: 1, page_size: 100, total: 2, total_pages: 1 }));
+    api.onGet("/student_profile/chat/sessions").reply(404, { detail: "Not Found" });
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
     saveToken(token);
   });
 
   afterEach(() => {
     api.restore();
-    localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
-  async function openWorkspace() {
+  async function openHome() {
     const user = userEvent.setup();
-    renderApp("/workspace");
-    const panel = await openMaterialsMenu();
-    await within(panel).findByText("Intro slides");
-    const assistant = screen.getByRole("region", { name: "Study assistant" });
-    await within(assistant).findByText("Assistant not available yet");
-    return { user, panel, assistant };
+    renderApp("/workspace/home");
+    const recent = await screen.findByRole("region", { name: "Recent uploads" });
+    await within(recent).findByText("Intro slides");
+    return { user, recent };
   }
 
-  it("lists lectures without status badges and says the assistant is not available", async () => {
-    const { panel, assistant } = await openWorkspace();
-    expect(within(panel).getByText("PPTX")).toBeInTheDocument();
-    expect(within(panel).queryByText("Processing")).not.toBeInTheDocument();
-    expect(within(assistant).getByText("Not available")).toBeInTheDocument();
-    expect(within(assistant).getByRole("button", { name: "Send message" })).toBeDisabled();
-    expect(api.history.post.filter((r) => r.url.includes("assistant"))).toHaveLength(0);
-  });
-
-  it("opens a PDF straight from its S3 URL", async () => {
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: /^Reading/ }));
-    const frame = await screen.findByTitle("Reading");
+  it("opens a PDF straight from its S3 URL beside the chat, which says it can't answer here", async () => {
+    const { user, recent } = await openHome();
+    await user.click(within(recent).getByRole("button", { name: /^Reading/ }));
+    const frame = await waitFor(() => {
+      const element = document.querySelector('iframe[title="Reading"]');
+      expect(element).not.toBeNull();
+      return element;
+    });
     expect(frame.getAttribute("src")).toMatch(/^https:\/\/bucket\.s3.+reading\.pdf#page=1/);
     expect(api.history.get.some((r) => r.url.endsWith("/file"))).toBe(false);
+    expect(await screen.findByText("This server has no chat assistant yet.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
   });
 
-  it("shows PowerPoint slides in the Office Online viewer, with a download", async () => {
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: /^Intro slides/ }));
+  it("shows PowerPoint slides in the Office Online viewer beside the chat, with a download", async () => {
+    const { user, recent } = await openHome();
+    await user.click(within(recent).getByRole("button", { name: /^Intro slides/ }));
     const viewer = await screen.findByRole("region", { name: "Lecture: Intro slides" });
     expect(within(viewer).getByRole("link", { name: "Download" })).toHaveAttribute("href", legacy.s3_url);
     const frame = within(viewer).getByTitle("Slides: Intro slides");
     expect(frame).toHaveAttribute("src", `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(legacy.s3_url)}`);
     expect(within(viewer).queryByText(/can’t be previewed/)).not.toBeInTheDocument();
-
-    // Like a PDF: beside the notebook (which stays visible), movable and collapsible.
-    expect(document.querySelector('[data-section="pdf"]')).toContainElement(viewer);
-    expect(screen.getByRole("region", { name: "Notebook" })).toBeVisible();
-    expect(within(viewer).getByRole("button", { name: "Move PDF viewer" })).toBeInTheDocument();
-    await user.click(within(viewer).getByRole("button", { name: "Collapse lecture viewer" }));
-    expect(viewer).toHaveClass("lecture-view--collapsed", "lecture-view--rail");
-    expect(frame).not.toBeVisible();
-    await user.click(within(viewer).getByRole("button", { name: "Expand lecture viewer" }));
-    expect(within(viewer).getByTitle("Slides: Intro slides")).toBe(frame); // not reloaded
+    expect(screen.getByRole("complementary", { name: "Intro slides, open beside the chat" })).toContainElement(viewer);
     expect(api.history.get.some((r) => r.url.endsWith("/content"))).toBe(false);
   });
 
-  it("uploads only the file types that backend accepts, without a course field", async () => {
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Upload materials" }));
+  it("offers the same file types as the AI backend, without a course field", async () => {
+    const { user, recent } = await openHome();
+    await user.click(within(recent).getByRole("button", { name: "Upload materials" }));
     const dialog = screen.getByRole("dialog", { name: "Upload lecture materials" });
-    expect(within(dialog).queryByLabelText("Course (optional)")).not.toBeInTheDocument();
-    expect(within(dialog).getByTestId("upload-input")).toHaveAttribute("accept", ".pdf,.pptx,.ipynb");
+    expect(within(dialog).queryByLabelText(/Course/)).not.toBeInTheDocument();
+    expect(within(dialog).getByTestId("upload-input")).toHaveAttribute("accept", ".pdf,.pptx,.ipynb,.png,.jpg,.jpeg,.gif,.webp");
     await userEvent.setup({ applyAccept: false }).upload(within(dialog).getByTestId("upload-input"), new File(["# x"], "notes.md"));
     expect(within(dialog).getByRole("alert")).toHaveTextContent("notes.md");
-  });
-
-  it("only renames, sending just the title", async () => {
-    api.onPatch("/student_profile/lectures/old-1").reply((config) => {
-      expect(JSON.parse(config.data)).toEqual({ title: "Intro (week 1)" });
-      return [200, ok({ ...legacy, title: "Intro (week 1)" })];
-    });
-    const { user, panel } = await openWorkspace();
-    await user.click(within(panel).getByRole("button", { name: "Edit Intro slides" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit lecture" });
-    expect(within(dialog).queryByLabelText("Course")).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: "Replace file" })).not.toBeInTheDocument();
-    expect(within(dialog).getByText(/supports renaming only/)).toBeInTheDocument();
-    const title = within(dialog).getByLabelText("Title");
-    await user.clear(title);
-    await user.type(title, "Intro (week 1)");
-    await user.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    expect(await within(panel).findByText("Intro (week 1)")).toBeInTheDocument();
   });
 });

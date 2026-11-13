@@ -2,30 +2,29 @@ import { useEffect, useState } from "react";
 import "katex/dist/katex.min.css";
 
 import Icon from "../../components/ui/Icon.jsx";
-import IconButton from "../../components/ui/IconButton.jsx";
 import { renderMarkdown } from "../../services/notebook/markdown.js";
 import { formatFileSize, groupOf } from "../../services/materials/materialTypes.js";
+import { ViewerHead, ZoomControls } from "./ViewerChrome.jsx";
 import "../notebook/notebook.css"; // .markdown-body styles
 import "./files.css";
 
+const ZOOM_MIN = 50;
+const ZOOM_MAX = 200;
+
 /*
-  Centre-panel viewer for uploaded notes (.md) and slides (.pptx).
-  Markdown is rendered (sanitised). Browsers cannot display PowerPoint files, so slides
-  show that plainly with a download link instead of a fake preview.
+  Viewer for Markdown notes beside the chat: the file is rendered (sanitised), with zoom,
+  download and open in a new tab. Slides, notebooks and images use LectureContentPanel.
 
   Props:
-    material    { name, type, size, file, url }
+    material    { name, type: "notes", size, file, url }
     onCollapse  closes the viewer
-    handle      optional grip for moving it in the workspace (SectionHandle)
-    collapse    optional { collapsed, mode: "rail" | "bar", onToggle }, like PdfViewerPanel
 */
-export default function MaterialViewerPanel({ material, onCollapse, handle = null, collapse = null }) {
-  const collapsed = Boolean(collapse?.collapsed);
+export default function MaterialViewerPanel({ material, onCollapse }) {
   const group = groupOf(material.type);
   const [markdown, setMarkdown] = useState({ html: null, error: null });
+  const [zoom, setZoom] = useState(100);
 
   useEffect(() => {
-    if (material.type !== "notes") return undefined;
     let cancelled = false;
     material.file.text().then(
       (text) => !cancelled && setMarkdown({ html: renderMarkdown(text), error: null }),
@@ -37,68 +36,41 @@ export default function MaterialViewerPanel({ material, onCollapse, handle = nul
   }, [material]);
 
   return (
-    <section
-      className={["panel center-panel pdf", collapsed ? "pdf--collapsed" : "", collapsed && collapse.mode === "rail" ? "pdf--rail" : ""]
-        .filter(Boolean)
-        .join(" ")}
-      aria-label={`Viewer: ${material.name}`}
-    >
-      <div className="pdf__toolbar">
-        <div className="pdf__file">
-          {handle}
-          <Icon name={group.icon} className="pdf__title-icon" />
-          <h2 className="pdf__title">{material.name}</h2>
-          <span className="pdf__title-meta">
-            {group.short} · {formatFileSize(material.size)}
-          </span>
-        </div>
-        <div className="viewer__actions">
-          {collapse && (
-            <IconButton
-              icon={
-                collapse.mode === "rail"
-                  ? collapse.collapsed ? "chevronRight" : "chevronLeft"
-                  : collapse.collapsed ? "chevronDown" : "chevronUp"
-              }
-              label={collapse.collapsed ? "Expand lecture viewer" : "Collapse lecture viewer"}
-              aria-expanded={!collapse.collapsed}
-              onClick={collapse.onToggle}
-            />
-          )}
-          <a className="icon-btn icon-btn--outlined" href={material.url} download={material.name} aria-label={`Download ${material.name}`} title="Download">
-            <Icon name="download" />
-          </a>
-          <IconButton icon="close" label="Close viewer" outlined className="pdf__close" onClick={onCollapse} />
-        </div>
+    <section className="viewer" aria-label={`Viewer: ${material.name}`}>
+      <ViewerHead
+        icon={group.icon}
+        title={material.name}
+        meta={`${group.short} · ${formatFileSize(material.size)}`}
+        newTabUrl={material.url}
+        onClose={onCollapse}
+      >
+        <a className="icon-btn" href={material.url} download={material.name} aria-label={`Download ${material.name}`} title="Download">
+          <Icon name="download" />
+        </a>
+      </ViewerHead>
+
+      <div className="viewer__toolbar">
+        <span className="viewer__spacer" />
+        <ZoomControls
+          zoom={zoom}
+          canZoomOut={zoom > ZOOM_MIN}
+          canZoomIn={zoom < ZOOM_MAX}
+          onZoomOut={() => setZoom(zoom - 10)}
+          onZoomIn={() => setZoom(zoom + 10)}
+        />
       </div>
 
-      <div className="viewer__body" hidden={collapsed}>
-        {material.type === "notes" ? (
-          markdown.error ? (
-            <p className="viewer__message" role="alert">
-              This file could not be read ({markdown.error}).
-            </p>
-          ) : markdown.html === null ? (
-            <p className="viewer__message" role="status">
-              Opening…
-            </p>
-          ) : (
-            <article className="markdown-body viewer__document" dangerouslySetInnerHTML={{ __html: markdown.html }} />
-          )
+      <div className="viewer__content viewer__body" style={{ "--viewer-zoom": zoom / 100 }}>
+        {markdown.error ? (
+          <p className="viewer__message" role="alert">
+            This file could not be read ({markdown.error}).
+          </p>
+        ) : markdown.html === null ? (
+          <p className="viewer__message" role="status">
+            Opening…
+          </p>
         ) : (
-          <div className="viewer__unsupported">
-            <span className="viewer__unsupported-icon">
-              <Icon name={group.icon} />
-            </span>
-            <p className="viewer__unsupported-title">Slides can’t be previewed in the browser</p>
-            <p className="viewer__message">
-              Download the file to open it in PowerPoint, Keynote, LibreOffice Impress or Google Slides.
-            </p>
-            <a className="btn btn--primary" href={material.url} download={material.name}>
-              <Icon name="download" />
-              Download {material.name}
-            </a>
-          </div>
+          <article className="markdown-body viewer__document viewer__zoomed" dangerouslySetInnerHTML={{ __html: markdown.html }} />
         )}
       </div>
     </section>

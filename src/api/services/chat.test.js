@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ApiError, setAuthToken } from "../client.js";
 import {
+  attachChatLecture,
   createChatSession,
+  detachChatLecture,
   deleteChatSession,
   detectChat,
   getChatSession,
@@ -36,16 +38,26 @@ describe("lecture chat service", () => {
     setAuthToken(null);
   });
 
-  it("creates a session for one lecture, sending the title only when given", async () => {
+  it("creates a session with any number of lectures, sending the title only when given", async () => {
     const bodies = [];
     api.onPost(BASE).reply((config) => {
       expect(config.headers.Authorization).toBe("Bearer test-token");
       bodies.push(JSON.parse(config.data));
       return [201, ok(session("s-1"))];
     });
-    expect((await createChatSession({ lectureId: "l-1" })).id).toBe("s-1");
-    await createChatSession({ lectureId: "l-1", title: "Revision" });
-    expect(bodies).toEqual([{ lecture_id: "l-1" }, { lecture_id: "l-1", title: "Revision" }]);
+    expect((await createChatSession()).id).toBe("s-1");
+    await createChatSession({ lectureIds: ["l-1", "l-2"], title: "Revision" });
+    expect(bodies).toEqual([{ lecture_ids: [] }, { lecture_ids: ["l-1", "l-2"], title: "Revision" }]);
+  });
+
+  it("attaches and detaches a chat's lectures, returning the updated session", async () => {
+    api.onPost(`${BASE}/s-1/lectures`).reply((config) => {
+      expect(JSON.parse(config.data)).toEqual({ lecture_id: "l-2" });
+      return [200, ok({ ...session("s-1"), lectures: [{ id: "l-2" }] })];
+    });
+    api.onDelete(`${BASE}/s-1/lectures/l-2`).reply(200, ok({ ...session("s-1"), lectures: [] }));
+    expect((await attachChatLecture("s-1", "l-2")).lectures).toEqual([{ id: "l-2" }]);
+    expect((await detachChatLecture("s-1", "l-2")).lectures).toEqual([]);
   });
 
   it("lists sessions with backend paging names and loads every page", async () => {

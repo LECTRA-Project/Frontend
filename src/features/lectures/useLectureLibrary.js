@@ -4,8 +4,8 @@ import {
   deleteLecture,
   detectServerFeatures,
   listAllLectures,
+  renameLecture,
   reprocessLecture,
-  updateLecture,
   uploadLecture,
 } from "../../api/services/lectures.js";
 import { detectChat } from "../../api/services/chat.js";
@@ -24,7 +24,7 @@ const POLL_INTERVAL_MS = 3000;
 */
 export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
   const [lectures, setLectures] = useState([]);
-  const [uploads, setUploads] = useState([]); // { id, name, progress, error }
+  const [uploads, setUploads] = useState([]); // { id, name, chatId, progress, error }
   const [loading, setLoading] = useState(true);
   // { ai, chat } once known: whether the backend has AI processing (and the one-shot
   // assistant), and whether it has the Lecture Chat API (saved chat sessions).
@@ -87,9 +87,12 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
     setLectures((list) => list.map((item) => (item.id === updated.id ? updated : item)));
   }, []);
 
-  /* Upload files one after another; returns the created lectures. */
-  const upload = useCallback(async (files, { course } = {}) => {
-    const pending = files.map((file) => ({ id: crypto.randomUUID(), name: file.name, file, progress: 0, error: null }));
+  /*
+    Upload files one after another; returns the created lectures. `chatId` tags the
+    uploads with the chat they are for (null: a new chat; undefined: the library only).
+  */
+  const upload = useCallback(async (files, { chatId } = {}) => {
+    const pending = files.map((file) => ({ id: crypto.randomUUID(), name: file.name, file, chatId, progress: 0, error: null }));
     setUploads((list) => [...list, ...pending]);
     const created = [];
     for (const item of pending) {
@@ -97,7 +100,6 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
         const lecture = await uploadLecture({
           file: item.file,
           title: titleFromFileName(item.name),
-          course,
           onProgress: (progress) =>
             setUploads((list) => list.map((u) => (u.id === item.id ? { ...u, progress } : u))),
         });
@@ -113,9 +115,9 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
 
   const dismissUpload = useCallback((id) => setUploads((list) => list.filter((u) => u.id !== id)), []);
 
-  const update = useCallback(
-    async (id, changes) => {
-      const updated = await updateLecture(id, changes);
+  const rename = useCallback(
+    async (id, title) => {
+      const updated = await renameLecture(id, title);
       replaceLecture(updated);
       return updated;
     },
@@ -136,5 +138,5 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
     [replaceLecture]
   );
 
-  return { lectures, uploads, loading, error, features, refresh, upload, dismissUpload, update, remove, retry };
+  return { lectures, uploads, loading, error, features, refresh, upload, dismissUpload, rename, remove, retry };
 }

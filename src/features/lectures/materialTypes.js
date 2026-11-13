@@ -10,7 +10,6 @@
     "processing" (backend: pending or processing)
     "completed" | "failed" | "skipped" (images are stored but not searchable)
 */
-import { materialTypeOf } from "../../services/materials/materialTypes.js";
 
 const TYPE_BY_MIME = {
   "application/pdf": "pdf",
@@ -55,16 +54,11 @@ export function titleFromFileName(name) {
   return (base || name).slice(0, 255);
 }
 
-export function hasAcceptedExtension(name) {
-  return materialTypeOf(name) !== null;
-}
-
-/* "PDF · 12 pages · AI Basics" */
+/* "PDF · 12 pages" */
 export function lectureMeta(lecture) {
   const parts = [FORMAT_LABEL[lecture.file_type] ?? "Image"];
   const unit = UNIT[lecture.source_type];
   if (unit && lecture.source_count) parts.push(`${lecture.source_count} ${unit[lecture.source_count === 1 ? 0 : 1]}`);
-  if (lecture.course) parts.push(lecture.course);
   return parts.join(" · ");
 }
 

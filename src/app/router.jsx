@@ -6,7 +6,7 @@ import ForgetPasswordPage from "../features/auth/ForgetPasswordPage.jsx";
 import ResetPasswordPage from "../features/auth/ResetPasswordPage.jsx";
 import { GuestOnly, RequireAuth } from "../features/auth/RouteGuards.jsx";
 import WorkspaceLayout from "../features/workspace/WorkspaceLayout.jsx";
-import NotebookPage from "../features/workspace/pages/NotebookPage.jsx";
+import ChatPage from "../features/workspace/pages/ChatPage.jsx";
 import ExamPage from "../features/workspace/pages/ExamPage.jsx";
 import HomePage from "../features/workspace/pages/HomePage.jsx";
 import MyProfilePage from "../features/profile/MyProfilePage.jsx";
@@ -23,8 +23,8 @@ import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
   /reset-password      Choose a new password
 
   Signed-in users only (guests are sent to sign-in):
-  /workspace           Study workspace with the Notebook in the centre
-  /workspace/exam      Study workspace with the Exam view in the centre
+  /workspace           Study workspace with the chat in the centre (notebook and viewer beside it)
+  /workspace/exam      Study workspace with the Exam view in place of the chat
   /workspace/home      Home: greeting, upload and recent materials (no Study assistant); where sign-in lands
   /profile             My profile
   /settings            Account settings
@@ -47,9 +47,9 @@ export const routes = [
       {
         path: "/workspace",
         element: <WorkspaceLayout />,
-        // The child route is rendered in the centre panel of WorkspaceLayout (<Outlet />).
+        // The child route is rendered in the centre of WorkspaceLayout (<Outlet />).
         children: [
-          { index: true, element: <NotebookPage /> },
+          { index: true, element: <ChatPage /> },
           { path: "exam", element: <ExamPage /> },
           { path: "home", element: <HomePage /> },
         ],
