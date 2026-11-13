@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { makeToken, mockApi, renderApp, saveToken } from "../../test/helpers.jsx";
+import { makeToken, mockApi, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
 import { daysAgo, installChatBackend, lectureFixture } from "../../test/chatBackend.js";
 
 /*
@@ -741,5 +741,76 @@ describe("chat-first workspace: the open chat and material in the URL", () => {
     expect(await screen.findByText("That lecture isn’t in your materials.")).toBeInTheDocument();
     await waitFor(() => expect(search(router)).toEqual({ chat: "s-hunt" }));
     expect(screen.getByRole("heading", { level: 1, name: "Hunt's algorithm" })).toBeInTheDocument();
+  });
+});
+
+describe("chat-first workspace: switching the notebook and the viewer", () => {
+  beforeEach(() => setup());
+  afterEach(() => localStorage.clear());
+
+  const chatColumn = () => document.querySelector(".cf__main");
+  const order = (element) => Number(element.style.order || 0);
+
+  async function openBoth(user) {
+    await openChat(user, "Hunt's algorithm");
+    await user.click(within(menu()).getByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" }));
+    await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" });
+    await user.click(screen.getByRole("button", { name: "Notebook" }));
+  }
+
+  it("switches the two panels on the right of the chat and back, keeping the chat where it is", async () => {
+    const { user, unmount } = await openWorkspace();
+    await openBoth(user);
+    const panel = notebookPanel();
+    const pdf = screen.getByRole("region", { name: "PDF viewer: KI 02 Classification Part1" });
+    // Default: chat | notebook | viewer.
+    expect(order(panel)).toBeLessThan(order(viewer()));
+
+    await user.click(within(panel).getByRole("button", { name: "Switch places with the material viewer" }));
+    // Switched: chat | viewer | notebook, side by side (the notebook pinned, not covering the viewer).
+    expect(order(viewer())).toBeLessThan(order(panel));
+    expect(panel).toHaveClass("cf-notebook--pinned");
+    expect(order(chatColumn())).toBe(0);
+    // The PDF keeps a readable width: the menu folds to its rail, the viewer gets its room
+    // first (1440 − 64 − 380 chat − 340 notebook = 656 px), and the notebook what is left.
+    expect(viewer().style.width).toBe("656px");
+    expect(panel.style.width).toBe("340px");
+    expect(chatColumn().compareDocumentPosition(viewer()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("region", { name: "PDF viewer: KI 02 Classification Part1" })).toBe(pdf); // not reloaded
+    expect(screen.getByText("The material viewer is now next to the chat, the notebook at the right edge.")).toBeInTheDocument();
+    expect(localStorage.getItem(`lectra:panels-switched:v1:${TEST_USER.id}`)).toBe("1");
+
+    // Remembered after a reload.
+    unmount();
+    const again = await openWorkspace();
+    await openBoth(again.user);
+    expect(order(viewer())).toBeLessThan(order(notebookPanel()));
+
+    // And back, from the viewer's own button.
+    await again.user.click(within(viewer()).getByRole("button", { name: "Switch places with the notebook" }));
+    expect(order(notebookPanel())).toBeLessThan(order(viewer()));
+    expect(localStorage.getItem(`lectra:panels-switched:v1:${TEST_USER.id}`)).toBeNull();
+  });
+
+  it("offers no switch with only one panel open, and floating the notebook again undoes a switch", async () => {
+    const { user } = await openWorkspace();
+    await user.click(screen.getByRole("button", { name: "Notebook" }));
+    expect(within(notebookPanel()).queryByRole("button", { name: "Switch places with the material viewer" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Notebook" })); // close it
+
+    await openBoth(user);
+    await user.click(within(notebookPanel()).getByRole("button", { name: "Switch places with the material viewer" }));
+    await user.click(within(notebookPanel()).getByRole("button", { name: "Float over the chat" }));
+    expect(notebookPanel()).toHaveClass("cf-notebook--floating");
+    expect(order(notebookPanel())).toBeLessThan(order(viewer()));
+  });
+
+  it("can't switch when the two panels don't fit side by side", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
+    const { user } = await openWorkspace();
+    await openBoth(user);
+    const button = within(notebookPanel()).getByRole("button", { name: "Switch places with the material viewer" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Not enough room to show the notebook and the material viewer side by side");
   });
 });

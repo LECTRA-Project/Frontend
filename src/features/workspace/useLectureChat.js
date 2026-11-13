@@ -5,18 +5,29 @@ import {
   createChatSession,
   deleteChatSession,
   detachChatLecture,
+  getChatSession,
   listAllChatMessages,
-  listAllChatSessions,
+  listChatMessages,
+  listChatSessions,
   renameChatSession,
   sendChatMessage,
 } from "../../api/services/chat.js";
+
+// Chats in the menu are loaded this many at a time (more as the list is scrolled).
+export const SESSIONS_PAGE_SIZE = 50;
+// A chat shows its latest messages, this many at a time (older ones as it is scrolled up).
+export const MESSAGES_PAGE_SIZE = 100;
 
 /*
   Saved chats (the Lecture Chat API) for the chat-first workspace. Every chat owns its
   materials (session.lectures) and answers from all of them.
 
-  - Loads the student's chat sessions once `enabled` (most recently active first).
-  - openSession(id) loads that chat's messages; startNewChat() shows an empty new chat.
+  - Loads the student's chat sessions once `enabled` (most recently active first),
+    SESSIONS_PAGE_SIZE at a time: loadMoreSessions() adds the next page (the menu calls it
+    when scrolled to the end); ensureSession(id) fetches one chat not loaded yet (a link).
+  - openSession(id) loads that chat's latest MESSAGES_PAGE_SIZE messages (or a little more,
+    so a short last page isn't all that shows); loadOlderMessages() adds the page before
+    them (the chat calls it when scrolled to the top). startNewChat() shows an empty new chat.
     A new chat has no session until it needs one: the first question or the first
     material creates it.
   - attachLectures(sessionId | null, ids) adds materials to a chat (null: the new chat,
@@ -53,6 +64,10 @@ export function useLectureChat({ enabled }) {
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState(null);
+  const [sessionsPage, setSessionsPage] = useState({ page: 0, totalPages: 0, loadingMore: false });
+  // Messages: the oldest page shown so far (0 when all are shown).
+  const [olderPage, setOlderPage] = useState(0);
+  const [olderLoading, setOlderLoading] = useState(false);
   const [activeId, setActiveId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -70,8 +85,9 @@ export function useLectureChat({ enabled }) {
   const loadSessions = useCallback(async ({ signal } = {}) => {
     setSessionsLoading(true);
     try {
-      const list = await listAllChatSessions({ signal });
-      setSessions(list);
+      const first = await listChatSessions({ page: 1, pageSize: SESSIONS_PAGE_SIZE, signal });
+      setSessions(first.sessions);
+      setSessionsPage({ page: 1, totalPages: first.total_pages, loadingMore: false });
       setSessionsError(null);
     } catch (err) {
       if (signal?.aborted || err?.name === "CanceledError") return;
@@ -85,9 +101,10 @@ export function useLectureChat({ enabled }) {
   useEffect(() => {
     if (!enabled) return undefined;
     const controller = new AbortController();
-    listAllChatSessions({ signal: controller.signal }).then(
-      (list) => {
-        setSessions(list);
+    listChatSessions({ page: 1, pageSize: SESSIONS_PAGE_SIZE, signal: controller.signal }).then(
+      (first) => {
+        setSessions(first.sessions);
+        setSessionsPage({ page: 1, totalPages: first.total_pages, loadingMore: false });
         setSessionsLoading(false);
       },
       (err) => {
@@ -100,6 +117,45 @@ export function useLectureChat({ enabled }) {
   }, [enabled]);
 
   useEffect(() => () => messagesRequest.current?.abort(), []);
+
+  const moreSessions = sessionsPage.page < sessionsPage.totalPages;
+  const loadingMoreRef = useRef(false);
+
+  /* The next page of chats, added below those shown (chats already listed are skipped). */
+  const loadMoreSessions = useCallback(async () => {
+    if (loadingMoreRef.current || sessionsPage.page >= sessionsPage.totalPages) return;
+    loadingMoreRef.current = true;
+    setSessionsPage((current) => ({ ...current, loadingMore: true }));
+    try {
+      const next = await listChatSessions({ page: sessionsPage.page + 1, pageSize: SESSIONS_PAGE_SIZE });
+      setSessions((list) => [...list, ...next.sessions.filter((item) => !list.some((shown) => shown.id === item.id))]);
+      setSessionsPage({ page: next.page, totalPages: next.total_pages, loadingMore: false });
+    } catch {
+      setSessionsPage((current) => ({ ...current, loadingMore: false })); // scrolling again retries
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }, [sessionsPage.page, sessionsPage.totalPages]);
+
+  /*
+    A chat that may not be loaded yet (older than the pages shown, e.g. opened from a link):
+    fetched and added at the end of the list. Resolves the session, or null if it is not one
+    of the student's chats.
+  */
+  const ensureSession = useCallback(
+    async (id) => {
+      const shown = sessions.find((item) => item.id === id);
+      if (shown) return shown;
+      try {
+        const session = await getChatSession(id);
+        setSessions((list) => (list.some((item) => item.id === id) ? list : [...list, session]));
+        return session;
+      } catch {
+        return null;
+      }
+    },
+    [sessions]
+  );
 
   const putSession = useCallback((session, { toTop = false } = {}) => {
     setSessions((list) => {
@@ -120,11 +176,28 @@ export function useLectureChat({ enabled }) {
       messagesRequest.current = controller;
       select(id);
       setMessages([]);
+      setOlderPage(0);
       setMessagesLoading(true);
       try {
-        const list = await listAllChatMessages(id, { signal: controller.signal });
+        // Pages are counted from the oldest message: page 1 tells how many there are, then the
+        // last page (and the one before it when the last is short) are the latest messages.
+        const signal = controller.signal;
+        const first = await listChatMessages(id, { page: 1, pageSize: MESSAGES_PAGE_SIZE, signal });
+        let list = first.messages;
+        let older = 0;
+        if (first.total_pages > 1) {
+          const last = await listChatMessages(id, { page: first.total_pages, pageSize: MESSAGES_PAGE_SIZE, signal });
+          list = last.messages;
+          older = first.total_pages - 1;
+          if (list.length < MESSAGES_PAGE_SIZE && older >= 1) {
+            const before = older === 1 ? first : await listChatMessages(id, { page: older, pageSize: MESSAGES_PAGE_SIZE, signal });
+            list = [...before.messages, ...list];
+            older -= 1;
+          }
+        }
         if (controller.signal.aborted) return;
         setMessages(list.map((message) => ({ ...message, extras: [] })));
+        setOlderPage(older);
       } catch (err) {
         if (controller.signal.aborted || err?.name === "CanceledError") return;
         setMessages([{ id: crypto.randomUUID(), role: "system", content: err.message || "This chat could not be loaded." }]);
@@ -135,9 +208,33 @@ export function useLectureChat({ enabled }) {
     [select]
   );
 
+  /* The page of messages before those shown, added above them. */
+  const olderRef = useRef(false);
+  const loadOlderMessages = useCallback(async () => {
+    const sessionId = activeRef.current;
+    if (olderRef.current || olderPage < 1 || !sessionId) return;
+    olderRef.current = true;
+    setOlderLoading(true);
+    try {
+      const page = await listChatMessages(sessionId, { page: olderPage, pageSize: MESSAGES_PAGE_SIZE });
+      if (activeRef.current !== sessionId) return; // the student opened another chat meanwhile
+      setMessages((list) => [
+        ...page.messages.filter((message) => !list.some((shown) => shown.id === message.id)).map((message) => ({ ...message, extras: [] })),
+        ...list,
+      ]);
+      setOlderPage(olderPage - 1);
+    } catch {
+      // Scrolling up again retries.
+    } finally {
+      olderRef.current = false;
+      setOlderLoading(false);
+    }
+  }, [olderPage]);
+
   const startNewChat = useCallback(() => {
     messagesRequest.current?.abort();
     select(null);
+    setOlderPage(0);
     setMessages([]);
     setMessagesLoading(false);
   }, [select]);
@@ -218,6 +315,7 @@ export function useLectureChat({ enabled }) {
           if (saved) {
             if (activeRef.current === sessionId) {
               const asked = saved.at(-2).id;
+              setOlderPage(0); // the whole chat was just loaded
               setMessages(saved.map((item) => (item.id === asked ? { ...item, content: question, extras } : { ...item, extras: [] })));
             }
             return true;
@@ -313,6 +411,13 @@ export function useLectureChat({ enabled }) {
     sessionsLoading,
     sessionsError,
     reloadSessions: loadSessions,
+    moreSessions,
+    loadingMoreSessions: sessionsPage.loadingMore,
+    loadMoreSessions,
+    ensureSession,
+    olderMessages: olderPage >= 1,
+    loadingOlderMessages: olderLoading,
+    loadOlderMessages,
     activeId,
     activeSession,
     messages,

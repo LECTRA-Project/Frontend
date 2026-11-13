@@ -38,7 +38,7 @@ import "./files.css";
 // The pages sidebar starts open in panels at least this wide.
 const PAGES_OPEN_WIDTH = 600;
 
-export default function PdfViewerPanel({ material, initialPage = 1, cited = false, citedIn = "the answer", onCollapse, widen = null }) {
+export default function PdfViewerPanel({ material, initialPage = 1, cited = false, citedIn = "the answer", onCollapse, widen = null, switcher = null }) {
   const usePdfjs = canRenderPdf();
   const ready = Boolean(material.url) && !material.loading && !material.loadError;
 
@@ -182,7 +182,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
 
   return (
     <section ref={panelRef} className="viewer pdf" aria-label={`PDF viewer: ${material.name}`}>
-      <ViewerHead title={material.name} meta={meta} newTabUrl={material.url ?? null} widen={widen} onClose={onCollapse} />
+      <ViewerHead title={material.name} meta={meta} newTabUrl={material.url ?? null} widen={widen} switcher={switcher} onClose={onCollapse} />
 
       <div className="viewer__toolbar">
         {hasPages && (

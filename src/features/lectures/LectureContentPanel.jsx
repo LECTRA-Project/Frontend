@@ -42,7 +42,7 @@ const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?
     onClose           closes the viewer
     onOpenInNotebook  optional (notebooks): opens the file in the runnable notebook
 */
-export default function LectureContentPanel({ lecture, focus, cited = false, citedIn = "the answer", onRetry, onClose, onOpenInNotebook = null, widen = null }) {
+export default function LectureContentPanel({ lecture, focus, cited = false, citedIn = "the answer", onRetry, onClose, onOpenInNotebook = null, widen = null, switcher = null }) {
   const [content, setContent] = useState(null);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
@@ -147,7 +147,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
 
   return (
     <section className="viewer lecture-view" aria-label={`Lecture: ${lecture.title}`}>
-      <ViewerHead icon={icon} title={lecture.title} meta={`${lecture.original_filename} · ${lectureMeta(lecture)}`} widen={widen} onClose={onClose}>
+      <ViewerHead icon={icon} title={lecture.title} meta={`${lecture.original_filename} · ${lectureMeta(lecture)}`} widen={widen} switcher={switcher} onClose={onClose}>
         {onOpenInNotebook && (
           <Button size="sm" icon="play" onClick={onOpenInNotebook} title="Open this notebook in the runnable notebook">
             Run in notebook

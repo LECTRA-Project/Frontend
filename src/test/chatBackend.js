@@ -46,6 +46,7 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     sessions: sessions.map((item) => ({ lectureIds: [], created_at: item.updated_at, ...item })),
     messages: { ...messages },
     sent: [],
+    requests: [], // { key: "sessions" | "messages", page, size } for each list request
     // A promise the list of chats waits for (to act before the chats are loaded).
     sessionsGate: null,
     nextId: 1,
@@ -126,11 +127,18 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     return state;
   }
 
+  // Paged like the backend: ?page (from 1) and ?page_size; total_pages is 0 for an empty list.
+  const pageOf = (items, config, key) => {
+    const page = Number(config.params?.page ?? 1);
+    const size = Number(config.params?.page_size ?? 20);
+    state.requests.push({ key, page, size });
+    return { [key]: items.slice((page - 1) * size, page * size), page, page_size: size, total: items.length, total_pages: Math.ceil(items.length / size) };
+  };
   api.onGet(SESSIONS).reply(async (config) => {
     // (Not the one-item check whether the server has chats.)
     if (state.sessionsGate && config.params?.page_size !== 1) await state.sessionsGate;
     const list = [...state.sessions].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(payload);
-    return [200, ok({ sessions: list, page: 1, page_size: 100, total: list.length, total_pages: list.length ? 1 : 0 })];
+    return [200, ok(pageOf(list, config, "sessions"))];
   });
   api.onPost(SESSIONS).reply((config) => {
     const body = JSON.parse(config.data);
@@ -159,7 +167,7 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
   });
   api.onGet(/\/chat\/sessions\/[^/]+\/messages$/).reply((config) => {
     const list = state.messages[find(config)?.id] ?? [];
-    return [200, ok({ messages: list, page: 1, page_size: 100, total: list.length, total_pages: 1 })];
+    return [200, ok(pageOf(list, config, "messages"))];
   });
   api.onPost(/\/chat\/sessions\/[^/]+\/messages$/).reply((config) => {
     const session = find(config);

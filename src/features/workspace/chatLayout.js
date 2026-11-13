@@ -51,7 +51,7 @@ const clamp = (value, min, max) => Math.round(Math.min(max, Math.max(min, value)
     chatWidth                      what is left for the chat column
     chatInset                      room the chat leaves at its right for a floating notebook
 */
-export function computeLayout({ width, sidebar, viewer = {}, notebook = {} }) {
+export function computeLayout({ width, sidebar, viewer = {}, notebook = {}, viewerFirst = false }) {
   const viewerOpen = Boolean(viewer.open);
   const notebookOpen = Boolean(notebook.open);
   const room = width - sidebar;
@@ -64,7 +64,15 @@ export function computeLayout({ width, sidebar, viewer = {}, notebook = {} }) {
   let viewerAuto = 0; // the automatic width, for the Widen / Restore toggle
   let notebookMax;
   let notebookWidth;
-  if (beside) {
+  if (pinned && viewerFirst && viewerOpen) {
+    // Notebook and viewer switched (the viewer next to the chat): the viewer keeps a readable
+    // width first; the notebook gets what is left, down to its minimum; the chat keeps CHAT_MIN.
+    viewerMax = Math.max(VIEWER_MIN, room - CHAT_MIN - NOTEBOOK_MIN);
+    viewerAuto = clamp(viewerAutoWidth(room), VIEWER_MIN, viewerMax);
+    viewerWidth = clamp(viewer.width ?? viewerAuto, VIEWER_MIN, viewerMax);
+    notebookMax = Math.max(NOTEBOOK_MIN, room - CHAT_MIN - viewerWidth);
+    notebookWidth = clamp(notebook.width ?? NOTEBOOK_DEFAULT, NOTEBOOK_MIN, notebookMax);
+  } else if (beside) {
     // A notebook beside the chat takes its room first (the viewer at its minimum, the chat at
     // CHAT_MIN); the viewer gets what the notebook leaves.
     notebookMax = Math.max(NOTEBOOK_MIN, room - (viewerOpen ? VIEWER_MIN : 0) - CHAT_MIN);
