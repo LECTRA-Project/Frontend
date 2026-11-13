@@ -32,6 +32,7 @@ import {
   RAIL_WIDTH,
   SIDEBAR_WIDTH,
   sidebarFits,
+  splitPanels,
   VIEWER_MIN,
 } from "./chatLayout.js";
 import "./workspace.css";
@@ -220,6 +221,26 @@ export default function WorkspaceLayout() {
   const rowRight = () => rowRef.current?.getBoundingClientRect().right || rowWidth;
   const clampViewer = (width) => Math.round(Math.min(layout.viewerMax, Math.max(VIEWER_MIN, width)));
   const clampNotebook = (width) => Math.round(Math.min(layout.notebookMax, Math.max(NOTEBOOK_MIN, width)));
+  // Both panels beside the chat: the edge between them is a divider that trades width
+  // between the notebook and the viewer (the panel at the right edge owns that handle).
+  const splitBoth = notebookOpen && viewerOpen && !phone && layout.beside;
+  function resizeSplit(rightWidth) {
+    const split = splitPanels({
+      total: layout.viewerWidth + layout.notebookWidth,
+      right: rightWidth,
+      rightMin: switched ? NOTEBOOK_MIN : VIEWER_MIN,
+      leftMin: switched ? VIEWER_MIN : NOTEBOOK_MIN,
+    });
+    if (!split) return;
+    setViewerWidth(switched ? split.left : split.right);
+    setNotebookWidth(switched ? split.right : split.left);
+  }
+  const rightWidth = switched ? layout.notebookWidth : layout.viewerWidth;
+  const divider = {
+    label: "Resize the notebook and the material viewer (drag, or use the left and right arrow keys)",
+    onResize: (x) => resizeSplit(rowRight() - x),
+    onStep: (step) => resizeSplit(rightWidth + step),
+  };
 
   /* ---------- Viewer ---------- */
   function openViewer(lectureId, focus = null, cited = false, citedIn = "the answer") {
@@ -829,6 +850,7 @@ export default function WorkspaceLayout() {
               onStep={(step) => setNotebookWidth(clampNotebook(layout.notebookWidth + step))}
               onReset={() => setNotebookWidth(NOTEBOOK_DEFAULT)}
               onResizing={setResizing}
+              {...(splitBoth && switched ? divider : {})}
             />
             <NotebookPage
               notebookState={notebookState}
@@ -848,6 +870,7 @@ export default function WorkspaceLayout() {
               onStep={(step) => setViewerWidth(clampViewer(layout.viewerWidth + step))}
               onReset={() => setViewerWidth(null)}
               onResizing={setResizing}
+              {...(splitBoth && !switched ? divider : {})}
             />
             {viewerContent}
           </aside>

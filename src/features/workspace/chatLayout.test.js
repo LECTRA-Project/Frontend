@@ -12,6 +12,7 @@ import {
   sidebarFits,
   sourceChip,
   sourceChips,
+  splitPanels,
   VIEWER_DEFAULT,
   VIEWER_MIN,
   viewerAutoWidth,
@@ -158,5 +159,14 @@ describe("source chips", () => {
     const source = { lecture_id: "l", lecture_title: "KI 02", page_number: 4, source_type: "page" };
     expect(sourceChips([source, { ...source }, { ...source, page_number: 5 }]).map((chip) => chip.loc)).toEqual(["p. 4", "p. 5"]);
     expect(sourceChips(null)).toEqual([]);
+  });
+});
+
+describe("the divider between notebook and viewer", () => {
+  it("moves width from one panel to the other, keeping the total and both minimums", () => {
+    expect(splitPanels({ total: 800, right: 450, rightMin: 360, leftMin: 340 })).toEqual({ right: 450, left: 350 });
+    expect(splitPanels({ total: 800, right: 900, rightMin: 360, leftMin: 340 })).toEqual({ right: 460, left: 340 });
+    expect(splitPanels({ total: 800, right: 10, rightMin: 360, leftMin: 340 })).toEqual({ right: 360, left: 440 });
+    expect(splitPanels({ total: 600, right: 400, rightMin: 360, leftMin: 340 })).toBeNull(); // no room for both
   });
 });

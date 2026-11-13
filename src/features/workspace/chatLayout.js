@@ -50,6 +50,7 @@ const clamp = (value, min, max) => Math.round(Math.min(max, Math.max(min, value)
                                    and the width it sets
     chatWidth                      what is left for the chat column
     chatInset                      room the chat leaves at its right for a floating notebook
+    beside                         the notebook sits beside the chat (pinned, or floating with room)
 */
 export function computeLayout({ width, sidebar, viewer = {}, notebook = {}, viewerFirst = false }) {
   const viewerOpen = Boolean(viewer.open);
@@ -106,7 +107,20 @@ export function computeLayout({ width, sidebar, viewer = {}, notebook = {}, view
     toggledWidth: wide ? (NOTEBOOK_DEFAULT < notebookMax - 4 ? NOTEBOOK_DEFAULT : NOTEBOOK_MIN) : notebookMax,
     chatWidth: room - viewerWidth - (beside ? notebookWidth : 0),
     chatInset: beside && !pinned ? notebookWidth : 0,
+    beside,
   };
+}
+
+/*
+  The divider between the notebook and the viewer when both sit beside the chat: it moves
+  width from one to the other and their total stays the same, so the chat is untouched.
+  `right` is the width asked for the panel at the right edge; each keeps its minimum.
+  Returns { right, left }, or null when the two can't be split (no room for both minimums).
+*/
+export function splitPanels({ total, right, rightMin, leftMin }) {
+  if (total - leftMin < rightMin) return null;
+  const width = Math.round(Math.min(total - leftMin, Math.max(rightMin, right)));
+  return { right: width, left: total - width };
 }
 
 /* Whether the full menu fits beside the chat (and the viewer, when it is open). */
