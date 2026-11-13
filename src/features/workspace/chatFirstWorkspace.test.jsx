@@ -92,6 +92,9 @@ describe("chat-first workspace: chats and their materials", () => {
     await openWorkspace();
     expect(screen.getByRole("heading", { name: "What are we studying today?" })).toBeInTheDocument();
     expect(screen.getByText("No materials in this chat yet.")).toBeInTheDocument();
+    // No upload button in the chat and no "No materials yet" chip in the composer; uploads are in the menu.
+    expect(screen.queryByRole("button", { name: "Upload materials" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "No materials yet" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "New chat" })).toBeInTheDocument();
     expect(materialNames()).toEqual([]);
     expect(within(menu()).getByRole("button", { name: "Upload a PDF, slides or a notebook for this chat" })).toBeInTheDocument();
@@ -187,7 +190,7 @@ describe("chat-first workspace: chats and their materials", () => {
 
   it("uploads into a new chat: the chat is created with the new lecture", async () => {
     const { user } = await openWorkspace();
-    await user.click(screen.getByRole("button", { name: "Upload materials" }));
+    await user.click(within(menu()).getByRole("button", { name: "Upload a material to this chat" }));
     const dialog = await screen.findByRole("dialog");
     await user.upload(within(dialog).getByTestId("upload-input"), new File(["%PDF-1.4"], "qa-Lecture 05.pdf", { type: "application/pdf" }));
     await user.click(within(dialog).getByRole("button", { name: "Upload" }));
@@ -351,6 +354,76 @@ describe("chat-first workspace: chats and their materials", () => {
       expect(chatRow("Regression metrics")).toBeInTheDocument();
       expect(await screen.findByText("Could not delete the chat.")).toBeInTheDocument();
       expect(screen.queryByText("Chat removed.")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("copying answers", () => {
+    const CODE = 'def area(r):\n    return 3.14 * r * r\n\nprint(area(2))';
+    const ANSWER = `Use a function:\n\n\`\`\`python\n${CODE}\n\`\`\`\n\n- one\n- two`;
+
+    beforeEach(() => {
+      backend.messages["s-old"] = [
+        message("q1", "s-old", "user", "Show me code"),
+        message("a1", "s-old", "assistant", ANSWER, [page(KI02, 4)]),
+      ];
+    });
+
+    async function openCodeChat() {
+      const result = await openWorkspace();
+      await openChat(result.user, "Last month");
+      await screen.findByText("Use a function:");
+      return result;
+    }
+
+    it("copies only a code block's code, with its indentation, and says so", async () => {
+      const { user } = await openCodeChat();
+      const button = screen.getByRole("button", { name: "Copy code" });
+      expect(button).toHaveTextContent("Copy");
+      button.focus();
+      await user.keyboard("{Enter}");
+
+      expect(await navigator.clipboard.readText()).toBe(CODE);
+      await waitFor(() => expect(button).toHaveTextContent("Copied"));
+      expect(screen.getByText("Code copied.")).toBeInTheDocument();
+      // The code shown is unchanged, and user messages have no copy buttons.
+      expect(document.querySelector(".chat-code pre").textContent).toBe(CODE + "\n");
+      expect(within(screen.getByText("Show me code").closest("li")).queryByRole("button")).toBeNull();
+    });
+
+    it("copies the whole answer as Markdown with its sources, without the question or labels", async () => {
+      const { user } = await openCodeChat();
+      expect(screen.getAllByRole("button", { name: "Copy answer" })).toHaveLength(1);
+      await user.click(screen.getByRole("button", { name: "Copy answer" }));
+
+      const copied = await navigator.clipboard.readText();
+      expect(copied).toBe(`${ANSWER}\n\nSources:\n- p. 4 · KI 02 Classification Part1`);
+      expect(copied).not.toContain("Show me code");
+      expect(await screen.findByRole("button", { name: "Answer copied" })).toHaveTextContent("Copied");
+    });
+
+    it("doesn't show a copy button while the answer is still coming", async () => {
+      const { user } = await openWorkspace();
+      api.delayResponse = 300; // time to look while the answer is on its way
+      await user.type(input(), "What is 1+1?{Enter}");
+      expect(await screen.findByText("Reading your materials…")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Copy answer" })).not.toBeInTheDocument();
+      expect(await screen.findByText(/1 \+ 1 equals 2/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Copy answer" })).toBeInTheDocument();
+    });
+
+    it("when the clipboard can't be used, says nothing was copied and shows the text to copy by hand", async () => {
+      const { user } = await openCodeChat();
+      vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+      document.execCommand = () => false;
+      await user.click(screen.getByRole("button", { name: "Copy code" }));
+
+      const dialog = await screen.findByRole("dialog", { name: "Copy manually" });
+      expect(within(dialog).getByLabelText("Text to copy")).toHaveValue(CODE);
+      expect(screen.getByRole("button", { name: "Copy code" })).toHaveTextContent("Copy");
+      expect(screen.queryByText("Code copied.")).not.toBeInTheDocument();
+      await user.click(within(dialog).getByRole("button", { name: "Done" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      delete document.execCommand;
     });
   });
 
@@ -532,7 +605,7 @@ describe("chat-first workspace without the chat API", () => {
     renderApp("/workspace");
     expect(await screen.findByText("This server has no chat assistant yet.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Upload materials" })).toBeDisabled();
+    expect(within(menu()).getByRole("button", { name: "Upload a material to this chat" })).toBeDisabled();
   });
 });
 
