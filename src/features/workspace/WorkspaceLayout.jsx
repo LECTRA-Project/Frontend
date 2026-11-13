@@ -19,9 +19,10 @@ import { useAuth } from "../auth/authContext.js";
 import { useNotebook } from "../notebook/useNotebook.js";
 import { usePythonKernel } from "../notebook/usePythonKernel.js";
 import { fetchLectureFile } from "../../api/services/lectures.js";
-import { MAX_MESSAGE_LENGTH } from "../../api/services/chat.js";
+import { getChatSession, MAX_MESSAGE_LENGTH } from "../../api/services/chat.js";
 import { cellContextLabel, displayChatTitle, isSameCellContext, withNotebookContext } from "../../services/notebook/cellContext.js";
 import { useLectureChat } from "./useLectureChat.js";
+import { examChatTitle, examQuestionMessage } from "../exam/askAboutAnswer.js";
 import {
   computeLayout,
   NOTEBOOK_DEFAULT,
@@ -170,8 +171,11 @@ export default function WorkspaceLayout() {
     const params = new URLSearchParams();
     if (chatId) params.set("chat", chatId);
     if (lectureId) params.set("lecture", lectureId);
-    // The exam view keeps its exam (?exam=) while chats and materials change around it.
-    if (path === "/workspace/exam" && urlExamId) params.set("exam", urlExamId);
+    // The exam view keeps its exam (?exam=) while chats and materials change around it. A
+    // chat opened from the exam results keeps it while that chat stays open, for "Back to
+    // exam results"; another chat drops it.
+    const keepExam = path === "/workspace/exam" || (path === "/workspace" && isChatRoute && chatId === urlChatId);
+    if (keepExam && urlExamId) params.set("exam", urlExamId);
     const search = params.toString();
     return search ? `${path}?${search}` : path;
   };
@@ -491,6 +495,34 @@ export default function WorkspaceLayout() {
     return true;
   }
 
+  /* ---------- Asking about an exam answer ---------- */
+  /*
+    "Ask about this" on a checked exam answer: opens a chat and asks the prepared question.
+    The open chat (?chat=) is used when it has all of the exam's lectures (the student came
+    from it); otherwise a new chat is created with the exam's lectures, leaving out deleted
+    ones (lecture_id null). With none left the chat has no materials and the assistant
+    answers from general knowledge (marked as such). The chat keeps ?exam= for "Back to exam
+    results". Rejects with the error to show on the card when the chat can't be created.
+  */
+  async function askAboutExamAnswer(exam, question) {
+    const content = examQuestionMessage(question);
+    if (content.length > MAX_MESSAGE_LENGTH) throw new Error("This question is too long to send to the chat.");
+    const lectureIds = [...new Set((exam.lectures ?? []).map((item) => item.lecture_id).filter(Boolean))];
+    // The open chat; read from the server if it isn't loaded yet (clicked right after a reload).
+    let open = urlChatId && session?.id === urlChatId ? session : null;
+    if (urlChatId && !open) open = await getChatSession(urlChatId).catch(() => null);
+    const reuse = open && lectureIds.length > 0 && lectureIds.every((id) => open.lectures?.some((item) => item.id === id));
+    const target = reuse ? open : await chat.createChat(lectureIds, examChatTitle(question));
+    setTooLong(null);
+    // The URL is set here, so the "?chat= changed" effect doesn't open the chat a second time.
+    appliedChat.current = target.id;
+    const params = new URLSearchParams({ chat: target.id });
+    if (reuse && urlLectureId) params.set("lecture", urlLectureId);
+    params.set("exam", exam.id);
+    navigate(`/workspace?${params}`);
+    chat.askIn(target.id, { question: content, content });
+  }
+
   /* ---------- Keyboard ---------- */
   // Escape closes the overlay menu (not while a dialog is open — Escape is theirs then).
   useEffect(() => {
@@ -535,6 +567,8 @@ export default function WorkspaceLayout() {
     onAddCell: addCellToDraft,
     onRemoveCell: removeCellFromDraft,
     announcement: draftAnnouncement,
+    // Opened from the exam results ("Ask about this"): the way back to them.
+    examLink: isChatRoute && urlExamId ? hrefFor("/workspace/exam", { lectureId: urlLectureId }) : null,
   };
 
   // The exam view: materials of the open chat (preselected) or the library, and whose
@@ -548,6 +582,8 @@ export default function WorkspaceLayout() {
     // A source of a checked exam question ({ lecture_id, page_number, source_type }).
     onOpenSource: (source) =>
       openSource({ lectureId: source.lecture_id, sourceType: source.source_type ?? "page", number: source.page_number }, "the exam results"),
+    // "Ask about this" on a checked answer (only with the chat assistant).
+    onAskAbout: chatAvailable === true ? askAboutExamAnswer : null,
   };
 
   const home = {

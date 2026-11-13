@@ -5,6 +5,7 @@ import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
 import { choiceLetter, formatPoints, pointsOutOf, verdictOf } from "../examFormat.js";
+import { canAskAbout } from "../askAboutAnswer.js";
 
 /*
   Step 3: the checked answers of a submitted exam.
@@ -17,6 +18,8 @@ import { choiceLetter, formatPoints, pointsOutOf, verdictOf } from "../examForma
     reference solution), the feedback, the points per criterion, a lecturer's correction and
     the pages it was written from, per lecture: "Page 12" ("Open page 12 of …") opens that
     page beside the exam; a source whose lecture was deleted shows the page as plain text.
+    A wrong, partly correct or unanswered question has "Ask about this" at the end of that
+    row: it opens the chat assistant with a prepared question about it.
 
   Props:
     exam              the submitted exam, with every question's `result`
@@ -24,8 +27,10 @@ import { choiceLetter, formatPoints, pointsOutOf, verdictOf } from "../examForma
     onRegrade()       → Promise; grades the waiting answers and refreshes the exam (rejects
                       with the error to show)
     onNewExam()       a new exam on the same materials
+    onAsk(question)   → Promise; opens the chat and asks about that question (rejects with
+                      the error to show); null hides "Ask about this"
 */
-export default function ExamResults({ exam, onOpenSource, onRegrade, onNewExam }) {
+export default function ExamResults({ exam, onOpenSource, onRegrade, onNewExam, onAsk = null }) {
   const questions = exam.questions ?? [];
   const counts = { correct: 0, partially_correct: 0, incorrect: 0, waiting: 0 };
   for (const question of questions) {
@@ -41,7 +46,7 @@ export default function ExamResults({ exam, onOpenSource, onRegrade, onNewExam }
       <ol className="exam-results" aria-label="Your answers">
         {questions.map((question, index) => (
           <li key={question.id}>
-            <ResultCard question={question} number={index + 1} onOpenSource={onOpenSource} />
+            <ResultCard question={question} number={index + 1} onOpenSource={onOpenSource} onAsk={onAsk} />
           </li>
         ))}
       </ol>
@@ -123,7 +128,7 @@ function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam }) {
   );
 }
 
-function ResultCard({ question, number, onOpenSource }) {
+function ResultCard({ question, number, onOpenSource, onAsk }) {
   const result = question.result ?? {};
   const verdict = verdictOf(result);
   const isChoice = question.type === "multiple_choice";
@@ -208,8 +213,49 @@ function ResultCard({ question, number, onOpenSource }) {
         </details>
       )}
 
-      <Sources sources={result.sources ?? []} onOpenSource={onOpenSource} />
+      <div className="exam-result__foot">
+        <Sources sources={result.sources ?? []} onOpenSource={onOpenSource} />
+        {onAsk && canAskAbout(question.result) && <AskButton question={question} number={number} onAsk={onAsk} />}
+      </div>
     </article>
+  );
+}
+
+/* "Ask about this": opens the chat with a prepared question; says why if it can't. */
+function AskButton({ question, number, onAsk }) {
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function ask() {
+    setOpening(true);
+    setError(null);
+    try {
+      await onAsk(question);
+    } catch (err) {
+      setError(err?.message || "The chat could not be opened.");
+      setOpening(false);
+    }
+  }
+
+  return (
+    <div className="exam-ask">
+      <Button
+        size="sm"
+        icon="chat"
+        className="exam-ask__button"
+        onClick={ask}
+        disabled={opening}
+        aria-label={opening ? undefined : `Ask about this: question ${number}`}
+        title="Ask the study assistant to explain this question from your lectures"
+      >
+        {opening ? "Opening the chat…" : "Ask about this"}
+      </Button>
+      {error && (
+        <p className="exam-alert exam-small" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -266,7 +312,6 @@ function Sources({ sources, onOpenSource }) {
       {groups.map((group) => (
         <div key={group.lectureId ?? "deleted"} className="exam-sources__group">
           <span className="exam-sources__doc">{group.lectureId ? `In ${group.title ?? "the lecture"}` : "The lecture was deleted"}</span>
-          {/* The row also leaves room for more actions per question. */}
           <ul className="exam-result__actions" aria-label={group.lectureId ? `Pages in ${group.title ?? "the lecture"}` : "Pages of a deleted lecture"}>
             {group.sources.map((source) =>
               group.lectureId ? (

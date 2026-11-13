@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { makeToken, mockApi, renderApp, saveToken } from "../../test/helpers.jsx";
 import { daysAgo, installChatBackend } from "../../test/chatBackend.js";
-import { examFixture, installExamBackend, KI02, KI03, QUESTIONS, resultFixture, SLIDES } from "../../test/examBackend.js";
+import { examFixture, installExamBackend, KI02, KI03, QUESTIONS, SLIDES, submittedExam } from "../../test/examBackend.js";
 
 /*
   Submitting an exam and its checked answers, over the real app routes with the fake chat
@@ -58,49 +58,6 @@ async function askToSubmit(user, review) {
 
 const card = (number) => screen.getAllByRole("article")[number - 1];
 const items = (list) => within(list).getAllByRole("listitem").map((item) => item.textContent.replace(/\s+/g, " ").trim());
-
-/* A submitted exam: right, partly right (corrected), wrong, and not answered from a deleted lecture. */
-function submittedExam({ ungraded = false } = {}) {
-  const [q1, q2, q3] = QUESTIONS;
-  const q4 = { id: "q4", position: 4, type: "short_answer", question: "What does *entropy* measure?", choices: null, points: 2, lecture_id: null, source_pages: [44] };
-  const questions = [
-    { ...q1, result: resultFixture(q1, { selected_choice_ids: ["b", "d"], feedback: "Correct. The test that gives the **purest** subsets." }) },
-    {
-      ...q2,
-      result: ungraded
-        ? resultFixture(q2, { answer_text: "When all records have one class", graded: false, verdict: null, points: null, feedback: null, scores: [] })
-        : resultFixture(q2, {
-            answer_text: "When all records have one class",
-            verdict: "partially_correct",
-            points: 2.5,
-            feedback: "You named the **main case**.",
-            scores: [
-              { criterion_id: "c1", description: "Names the pure-node case", points: 2, max_points: 2, justification: "Named clearly." },
-              { criterion_id: "c2", description: "Names the case without attributes", points: 0.5, max_points: 1, justification: "Only hinted at." },
-            ],
-            corrected: true,
-            correction_comment: "Half a point for the hint at the attributes.",
-          }),
-    },
-    { ...q3, result: resultFixture(q3, { selected_choice_ids: ["b"], verdict: "incorrect", points: 0, feedback: "You selected b, the correct answer is a." }) },
-    {
-      ...q4,
-      result: {
-        ...resultFixture(q4, { answer_text: "", answered: false, verdict: "incorrect", points: 0, feedback: "Not answered. Disorder.", reference_solution: "The disorder of the class labels." }),
-        sources: [{ lecture_id: null, lecture_title: null, page_number: 44, source_type: "page", location: "Page 44" }],
-      },
-    },
-  ];
-  return {
-    ...examFixture("e-done", { status: "submitted", count: 4, title: "KI 02 and KI 03", lectures: [{ lecture_id: KI02.id, title: KI02.title }, { lecture_id: null, title: "Entropy (deleted)" }] }),
-    submitted_at: daysAgo(0),
-    max_points: 7,
-    total_points: ungraded ? null : 3.5,
-    score_percent: ungraded ? null : 50,
-    questions_ungraded: ungraded ? 1 : 0,
-    questions,
-  };
-}
 
 describe("submitting", () => {
   it("names the unanswered questions and can go back to answer them", async () => {

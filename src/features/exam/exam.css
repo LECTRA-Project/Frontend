@@ -1014,6 +1014,30 @@ button.exam-source:hover {
   background: transparent;
   color: var(--text-secondary);
 }
+/* The card's last row: the pages it came from, then "Ask about this" at the right. */
+.exam-result__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.exam-result__foot > .exam-sources {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.exam-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+.exam-ask__button {
+  min-height: 32px;
+  border-radius: var(--radius-pill);
+  color: var(--accent-strong);
+}
 
 /* ---------- Phone width ---------- */
 @media (max-width: 760px) {
@@ -1062,6 +1086,10 @@ button.exam-source:hover {
   }
   .exam-setup__actions .btn {
     width: 100%;
+  }
+  .exam-ask {
+    flex: 1 1 100%;
+    align-items: stretch;
   }
   .exam-review__item {
     flex-wrap: wrap;
