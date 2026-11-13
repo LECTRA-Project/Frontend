@@ -204,7 +204,7 @@ export function PdfPagesView({ lib, doc, sizes, zoom, scrollRequest, citedPage, 
   );
 }
 
-function Thumbnail({ lib, doc, number, size, visible, current, cited, onSelect }) {
+function Thumbnail({ lib, doc, number, size, visible, current, cited, citedIn, onSelect }) {
   const canvasRef = useRef(null);
   const drawn = useRef(false);
   const scale = THUMB_WIDTH / size.width;
@@ -221,7 +221,7 @@ function Thumbnail({ lib, doc, number, size, visible, current, cited, onSelect }
         type="button"
         className={`pdf__thumb ${cited ? "pdf__thumb--cited" : ""}`}
         aria-current={current ? "page" : undefined}
-        aria-label={`Page ${number}${cited ? " (cited in the answer)" : ""}`}
+        aria-label={`Page ${number}${cited ? ` (cited in ${citedIn})` : ""}`}
         onClick={() => onSelect(number)}
       >
         <span className="pdf__thumb-sheet" style={{ width: THUMB_WIDTH, height: Math.round(size.height * scale) }}>
@@ -233,7 +233,7 @@ function Thumbnail({ lib, doc, number, size, visible, current, cited, onSelect }
   );
 }
 
-export function PdfThumbnails({ lib, doc, sizes, page, citedPage, onSelect }) {
+export function PdfThumbnails({ lib, doc, sizes, page, citedPage, citedIn = "the answer", onSelect }) {
   const navRef = useRef(null);
   const visible = useVisiblePages(navRef, "li[data-page]", sizes.length, 600);
 
@@ -255,6 +255,7 @@ export function PdfThumbnails({ lib, doc, sizes, page, citedPage, onSelect }) {
             visible={visible.has(index + 1)}
             current={page === index + 1}
             cited={citedPage === index + 1}
+            citedIn={citedIn}
             onSelect={onSelect}
           />
         ))}

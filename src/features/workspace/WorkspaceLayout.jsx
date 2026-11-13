@@ -136,7 +136,7 @@ export default function WorkspaceLayout() {
 
   const [sidebarOpen, setSidebarOpen] = useState(() => !matches(PHONE_QUERY));
   // Where the material in the viewer was opened (its id is in the URL):
-  // { lectureId, focus: { sourceType, sourceNumber } | null, cited, seq }
+  // { lectureId, focus: { sourceType, sourceNumber } | null, cited, citedIn, seq }
   const [viewer, setViewer] = useState(null);
   // null: the automatic width (viewerAutoWidth) until the student resizes the viewer.
   const [viewerWidth, setViewerWidth] = useState(null);
@@ -211,8 +211,8 @@ export default function WorkspaceLayout() {
   const clampNotebook = (width) => Math.round(Math.min(layout.notebookMax, Math.max(NOTEBOOK_MIN, width)));
 
   /* ---------- Viewer ---------- */
-  function openViewer(lectureId, focus = null, cited = false) {
-    setViewer((previous) => ({ lectureId, focus, cited, seq: (previous?.seq ?? 0) + 1 }));
+  function openViewer(lectureId, focus = null, cited = false, citedIn = "the answer") {
+    setViewer((previous) => ({ lectureId, focus, cited, citedIn, seq: (previous?.seq ?? 0) + 1 }));
     // Make room: the full menu does not fit beside the chat and the viewer on small screens.
     if (phone || !sidebarFits(rowWidth, true)) setSidebarOpen(false);
     // Another place in the same lecture doesn't add a history entry.
@@ -384,12 +384,13 @@ export default function WorkspaceLayout() {
     openViewer(material.id);
   }
 
-  function openSource(chip) {
+  // `citedIn` names where the source was cited, for the viewer's "Opened from a source in …".
+  function openSource(chip, citedIn = "the answer") {
     if (!findLecture(chip.lectureId)) {
       setNotice("That lecture is no longer in your materials.");
       return;
     }
-    openViewer(chip.lectureId, { sourceType: chip.sourceType, sourceNumber: chip.number }, true);
+    openViewer(chip.lectureId, { sourceType: chip.sourceType, sourceNumber: chip.number }, true, citedIn);
   }
 
   async function openInNotebook(material) {
@@ -512,7 +513,7 @@ export default function WorkspaceLayout() {
     materials: chatMaterials,
     materialType,
     lectureTitle: (id) => findLecture(id)?.title,
-    onOpenSource: openSource,
+    onOpenSource: (chip) => openSource(chip),
     onUploadClick: () => setUploadTarget("chat"),
     // The scope chip: show the chat's materials (opening the menu if needed).
     onOpenMenu: () => {
@@ -544,6 +545,9 @@ export default function WorkspaceLayout() {
     library: library.lectures,
     loading: library.loading || (Boolean(urlChatId) && !session && chatAvailable !== false && !chat.sessionsError),
     sourceType: (id) => findLecture(id)?.source_type ?? "page",
+    // A source of a checked exam question ({ lecture_id, page_number, source_type }).
+    onOpenSource: (source) =>
+      openSource({ lectureId: source.lecture_id, sourceType: source.source_type ?? "page", number: source.page_number }, "the exam results"),
   };
 
   const home = {
@@ -581,6 +585,7 @@ export default function WorkspaceLayout() {
           }
           initialPage={pdfPage}
           cited={opened.cited && opened.focus?.sourceType === "page"}
+          citedIn={opened.citedIn}
           onCollapse={() => closeViewer()}
           widen={viewerWiden}
         />
@@ -601,6 +606,7 @@ export default function WorkspaceLayout() {
           lecture={viewerMaterial.lecture}
           focus={opened.focus}
           cited={opened.cited}
+          citedIn={opened.citedIn}
           onRetry={() => handleRetry(viewerMaterial)}
           onClose={() => closeViewer()}
           widen={viewerWiden}

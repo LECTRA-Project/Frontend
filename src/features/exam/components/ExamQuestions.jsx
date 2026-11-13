@@ -7,7 +7,9 @@ import { MAX_ANSWER_LENGTH } from "../../../api/services/exams.js";
 import { countAnswered, isAnswered, loadExamProgress, saveExamProgress } from "../../../services/exam/examStorage.js";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
 import { choiceLetter, pagesLabel, pointsLabel } from "../examFormat.js";
+import ExamGrading from "./ExamGrading.jsx";
 import ExamReview from "./ExamReview.jsx";
+import ExamSubmitDialog from "./ExamSubmitDialog.jsx";
 
 /*
   Step 2: answering a ready exam, one question at a time.
@@ -19,19 +21,24 @@ import ExamReview from "./ExamReview.jsx";
   - Every change is saved on this device (examStorage), per user and exam, with the question
     on screen; a reload or coming back later restores both.
   - Finish (on the last question) opens the review: every question answered or not, and a
-    click jumps to it. `reviewActions` are shown in the review's action row.
+    click jumps to it. With `onSubmit`, the review has "Submit and check": a confirmation
+    names the questions without an answer (and can go to them), then onSubmit(answers)
+    hands them in. While `grading`, "Checking your answers…" is shown instead; when
+    onSubmit rejects, the review shows the error.
 
   Render it with key={exam.id}: the saved answers are read once, when it mounts.
 
   Props: exam (with questions), userKey, sourceType(lectureId) → "page" | "slide" | "cell",
-         reviewActions
+         onSubmit(answers) → Promise (rejects with the ApiError to show), grading
 */
-export default function ExamQuestions({ exam, userKey, sourceType = () => "page", reviewActions = null }) {
+export default function ExamQuestions({ exam, userKey, sourceType = () => "page", onSubmit = null, grading = false }) {
   const questions = exam.questions;
   const total = questions.length;
   const [progress, setProgress] = useState(() => loadExamProgress(userKey, exam.id));
   const [reviewing, setReviewing] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const headingRef = useRef(null);
   const moved = useRef(false);
 
@@ -75,6 +82,18 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
     moved.current = true;
     setReviewing(true);
   }
+
+  async function submit() {
+    setConfirming(false);
+    setSubmitError(null);
+    try {
+      await onSubmit(answers);
+    } catch (err) {
+      setSubmitError(err?.message || "The exam could not be submitted.");
+    }
+  }
+
+  if (grading) return <ExamGrading questions={questions} answers={answers} />;
 
   const lectureTitle = exam.lectures?.find((item) => item.lecture_id && item.lecture_id === question.lecture_id)?.title;
   const pages = pagesLabel(question.source_pages, sourceType(question.lecture_id));
@@ -124,9 +143,39 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
       )}
 
       {reviewing ? (
-        <ExamReview questions={questions} answers={answers} onJump={go} onBack={() => go(index)}>
-          {reviewActions}
-        </ExamReview>
+        <>
+          <ExamReview questions={questions} answers={answers} onJump={go} onBack={() => go(index)}>
+            {onSubmit && (
+              <Button
+                variant="primary"
+                icon="check"
+                onClick={() => {
+                  setSubmitError(null);
+                  setConfirming(true);
+                }}
+              >
+                Submit and check
+              </Button>
+            )}
+          </ExamReview>
+          {submitError && (
+            <p className="exam-alert" role="alert">
+              {submitError}
+            </p>
+          )}
+          {confirming && (
+            <ExamSubmitDialog
+              questions={questions}
+              answers={answers}
+              onSubmit={submit}
+              onAnswer={(position) => {
+                setConfirming(false);
+                go(position);
+              }}
+              onCancel={() => setConfirming(false)}
+            />
+          )}
+        </>
       ) : (
         <>
           <section className="exam-card exam-question" aria-labelledby={headingId}>

@@ -15,6 +15,8 @@ import { formatExamDate } from "../examFormat.js";
     student's library, nothing preselected. Materials without readable text yet (still
     processing, failed, images) can't be picked.
   - Number of questions (3, 5, 7, 10) and question types (at least one).
+  - With `preset` (New exam on the same materials) its lectures, number and types are
+    chosen at first instead.
   - "Continue an exam" lists the exams being generated or ready to answer, each with
     Continue and Discard (after a confirmation).
 
@@ -26,6 +28,7 @@ import { formatExamDate } from "../examFormat.js";
     userKey        whose answers on this device to count
     onStart({ lectureIds, questionCount, types }), starting, startError { message, busyId }
     onOpenExam(id), onDiscard(exam) → Promise (rejects with the error to show)
+    preset         { lectureIds, questionCount, types } to start from, or null
 */
 export default function ExamSetup({
   materials,
@@ -38,12 +41,17 @@ export default function ExamSetup({
   startError,
   onOpenExam,
   onDiscard,
+  preset = null,
 }) {
   const hintId = useId();
   // null until the student changes the selection: then the defaults follow the materials.
-  const [picked, setPicked] = useState(null);
-  const [count, setCount] = useState(5);
-  const [types, setTypes] = useState(() => QUESTION_TYPES.map((type) => type.value));
+  const [picked, setPicked] = useState(() => preset?.lectureIds ?? null);
+  const [count, setCount] = useState(() => (QUESTION_COUNTS.includes(preset?.questionCount) ? preset.questionCount : 5));
+  const [types, setTypes] = useState(() => {
+    const allowed = QUESTION_TYPES.map((type) => type.value);
+    const chosen = allowed.filter((value) => preset?.types?.includes(value));
+    return chosen.length > 0 ? chosen : allowed;
+  });
 
   const selectable = materials.filter((item) => item.selectable);
   const defaults = fromChat ? selectable.map((item) => item.id) : [];
@@ -83,9 +91,11 @@ export default function ExamSetup({
             New exam
           </h3>
           <p className="exam-card__lead">
-            {fromChat
-              ? "Questions are generated from this chat’s materials. Your answers are kept on this device."
-              : "This chat has no materials, so pick from your library. Your answers are kept on this device."}
+            {preset
+              ? "The materials and settings of that exam are chosen. Change them if you like."
+              : fromChat
+                ? "Questions are generated from this chat’s materials. Your answers are kept on this device."
+                : "This chat has no materials, so pick from your library. Your answers are kept on this device."}
           </p>
         </div>
 

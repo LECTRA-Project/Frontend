@@ -38,3 +38,29 @@ export function plainText(markdown) {
   const text = typeof DOMParser === "undefined" ? html.replace(/<[^>]*>/g, " ") : new DOMParser().parseFromString(html, "text/html").body.textContent;
   return text.replace(/\s+/g, " ").trim();
 }
+
+/* Points as the backend gives them (partial credit can be a fraction): 2, 1.5, 0.67. */
+export function formatPoints(points) {
+  if (typeof points !== "number" || Number.isNaN(points)) return "–";
+  return String(Math.round(points * 100) / 100);
+}
+
+/* "2 / 3 points", "1 / 1 point"; "– / 3 points" while the answer waits to be graded. */
+export function pointsOutOf(points, max) {
+  return `${formatPoints(points)} / ${formatPoints(max)} ${max === 1 ? "point" : "points"}`;
+}
+
+/* "Question 2", "Questions 2 and 4", "Questions 1, 2 and 4". */
+export function questionNumbers(numbers) {
+  if (numbers.length === 1) return `Question ${numbers[0]}`;
+  return `Questions ${numbers.slice(0, -1).join(", ")} and ${numbers.at(-1)}`;
+}
+
+/* The verdict of a checked answer, as a label and a tone for its badge. */
+export function verdictOf(result) {
+  if (!result?.answered) return { label: "Not answered", tone: "bad" };
+  if (!result?.graded) return { label: "Waiting to be graded", tone: "wait" };
+  if (result.verdict === "correct") return { label: "Correct", tone: "ok" };
+  if (result.verdict === "partially_correct") return { label: "Partly correct", tone: "part" };
+  return { label: "Wrong", tone: "bad" };
+}

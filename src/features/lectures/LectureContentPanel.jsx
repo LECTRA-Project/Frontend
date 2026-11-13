@@ -37,11 +37,12 @@ const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?
     lecture           the backend lecture
     focus             optional place to open at
     cited             true when opened from a source in an answer
+    citedIn           where that source was: "the answer" (default) or "the exam results"
     onRetry           retries failed processing
     onClose           closes the viewer
     onOpenInNotebook  optional (notebooks): opens the file in the runnable notebook
 */
-export default function LectureContentPanel({ lecture, focus, cited = false, onRetry, onClose, onOpenInNotebook = null, widen = null }) {
+export default function LectureContentPanel({ lecture, focus, cited = false, citedIn = "the answer", onRetry, onClose, onOpenInNotebook = null, widen = null }) {
   const [content, setContent] = useState(null);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
@@ -186,7 +187,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, onR
 
       {citedActive && focusIndex >= 0 && (
         <ViewerBanner>
-          Opened from a source in the answer: {(UNIT[focus.sourceType] ?? "Section").toLowerCase()} {focus.sourceNumber}
+          Opened from a source in {citedIn}: {(UNIT[focus.sourceType] ?? "Section").toLowerCase()} {focus.sourceNumber}
         </ViewerBanner>
       )}
 

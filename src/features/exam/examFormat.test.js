@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { choiceLetter, formatExamDate, pagesLabel, plainText, pointsLabel } from "./examFormat.js";
+import { choiceLetter, formatExamDate, formatPoints, pagesLabel, plainText, pointsLabel, pointsOutOf, questionNumbers, verdictOf } from "./examFormat.js";
 
 describe("exam text helpers", () => {
   it("names the pages a question comes from", () => {
@@ -23,5 +23,19 @@ describe("exam text helpers", () => {
 
   it("turns a Markdown question into one line of text", () => {
     expect(plainText("Split **12** examples:\n\n- Child 1: 6\n- Child 2: 6")).toBe("Split 12 examples: Child 1: 6 Child 2: 6");
+  });
+
+  it("formats checked points, question lists and verdicts", () => {
+    expect([formatPoints(2), formatPoints(1.5), formatPoints(2 / 3), formatPoints(null)]).toEqual(["2", "1.5", "0.67", "–"]);
+    expect([pointsOutOf(1, 1), pointsOutOf(2.5, 3), pointsOutOf(null, 3)]).toEqual(["1 / 1 point", "2.5 / 3 points", "– / 3 points"]);
+    expect([questionNumbers([2]), questionNumbers([2, 4]), questionNumbers([1, 2, 4])]).toEqual(["Question 2", "Questions 2 and 4", "Questions 1, 2 and 4"]);
+    const labels = [
+      { answered: true, graded: true, verdict: "correct" },
+      { answered: true, graded: true, verdict: "partially_correct" },
+      { answered: true, graded: true, verdict: "incorrect" },
+      { answered: false, graded: true, verdict: "incorrect" },
+      { answered: true, graded: false, verdict: null },
+    ].map((result) => verdictOf(result).label);
+    expect(labels).toEqual(["Correct", "Partly correct", "Wrong", "Not answered", "Waiting to be graded"]);
   });
 });
