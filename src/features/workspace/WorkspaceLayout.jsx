@@ -693,7 +693,8 @@ export default function WorkspaceLayout() {
           available={chatAvailable !== false}
         />
 
-        <main className="cf__main">
+        {/* A floating notebook beside the chat: the chat reflows into the room left of it. */}
+        <main className="cf__main" style={layout.chatInset && !phone ? { paddingRight: layout.chatInset } : undefined}>
           <Outlet context={{ chatView, home, examView }} />
         </main>
 

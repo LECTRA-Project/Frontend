@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderMarkdown, sanitizeHtml } from "./markdown.js";
+import { renderAnswerMarkdown, renderMarkdown, sanitizeHtml } from "./markdown.js";
 
 describe("renderMarkdown", () => {
   it("renders headings, emphasis, lists and links", () => {
@@ -31,5 +31,21 @@ describe("sanitizeHtml", () => {
     const html = sanitizeHtml("<style>body{display:none}</style><table><tr><td>1</td></tr></table>");
     expect(html).not.toContain("<style");
     expect(html).toContain("<td>1</td>");
+  });
+});
+
+describe("renderAnswerMarkdown (chat answers)", () => {
+  it("keeps dollar amounts as text instead of one long formula", () => {
+    const html = renderAnswerMarkdown(
+      "All three cost well under $1 per month even at the highest volume (25,000 SKUs/day). Totals of $121, $484, or $1,210."
+    );
+    expect(html).not.toContain("katex");
+    expect(html).toContain("$1 per month");
+    expect(html).toContain("$121, $484, or $1,210");
+  });
+
+  it("still renders real inline and display math", () => {
+    expect(renderAnswerMarkdown("The index is $Gini(t) = 1 - p^2$, for each node.")).toContain("katex");
+    expect(renderAnswerMarkdown("$$\\Delta = I(parent)$$")).toContain("katex-display");
   });
 });

@@ -7,7 +7,7 @@ import Menu from "../../../components/ui/Menu.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
 import Modal from "../../../components/ui/Modal.jsx";
 import ChatComposer from "../components/ChatComposer.jsx";
-import { renderMarkdown } from "../../../services/notebook/markdown.js";
+import { renderAnswerMarkdown } from "../../../services/notebook/markdown.js";
 import {
   CELL_DROP_ZONE_ATTR,
   isCellDrag,
@@ -331,7 +331,7 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
         <div
           className="chat-msg__md markdown-body"
           onClick={handleAnswerClick}
-          dangerouslySetInnerHTML={{ __html: withCodeCopyButtons(renderMarkdown(message.content)) }}
+          dangerouslySetInnerHTML={{ __html: withCodeCopyButtons(renderAnswerMarkdown(message.content)) }}
         />
         {chips.length > 0 && (
           <ul className="chat-sources" aria-label="Sources">
