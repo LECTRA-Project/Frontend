@@ -6,6 +6,7 @@ import ChatSidebar from "./components/ChatSidebar.jsx";
 import ResizeHandle from "./components/ResizeHandle.jsx";
 import IconButton from "../../components/ui/IconButton.jsx";
 import NotebookPage from "./pages/NotebookPage.jsx";
+import { loadPanelsSwitched, savePanelsSwitched } from "./panelSwitch.js";
 import UploadDialog from "../files/UploadDialog.jsx";
 import PdfViewerPanel from "../files/PdfViewerPanel.jsx";
 import MaterialViewerPanel from "../files/MaterialViewerPanel.jsx";
@@ -144,6 +145,8 @@ export default function WorkspaceLayout() {
   const [notebookPinned, setNotebookPinned] = useState(false);
   const [notebookWidth, setNotebookWidth] = useState(NOTEBOOK_DEFAULT);
   const [resizing, setResizing] = useState(false);
+  // The notebook and the viewer switched places (see panelSwitch.js); the chat never moves.
+  const [panelsSwitched, setPanelsSwitched] = useState(() => loadPanelsSwitched(userKey));
   const [uploadTarget, setUploadTarget] = useState(null); // "chat" | "library" while the dialog is open
   const [notice, setNotice] = useState(null);
   const [renaming, setRenaming] = useState(null); // a lecture, in the rename dialog
@@ -196,12 +199,16 @@ export default function WorkspaceLayout() {
   /* ---------- Widths ---------- */
   const sidebarMode = phone ? "phone" : sidebarFits(rowWidth, viewerOpen) ? "docked" : "overlay";
   const sideWidth = phone ? 0 : sidebarMode === "docked" && sidebarOpen ? SIDEBAR_WIDTH : RAIL_WIDTH;
+  // Switched places only applies with both panels open side by side (the notebook pinned), when there is room.
+  const wantSwitched = panelsSwitched && notebookOpen && viewerOpen && !phone;
   const layout = computeLayout({
     width: rowWidth,
     sidebar: sideWidth,
     viewer: { open: viewerOpen, width: viewerWidth },
-    notebook: { open: notebookOpen, pinned: notebookPinned, width: notebookWidth },
+    notebook: { open: notebookOpen, pinned: notebookPinned || wantSwitched, width: notebookWidth },
+    viewerFirst: wantSwitched, // switched: the viewer keeps a readable width first
   });
+  const switched = wantSwitched && layout.pinned; // chat | viewer | notebook
   // The row's right edge on screen (the panels grow leftwards from it); 0 when not laid out.
   const rowRight = () => rowRef.current?.getBoundingClientRect().right || rowWidth;
   const clampViewer = (width) => Math.round(Math.min(layout.viewerMax, Math.max(VIEWER_MIN, width)));
@@ -267,8 +274,16 @@ export default function WorkspaceLayout() {
     } else if (chat.sessionsError || chat.sessions.some((item) => item.id === urlChatId)) {
       chat.openSession(urlChatId);
     } else {
-      setNotice("That chat isn’t in your chats.");
-      navigate(hrefFor(pagePath, { chatId: null, lectureId: urlLectureId }), { replace: true });
+      // Not among the chats loaded so far (the menu loads them page by page): ask for it.
+      const wanted = urlChatId;
+      chat.ensureSession(wanted).then((session) => {
+        if (appliedChat.current !== wanted) return; // the URL changed meanwhile
+        if (session) chat.openSession(wanted);
+        else {
+          setNotice("That chat isn’t in your chats.");
+          navigate(hrefFor(pagePath, { chatId: null, lectureId: urlLectureId }), { replace: true });
+        }
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHome, chatAvailable, urlChatId, chat.sessionsLoading]);
@@ -524,6 +539,9 @@ export default function WorkspaceLayout() {
       navigate("/workspace", { replace: true });
     },
     onSend: handleSend,
+    olderMessages: chat.olderMessages,
+    loadingOlder: chat.loadingOlderMessages,
+    onLoadOlder: chat.loadOlderMessages,
     note: chatAvailable === false ? "This server has no chat assistant yet." : tooLong,
     cellContext,
     cellDragActive,
@@ -541,6 +559,43 @@ export default function WorkspaceLayout() {
     onDismissUpload: library.dismissUpload,
     onOpenMaterial: (material) => openViewer(material.id),
   };
+
+  /* ---------- Switching the notebook and the viewer ---------- */
+  const canSwitch = !phone && notebookOpen && viewerOpen && layout.canPin;
+  function switchPanels() {
+    const next = !switched;
+    setPanelsSwitched(next);
+    savePanelsSwitched(userKey, next);
+    if (next) {
+      // Room for a readable PDF: fold the menu to its icon rail (it can be opened again).
+      const nextSide = sidebarMode === "docked" && sidebarOpen ? RAIL_WIDTH : sideWidth;
+      if (nextSide !== sideWidth) setSidebarOpen(false);
+      // Side by side, the viewer first: start both at the widths that layout gives them.
+      const nextLayout = computeLayout({
+        width: rowWidth,
+        sidebar: nextSide,
+        viewer: { open: true, width: null },
+        notebook: { open: true, pinned: true, width: null },
+        viewerFirst: true,
+      });
+      setViewerWidth(null);
+      setNotebookWidth(nextLayout.notebookWidth);
+    }
+    announce(next ? "The material viewer is now next to the chat, the notebook at the right edge." : "The notebook is now next to the chat, the material viewer at the right edge.");
+  }
+  const switchTitle = canSwitch
+    ? undefined
+    : phone
+      ? undefined
+      : !notebookOpen || !viewerOpen
+        ? "Open both the notebook and the material viewer to switch their places"
+        : "Not enough room to show the notebook and the material viewer side by side";
+  const switcher = (other) => ({
+    label: `Switch places with the ${other}`,
+    title: switchTitle,
+    disabled: !canSwitch,
+    onClick: switchPanels,
+  });
 
   /* ---------- Viewer content ---------- */
   // Widen / Restore, like the notebook's: to the widest the chat allows, or back to the automatic width.
@@ -570,6 +625,7 @@ export default function WorkspaceLayout() {
           cited={opened.cited && opened.focus?.sourceType === "page"}
           onCollapse={() => closeViewer()}
           widen={viewerWiden}
+          switcher={notebookOpen && !phone ? switcher("notebook") : null}
         />
       );
     } else if (viewerMaterial.type === "notes" && !showsSource && fileState?.file) {
@@ -579,6 +635,7 @@ export default function WorkspaceLayout() {
           material={{ ...viewerMaterial, name: viewerMaterial.lecture.original_filename, file: fileState.file, url: fileState.url }}
           onCollapse={() => closeViewer()}
           widen={viewerWiden}
+          switcher={notebookOpen && !phone ? switcher("notebook") : null}
         />
       );
     } else {
@@ -591,6 +648,7 @@ export default function WorkspaceLayout() {
           onRetry={() => handleRetry(viewerMaterial)}
           onClose={() => closeViewer()}
           widen={viewerWiden}
+          switcher={notebookOpen && !phone ? switcher("notebook") : null}
           onOpenInNotebook={viewerMaterial.type === "notebook" ? () => openInNotebook(viewerMaterial) : null}
         />
       );
@@ -599,6 +657,17 @@ export default function WorkspaceLayout() {
 
   const notebookActions = (
     <>
+      {viewerOpen && !phone && (
+        <IconButton
+          icon="swap"
+          className={`cf-panel-toggle ${switched ? "cf-panel-toggle--on" : ""}`}
+          label="Switch places with the material viewer"
+          aria-pressed={switched}
+          title={switchTitle}
+          disabled={!canSwitch}
+          onClick={switchPanels}
+        />
+      )}
       <IconButton
         icon="dock"
         className={`cf-panel-toggle ${layout.pinned ? "cf-panel-toggle--on" : ""}`}
@@ -607,8 +676,13 @@ export default function WorkspaceLayout() {
         disabled={!layout.canPin && !layout.pinned}
         title={!layout.canPin ? "Not enough room to pin the notebook beside the chat" : undefined}
         onClick={() => {
-          const next = !notebookPinned;
+          const next = !layout.pinned;
           setNotebookPinned(next);
+          // Floating over the chat only works on the chat's side: undo a switch.
+          if (!next && switched) {
+            setPanelsSwitched(false);
+            savePanelsSwitched(userKey, false);
+          }
           // Keep the width valid for the new mode.
           const nextLayout = computeLayout({
             width: rowWidth,
@@ -676,6 +750,9 @@ export default function WorkspaceLayout() {
           sessionsError={chat.sessionsError}
           onOpenChat={openChat}
           onReloadChats={() => chat.reloadSessions()}
+          moreChats={chat.moreSessions}
+          loadingMoreChats={chat.loadingMoreSessions}
+          onLoadMoreChats={chat.loadMoreSessions}
           onRemoveChat={removeChat}
           available={chatAvailable !== false}
         />
@@ -688,11 +765,11 @@ export default function WorkspaceLayout() {
           <aside
             className={`cf-notebook ${layout.pinned ? "cf-notebook--pinned" : "cf-notebook--floating"}`}
             aria-label="Notebook panel"
-            style={{ width: layout.notebookWidth, right: layout.pinned ? undefined : layout.viewerWidth }}
+            style={{ width: layout.notebookWidth, right: layout.pinned ? undefined : layout.viewerWidth, order: switched ? 2 : 1 }}
           >
             <ResizeHandle
               label="Resize notebook (drag, or use the left and right arrow keys)"
-              onResize={(x) => setNotebookWidth(clampNotebook(rowRight() - layout.viewerWidth - x))}
+              onResize={(x) => setNotebookWidth(clampNotebook(rowRight() - (switched ? 0 : layout.viewerWidth) - x))}
               onStep={(step) => setNotebookWidth(clampNotebook(layout.notebookWidth + step))}
               onReset={() => setNotebookWidth(NOTEBOOK_DEFAULT)}
               onResizing={setResizing}
@@ -708,10 +785,10 @@ export default function WorkspaceLayout() {
         )}
 
         {viewerOpen && (
-          <aside className="cf-viewer" aria-label={`${viewerMaterial.name}, open beside the chat`} style={{ width: layout.viewerWidth }}>
+          <aside className="cf-viewer" aria-label={`${viewerMaterial.name}, open beside the chat`} style={{ width: layout.viewerWidth, order: switched ? 1 : 2 }}>
             <ResizeHandle
               label="Resize the material viewer (drag, or use the left and right arrow keys)"
-              onResize={(x) => setViewerWidth(clampViewer(rowRight() - x))}
+              onResize={(x) => setViewerWidth(clampViewer(rowRight() - (switched ? layout.notebookWidth : 0) - x))}
               onStep={(step) => setViewerWidth(clampViewer(layout.viewerWidth + step))}
               onReset={() => setViewerWidth(null)}
               onResizing={setResizing}

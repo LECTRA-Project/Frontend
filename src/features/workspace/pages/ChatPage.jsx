@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
 import Icon from "../../../components/ui/Icon.jsx";
@@ -58,6 +58,9 @@ export function ChatView({
   onAddCell,
   onRemoveCell,
   announcement,
+  olderMessages = false,
+  loadingOlder = false,
+  onLoadOlder = () => {},
 }) {
   const [nativeDragOver, setNativeDragOver] = useState(false);
   const [renaming, setRenaming] = useState(null); // the title being typed
@@ -70,11 +73,31 @@ export function ChatView({
   const count = materials.length;
   const empty = !loading && messages.length === 0;
 
-  // Keep the newest message in view.
-  useEffect(() => {
+  /*
+    Keep the newest message in view — except when older messages were just added above
+    (scrolling up loads them page by page): then the view stays on what the student was
+    reading.
+  */
+  const shown = useRef({ first: null, last: null, height: 0 });
+  useLayoutEffect(() => {
     const body = scrollRef.current;
-    if (body) body.scrollTop = body.scrollHeight;
+    if (!body) return;
+    const first = messages[0]?.id ?? null;
+    const last = messages.at(-1)?.id ?? null;
+    const previous = shown.current;
+    if (previous.last !== null && last === previous.last && first !== previous.first) {
+      body.scrollTop += body.scrollHeight - previous.height;
+    } else {
+      body.scrollTop = body.scrollHeight;
+    }
+    shown.current = { first, last, height: body.scrollHeight };
   }, [messages, busy]);
+
+  // Near the top: load the messages before those shown.
+  function handleScroll(event) {
+    shown.current.height = event.currentTarget.scrollHeight;
+    if (olderMessages && !loadingOlder && event.currentTarget.scrollTop < 160) onLoadOlder();
+  }
 
   function handleDragOver(event) {
     if (!isCellDrag(event.dataTransfer)) return;
@@ -170,7 +193,7 @@ export function ChatView({
         </p>
       )}
 
-      <div className="chat__scroll" ref={scrollRef}>
+      <div className="chat__scroll" ref={scrollRef} onScroll={handleScroll}>
         {loading ? (
           <p className="chat__loading" role="status">
             Loading the chat…
@@ -191,6 +214,13 @@ export function ChatView({
           </div>
         ) : (
           <ol className="chat__thread" aria-label="Messages" aria-live="polite">
+            {olderMessages && (
+              <li className="chat__older">
+                <button type="button" className="cf-link-button" onClick={onLoadOlder} disabled={loadingOlder}>
+                  {loadingOlder ? "Loading earlier messages…" : "Show earlier messages"}
+                </button>
+              </li>
+            )}
             {messages.map((message) => (
               <ChatMessage
                 key={message.id}

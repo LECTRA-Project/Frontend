@@ -1645,3 +1645,29 @@ button.cf-material__open:hover {
   padding-block: 6px;
   white-space: normal;
 }
+
+/* ---------- Loading more: chats in the menu, earlier messages in a chat ---------- */
+.cf-chats__more {
+  align-self: stretch;
+  margin-top: var(--space-2);
+  padding: 8px 10px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cf-chats__more:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.cf-chats__more:disabled {
+  cursor: progress;
+}
+.chat__older {
+  align-self: center;
+  list-style: none;
+  font-size: 13px;
+}

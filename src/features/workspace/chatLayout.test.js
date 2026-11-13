@@ -38,6 +38,17 @@ describe("panel widths", () => {
     expect(at1440({ open: true, width: 5000 }, {}, RAIL_WIDTH).viewerWidth).toBe(1440 - 64 - CHAT_MIN);
   });
 
+  it("gives the viewer its room first when it is switched next to the chat", () => {
+    const switched = computeLayout({ width: 1440, sidebar: RAIL_WIDTH, viewer: { open: true }, notebook: { open: true, pinned: true }, viewerFirst: true });
+    expect(switched).toMatchObject({ pinned: true, viewerWidth: 1440 - 64 - CHAT_MIN - NOTEBOOK_MIN, notebookWidth: NOTEBOOK_MIN, chatWidth: CHAT_MIN });
+    // Without viewerFirst, a pinned notebook takes its default room first and the viewer gets less.
+    expect(computeLayout({ width: 1440, sidebar: RAIL_WIDTH, viewer: { open: true }, notebook: { open: true, pinned: true } }).viewerWidth).toBe(1440 - 64 - CHAT_MIN - NOTEBOOK_DEFAULT);
+    // On a wide screen the viewer gets its automatic width and the notebook its default.
+    const wide = computeLayout({ width: 2400, sidebar: RAIL_WIDTH, viewer: { open: true }, notebook: { open: true, pinned: true }, viewerFirst: true });
+    expect(wide.viewerWidth).toBe(Math.round((2400 - 64) * 0.55));
+    expect(wide.notebookWidth).toBe(NOTEBOOK_DEFAULT);
+  });
+
   it("widens the viewer to its maximum and restores the automatic width", () => {
     const auto = at1440({ open: true });
     expect(auto).toMatchObject({ viewerWide: false, viewerCanWiden: true });

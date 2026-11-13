@@ -6,12 +6,13 @@ import IconButton from "../../components/ui/IconButton.jsx";
 
   ViewerHead     icon, title and meta; then the actions (open in a new tab, download, …),
                  the optional Widen / Restore button (`widen`: { wide, disabled, onToggle },
-                 like the notebook's) and the close button.
+                 like the notebook's), the optional Switch places button (`switcher`:
+                 { label, disabled, title, onClick }) and the close button.
   ViewerBanner   "Opened from a source in the answer: page 12", shown while the viewer is
                  on the place an answer cited.
   ZoomControls   − 100% +  (`label` replaces the percentage, e.g. "Fit")
 */
-export function ViewerHead({ icon = "fileText", title, meta, newTabUrl = null, children = null, widen = null, onClose }) {
+export function ViewerHead({ icon = "fileText", title, meta, newTabUrl = null, children = null, widen = null, switcher = null, onClose }) {
   return (
     <div className="viewer__head">
       <span className="viewer__icon">
@@ -35,6 +36,15 @@ export function ViewerHead({ icon = "fileText", title, meta, newTabUrl = null, c
         >
           <Icon name="external" />
         </a>
+      )}
+      {switcher && (
+        <IconButton
+          icon="swap"
+          label={switcher.label}
+          title={switcher.title ?? switcher.label}
+          disabled={switcher.disabled}
+          onClick={switcher.onClick}
+        />
       )}
       {widen && (
         <IconButton

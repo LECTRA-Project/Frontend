@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
 
@@ -41,6 +41,9 @@ import { displayChatTitle } from "../../../services/notebook/cellContext.js";
     onRenameMaterial(material), onDeleteMaterial(material)   open the library dialogs
     onDismissUpload(id)
     sessions, activeId, sessionsLoading, sessionsError, onOpenChat(id), onReloadChats()
+    moreChats, loadingMoreChats, onLoadMoreChats()   the chats are loaded page by page: at
+                                                     the end of the list, more load as it
+                                                     comes into view (or with its button)
     onRemoveChat(session)         deletes a chat after confirmation; resolves true when removed
     available                     false when the server has no chat API
 */
@@ -68,11 +71,28 @@ export default function ChatSidebar({
   sessionsError,
   onOpenChat,
   onReloadChats,
+  moreChats = false,
+  loadingMoreChats = false,
+  onLoadMoreChats = () => {},
   onRemoveChat,
   available = true,
 }) {
   const [removing, setRemoving] = useState(null); // the chat whose Remove is being confirmed
   const newChatRef = useRef(null);
+  const scrollRef = useRef(null);
+  const moreRef = useRef(null);
+
+  // Load the next page of chats when the end of the list scrolls into view.
+  useEffect(() => {
+    const target = moreRef.current;
+    if (!moreChats || loadingMoreChats || !target || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver((entries) => entries.some((entry) => entry.isIntersecting) && onLoadMoreChats(), {
+      root: scrollRef.current,
+      rootMargin: "0px 0px 200px 0px",
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [moreChats, loadingMoreChats, onLoadMoreChats, sessions.length]);
 
   if (!open) {
     if (mode === "phone") return null;
@@ -108,7 +128,7 @@ export default function ChatSidebar({
           <IconButton icon="sidebar" label={overlay ? "Close menu" : "Collapse menu"} onClick={onToggle} />
         </div>
 
-        <div className="cf-side__scroll">
+        <div className="cf-side__scroll" ref={scrollRef}>
           <section className="cf-materials" id="cf-materials" tabIndex={-1} aria-labelledby="cf-materials-title">
             <div className="cf-materials__head">
               <h2 id="cf-materials-title" className="cf-section-title">
@@ -277,6 +297,11 @@ export default function ChatSidebar({
                   </ul>
                 </div>
               ))
+            )}
+            {moreChats && sessions.length > 0 && (
+              <button ref={moreRef} type="button" className="cf-chats__more" onClick={onLoadMoreChats} disabled={loadingMoreChats}>
+                {loadingMoreChats ? "Loading more chats…" : "Show more chats"}
+              </button>
             )}
           </section>
         </div>
