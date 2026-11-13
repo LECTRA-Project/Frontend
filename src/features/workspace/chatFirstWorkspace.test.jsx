@@ -758,6 +758,54 @@ describe("chat-first workspace: switching the notebook and the viewer", () => {
     await user.click(screen.getByRole("button", { name: "Notebook" }));
   }
 
+  it("drags the divider between notebook and PDF: one widens, the other narrows, the chat stays", async () => {
+    const { user } = await openWorkspace();
+    await openBoth(user);
+    const panel = notebookPanel();
+    const pdf = screen.getByRole("region", { name: "PDF viewer: KI 02 Classification Part1" });
+    const px = (node) => parseInt(node.style.width, 10);
+    const [pdfWidth, notebookWidth] = [px(viewer()), px(panel)];
+    const total = pdfWidth + notebookWidth;
+    const chatRoom = () => document.querySelector(".cf__main").style.paddingRight;
+    const divider = within(viewer()).getByRole("button", { name: /^Resize the notebook and the material viewer/ });
+
+    fireEvent.pointerDown(divider, { button: 0, pointerId: 1, clientX: 1440 - pdfWidth });
+    fireEvent.pointerMove(divider, { pointerId: 1, clientX: 1440 - pdfWidth - 40 }); // the PDF grows by 40
+    expect(px(viewer())).toBe(pdfWidth + 40);
+    expect(px(panel)).toBe(notebookWidth - 40);
+    expect(chatRoom()).toBe(`${notebookWidth - 40}px`); // the chat ends where it did
+    fireEvent.pointerMove(divider, { pointerId: 1, clientX: 1440 - pdfWidth + 2000 }); // far right: the PDF's minimum
+    expect(px(viewer())).toBe(360);
+    expect(px(panel)).toBe(total - 360);
+    fireEvent.pointerMove(divider, { pointerId: 1, clientX: 0 }); // far left: the notebook's minimum
+    expect(px(panel)).toBe(340);
+    expect(px(viewer())).toBe(total - 340);
+    fireEvent.pointerUp(divider, { pointerId: 1, clientX: 0 });
+
+    divider.focus();
+    await user.keyboard("{ArrowRight}"); // the PDF narrows by a step, the notebook widens
+    expect(px(viewer())).toBe(total - 340 - 32);
+    expect(px(panel)).toBe(340 + 32);
+    // Neither panel was reloaded.
+    expect(screen.getByRole("region", { name: "PDF viewer: KI 02 Classification Part1" })).toBe(pdf);
+    expect(notebookPanel()).toBe(panel);
+  });
+
+  it("switched (chat | PDF | notebook), the notebook's edge is the divider", async () => {
+    const { user } = await openWorkspace();
+    await openBoth(user);
+    await user.click(within(notebookPanel()).getByRole("button", { name: "Switch places with the material viewer" }));
+    const px = (node) => parseInt(node.style.width, 10);
+    const [pdfWidth, notebookWidth] = [px(viewer()), px(notebookPanel())];
+    const divider = within(notebookPanel()).getByRole("button", { name: /^Resize the notebook and the material viewer/ });
+
+    fireEvent.pointerDown(divider, { button: 0, pointerId: 1, clientX: 1440 - notebookWidth });
+    fireEvent.pointerMove(divider, { pointerId: 1, clientX: 1440 - notebookWidth - 60 }); // the notebook grows by 60
+    fireEvent.pointerUp(divider, { pointerId: 1, clientX: 1440 - notebookWidth - 60 });
+    expect(px(notebookPanel())).toBe(notebookWidth + 60);
+    expect(px(viewer())).toBe(pdfWidth - 60);
+  });
+
   it("switches the two panels on the right of the chat and back, keeping the chat where it is", async () => {
     const { user, unmount } = await openWorkspace();
     await openBoth(user);

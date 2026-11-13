@@ -100,8 +100,6 @@ export default function ChatSidebar({
       <nav className="cf-rail" aria-label="Menu">
         <IconButton icon="sidebar" label="Open menu" onClick={onToggle} />
         <IconButton icon="plus" label="New chat" onClick={onNewChat} />
-        <IconButton icon="fileText" label="Materials in this chat" onClick={onToggle} />
-        <IconButton icon="chat" label="Chats" onClick={onToggle} />
       </nav>
     );
   }
