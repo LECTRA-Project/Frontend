@@ -1,5 +1,6 @@
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
+import { useI18n } from "../../../i18n/i18n.js";
 import { isAnswered } from "../../../services/exam/examStorage.js";
 import { plainText } from "../examFormat.js";
 
@@ -10,6 +11,7 @@ import { plainText } from "../examFormat.js";
          children   more actions for the reviewed exam, shown beside "Back to the questions"
 */
 export default function ExamReview({ questions, answers, onJump, onBack, children = null }) {
+  const { t } = useI18n();
   const missing = questions.filter((question) => !isAnswered(answers[question.id])).length;
   const total = questions.length;
 
@@ -17,12 +19,14 @@ export default function ExamReview({ questions, answers, onJump, onBack, childre
     <section className="exam-card exam-review" aria-labelledby="exam-review-title">
       <div>
         <h3 id="exam-review-title" className="exam-card__title" tabIndex={-1}>
-          Review your answers
+          {t("Review your answers")}
         </h3>
         <p className="exam-card__lead">
           {missing === 0
-            ? `All ${total} questions are answered.`
-            : `${total - missing} of ${total} answered · ${missing === 1 ? "1 question isn’t" : `${missing} questions aren’t`} answered yet.`}
+            ? t("All {total} questions are answered.", { total })
+            : missing === 1
+              ? t("{answered} of {total} answered · 1 question isn’t answered yet.", { answered: total - missing, total })
+              : t("{answered} of {total} answered · {missing} questions aren’t answered yet.", { answered: total - missing, total, missing })}
         </p>
       </div>
 
@@ -36,7 +40,7 @@ export default function ExamReview({ questions, answers, onJump, onBack, childre
                 <span className="exam-review__text">{plainText(question.question)}</span>
                 <span className={`exam-status ${done ? "exam-status--done" : ""}`}>
                   {done && <Icon name="check" />}
-                  {done ? "Answered" : "Not answered"}
+                  {done ? t("Answered") : t("Not answered")}
                 </span>
               </button>
             </li>
@@ -46,7 +50,7 @@ export default function ExamReview({ questions, answers, onJump, onBack, childre
 
       <div className="exam-actions">
         <Button icon="chevronLeft" onClick={onBack}>
-          Back to the questions
+          {t("Back to the questions")}
         </Button>
         {children}
       </div>

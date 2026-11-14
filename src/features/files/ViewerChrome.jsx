@@ -1,5 +1,6 @@
 import Icon from "../../components/ui/Icon.jsx";
 import IconButton from "../../components/ui/IconButton.jsx";
+import { useI18n } from "../../i18n/i18n.js";
 
 /*
   The parts every material viewer shares (PDF, notes, slides and notebooks):
@@ -13,6 +14,7 @@ import IconButton from "../../components/ui/IconButton.jsx";
   ZoomControls   − 100% +  (`label` replaces the percentage, e.g. "Fit")
 */
 export function ViewerHead({ icon = "fileText", title, meta, newTabUrl = null, children = null, widen = null, switcher = null, onClose }) {
+  const { t } = useI18n();
   return (
     <div className="viewer__head">
       <span className="viewer__icon">
@@ -31,8 +33,8 @@ export function ViewerHead({ icon = "fileText", title, meta, newTabUrl = null, c
           href={newTabUrl}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Open in a new tab"
-          title="Open in a new tab"
+          aria-label={t("Open in a new tab")}
+          title={t("Open in a new tab")}
         >
           <Icon name="external" />
         </a>
@@ -49,12 +51,12 @@ export function ViewerHead({ icon = "fileText", title, meta, newTabUrl = null, c
       {widen && (
         <IconButton
           icon={widen.wide ? "collapse" : "expand"}
-          label={widen.wide ? "Restore viewer width" : "Widen viewer"}
+          label={widen.wide ? t("Restore viewer width") : t("Widen viewer")}
           disabled={widen.disabled}
           onClick={widen.onToggle}
         />
       )}
-      {onClose && <IconButton icon="close" label="Close the material viewer" onClick={onClose} />}
+      {onClose && <IconButton icon="close" label={t("Close the material viewer")} onClick={onClose} />}
     </div>
   );
 }
@@ -69,13 +71,14 @@ export function ViewerBanner({ children }) {
 }
 
 export function ZoomControls({ zoom, label, canZoomOut, canZoomIn, onZoomOut, onZoomIn }) {
+  const { t } = useI18n();
   return (
     <div className="viewer__zoom">
-      <IconButton icon="zoomOut" label="Zoom out" disabled={!canZoomOut} onClick={onZoomOut} />
+      <IconButton icon="zoomOut" label={t("Zoom out")} disabled={!canZoomOut} onClick={onZoomOut} />
       <span className="viewer__zoom-value" aria-live="polite">
         {label ?? `${zoom}%`}
       </span>
-      <IconButton icon="zoomIn" label="Zoom in" disabled={!canZoomIn} onClick={onZoomIn} />
+      <IconButton icon="zoomIn" label={t("Zoom in")} disabled={!canZoomIn} onClick={onZoomIn} />
     </div>
   );
 }

@@ -7,6 +7,8 @@ import NotebookCell from "../../notebook/components/NotebookCell.jsx";
 import NotebookToolbar from "../../notebook/components/NotebookToolbar.jsx";
 import { createCell, fileNameForTitle, newCellId, serializeNotebook } from "../../../services/notebook/ipynb.js";
 import { createCellContext, writeCellDrag } from "../../../services/notebook/cellContext.js";
+import { describeProgress } from "../../../services/python/pythonKernel.js";
+import { useI18n } from "../../../i18n/i18n.js";
 import "../../notebook/notebook.css";
 
 /*
@@ -20,6 +22,7 @@ import "../../notebook/notebook.css";
   close), shown in the toolbar.
 */
 export default function NotebookPage({ notebookState, kernel, kernelState, assistantDraft, panelActions = null }) {
+  const { t } = useI18n();
   const { notebook, runState, saveInfo, notice, lastRunFailed, pendingOpen, actions } = notebookState;
   const { cells } = notebook;
 
@@ -216,7 +219,7 @@ export default function NotebookPage({ notebookState, kernel, kernelState, assis
   const kernelUnavailable = kernelState.status === "unavailable";
 
   return (
-    <section className="panel center-panel notebook" aria-label="Notebook">
+    <section className="panel center-panel notebook" aria-label={t("Notebook")}>
       <NotebookToolbar
         title={notebook.title}
         saveInfo={saveInfo}
@@ -242,7 +245,7 @@ export default function NotebookPage({ notebookState, kernel, kernelState, assis
         type="file"
         accept=".ipynb,application/x-ipynb+json,application/json"
         hidden
-        aria-label="Import notebook file"
+        aria-label={t("Import notebook file")}
         onChange={(event) => {
           const [file] = event.target.files;
           event.target.value = ""; // allows picking the same file again
@@ -255,14 +258,14 @@ export default function NotebookPage({ notebookState, kernel, kernelState, assis
           <div className="notebook__notice notebook__notice--error" role="alert">
             <span>{kernelState.error}</span>
             <Button size="sm" onClick={() => kernel.start().catch(() => {})}>
-              Retry
+              {t("Retry")}
             </Button>
           </div>
         )}
         {notice && (
           <div className={`notebook__notice notebook__notice--${notice.kind}`} role="alert">
             <span>{notice.text}</span>
-            <IconButton icon="close" label="Dismiss" onClick={actions.dismissNotice} />
+            <IconButton icon="close" label={t("Dismiss")} onClick={actions.dismissNotice} />
           </div>
         )}
 
@@ -271,19 +274,19 @@ export default function NotebookPage({ notebookState, kernel, kernelState, assis
             <span className="notebook__empty-icon">
               <Icon name="code" />
             </span>
-            <p className="notebook__empty-title">This notebook is empty</p>
+            <p className="notebook__empty-title">{t("This notebook is empty")}</p>
             <p className="notebook__empty-text">
-              Write Python and run it right here — code runs in your browser. Add Markdown cells for your notes.
+              {t("Write Python and run it right here — code runs in your browser. Add Markdown cells for your notes.")}
             </p>
             <div className="notebook__empty-actions">
               <Button variant="primary" icon="plus" onClick={() => insertCell("code", 0)}>
-                Create your first code cell
+                {t("Create your first code cell")}
               </Button>
               <Button icon="text" onClick={() => insertCell("markdown", 0)}>
-                Add a Markdown cell
+                {t("Add a Markdown cell")}
               </Button>
               <Button variant="ghost" icon="upload" onClick={() => fileInputRef.current?.click()}>
-                Import .ipynb
+                {t("Import .ipynb")}
               </Button>
             </div>
           </div>
@@ -296,7 +299,7 @@ export default function NotebookPage({ notebookState, kernel, kernelState, assis
                 index={index}
                 cellCount={cells.length}
                 runStatus={runState[cell.id]}
-                progress={runState[cell.id] === "running" ? kernelState.message : ""}
+                progress={runState[cell.id] === "running" ? describeProgress(kernelState.message) : ""}
                 selected={cell.id === selectedId}
                 editing={editingIds.has(cell.id)}
                 focusRequest={focusRequest?.id === cell.id ? focusRequest : null}
@@ -305,54 +308,54 @@ export default function NotebookPage({ notebookState, kernel, kernelState, assis
             ))}
             <div className="notebook__add">
               <Button variant="ghost" size="sm" icon="plus" onClick={() => insertCell("code", cells.length)}>
-                Code
+                {t("Code")}
               </Button>
               <Button variant="ghost" size="sm" icon="text" onClick={() => insertCell("markdown", cells.length)}>
                 Markdown
               </Button>
             </div>
             <p className="notebook__hint">
-              Shift + Enter runs a cell and moves on · Ctrl/⌘ + Enter runs it in place · Esc leaves the editor · Ctrl/⌘ + S saves
+              {t("Shift + Enter runs a cell and moves on · Ctrl/⌘ + Enter runs it in place · Esc leaves the editor · Ctrl/⌘ + S saves")}
             </p>
           </>
         )}
       </div>
 
       {confirm?.kind === "delete" && (
-        <ConfirmDialog title="Delete this cell?" confirmLabel="Delete" danger onConfirm={confirmAction} onCancel={() => setConfirm(null)}>
-          <p>The cell and its output will be removed. This can’t be undone.</p>
+        <ConfirmDialog title={t("Delete this cell?")} confirmLabel={t("Delete")} danger onConfirm={confirmAction} onCancel={() => setConfirm(null)}>
+          <p>{t("The cell and its output will be removed. This can’t be undone.")}</p>
         </ConfirmDialog>
       )}
       {confirm?.kind === "restart" && (
-        <ConfirmDialog title="Restart the Python kernel?" confirmLabel="Restart" onConfirm={confirmAction} onCancel={() => setConfirm(null)}>
-          <p>All variables, functions and imports will be cleared, and any running cell is stopped.</p>
-          <p>Your cells and their outputs stay as they are.</p>
+        <ConfirmDialog title={t("Restart the Python kernel?")} confirmLabel={t("Restart")} onConfirm={confirmAction} onCancel={() => setConfirm(null)}>
+          <p>{t("All variables, functions and imports will be cleared, and any running cell is stopped.")}</p>
+          <p>{t("Your cells and their outputs stay as they are.")}</p>
         </ConfirmDialog>
       )}
       {confirm?.kind === "new" && (
-        <ConfirmDialog title="Start a new notebook?" confirmLabel="New notebook" danger onConfirm={confirmAction} onCancel={() => setConfirm(null)}>
-          <p>This replaces the current notebook saved in this browser, and restarts Python.</p>
-          <p>Download it first if you want to keep a copy.</p>
+        <ConfirmDialog title={t("Start a new notebook?")} confirmLabel={t("New notebook")} danger onConfirm={confirmAction} onCancel={() => setConfirm(null)}>
+          <p>{t("This replaces the current notebook saved in this browser, and restarts Python.")}</p>
+          <p>{t("Download it first if you want to keep a copy.")}</p>
           <div>
             <Button size="sm" icon="download" onClick={download}>
-              Download current notebook
+              {t("Download current notebook")}
             </Button>
           </div>
         </ConfirmDialog>
       )}
       {pendingOpen && (
         <ConfirmDialog
-          title={`Open “${pendingOpen.title}”?`}
-          confirmLabel="Open notebook"
+          title={t("Open “{title}”?", { title: pendingOpen.title })}
+          confirmLabel={t("Open notebook")}
           danger
           onConfirm={actions.confirmOpen}
           onCancel={actions.cancelOpen}
         >
-          <p>This replaces the current notebook saved in this browser, and restarts Python.</p>
-          <p>Download it first if you want to keep a copy.</p>
+          <p>{t("This replaces the current notebook saved in this browser, and restarts Python.")}</p>
+          <p>{t("Download it first if you want to keep a copy.")}</p>
           <div>
             <Button size="sm" icon="download" onClick={download}>
-              Download current notebook
+              {t("Download current notebook")}
             </Button>
           </div>
         </ConfirmDialog>

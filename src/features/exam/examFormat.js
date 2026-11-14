@@ -1,8 +1,7 @@
+import { dateLocale, t } from "../../i18n/i18n.js";
 import { renderMarkdown } from "../../services/notebook/markdown.js";
 
 /* Small text helpers for the exam screens. */
-
-const UNITS = { page: ["page", "pages"], slide: ["slide", "slides"], cell: ["cell", "cells"] };
 
 /* "13 Nov, 14:05" (the year only when it isn't this year). */
 export function formatExamDate(iso, now = new Date()) {
@@ -10,21 +9,25 @@ export function formatExamDate(iso, now = new Date()) {
   if (Number.isNaN(date.getTime())) return "";
   const options = { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" };
   if (date.getFullYear() !== now.getFullYear()) options.year = "numeric";
-  return date.toLocaleString("en-GB", options);
+  return date.toLocaleString(dateLocale("en-GB"), options);
 }
 
 export function pointsLabel(points) {
-  return points === 1 ? "1 point" : `${points ?? 0} points`;
+  return points === 1 ? t("1 point") : t("{points} points", { points: points ?? 0 });
 }
 
 /* "page 4", "pages 3–7", "slides 2, 5" for the numbers a question was written from. */
 export function pagesLabel(numbers, sourceType = "page") {
   const list = [...new Set((numbers ?? []).filter((value) => Number.isInteger(value)))].sort((a, b) => a - b);
   if (list.length === 0) return "";
-  const [one, many] = UNITS[sourceType] ?? UNITS.page;
-  if (list.length === 1) return `${one} ${list[0]}`;
+  const unit = sourceType === "slide" || sourceType === "cell" ? sourceType : "page";
+  if (list.length === 1) {
+    const number = list[0];
+    return { page: t("page {number}", { number }), slide: t("slide {number}", { number }), cell: t("cell {number}", { number }) }[unit];
+  }
   const contiguous = list.every((value, index) => index === 0 || value === list[index - 1] + 1);
-  return `${many} ${contiguous ? `${list[0]}–${list.at(-1)}` : list.join(", ")}`;
+  const range = contiguous ? `${list[0]}–${list.at(-1)}` : list.join(", ");
+  return { page: t("pages {numbers}", { numbers: range }), slide: t("slides {numbers}", { numbers: range }), cell: t("cells {numbers}", { numbers: range }) }[unit];
 }
 
 /* A, B, C … for the choices, in the order they are shown. */
@@ -47,20 +50,21 @@ export function formatPoints(points) {
 
 /* "2 / 3 points", "1 / 1 point"; "– / 3 points" while the answer waits to be graded. */
 export function pointsOutOf(points, max) {
-  return `${formatPoints(points)} / ${formatPoints(max)} ${max === 1 ? "point" : "points"}`;
+  const vars = { points: formatPoints(points), max: formatPoints(max) };
+  return max === 1 ? t("{points} / {max} point", vars) : t("{points} / {max} points", vars);
 }
 
 /* "Question 2", "Questions 2 and 4", "Questions 1, 2 and 4". */
 export function questionNumbers(numbers) {
-  if (numbers.length === 1) return `Question ${numbers[0]}`;
-  return `Questions ${numbers.slice(0, -1).join(", ")} and ${numbers.at(-1)}`;
+  if (numbers.length === 1) return t("Question {number}", { number: numbers[0] });
+  return t("Questions {list} and {last}", { list: numbers.slice(0, -1).join(", "), last: numbers.at(-1) });
 }
 
 /* The verdict of a checked answer, as a label and a tone for its badge. */
 export function verdictOf(result) {
-  if (!result?.answered) return { label: "Not answered", tone: "bad" };
-  if (!result?.graded) return { label: "Waiting to be graded", tone: "wait" };
-  if (result.verdict === "correct") return { label: "Correct", tone: "ok" };
-  if (result.verdict === "partially_correct") return { label: "Partly correct", tone: "part" };
-  return { label: "Wrong", tone: "bad" };
+  if (!result?.answered) return { label: t("Not answered"), tone: "bad" };
+  if (!result?.graded) return { label: t("Waiting to be graded"), tone: "wait" };
+  if (result.verdict === "correct") return { label: t("Correct"), tone: "ok" };
+  if (result.verdict === "partially_correct") return { label: t("Partly correct"), tone: "part" };
+  return { label: t("Wrong"), tone: "bad" };
 }

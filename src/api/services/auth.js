@@ -1,5 +1,6 @@
 import { post } from "../http.js";
 import { ApiError, setAuthToken } from "../client.js";
+import { t } from "../../i18n/i18n.js";
 
 /*
   AUTH SERVICE — /api/auth endpoints of the FastAPI backend.
@@ -26,7 +27,7 @@ export async function requestPasswordReset({ email }) {
   const response = await post("/auth/forgot-password", { email });
   if (response?.status !== true) {
     throw new ApiError({
-      message: response?.message || "Unable to send the password reset email.",
+      message: response?.message || t("Unable to send the password reset email."),
       data: response,
     });
   }
@@ -38,7 +39,7 @@ export async function resetPassword({ token, newPassword }) {
   const response = await post("/auth/reset-password", { token, new_password: newPassword });
   if (response?.status !== true) {
     throw new ApiError({
-      message: response?.message || "Unable to reset the password.",
+      message: response?.message || t("Unable to reset the password."),
       data: response,
     });
   }

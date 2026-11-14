@@ -1,5 +1,7 @@
 import axios from "axios";
 
+import { t } from "../i18n/i18n.js";
+
 /*
   API CLIENT — the one axios instance every request in the app goes through.
 
@@ -131,10 +133,10 @@ apiClient.interceptors.response.use(
     const server = readServerError(data);
     const message =
       server.message ||
-      (error.code === "ECONNABORTED" && "The request timed out.") ||
-      (!error.response && "Can't reach the server. Check your connection.") ||
+      (error.code === "ECONNABORTED" && t("The request timed out.")) ||
+      (!error.response && t("Can't reach the server. Check your connection.")) ||
       error.message ||
-      "Something went wrong.";
+      t("Something went wrong.");
 
     return Promise.reject(
       new ApiError({ message, status, data, code: error.code ?? null, fieldErrors: server.fieldErrors })

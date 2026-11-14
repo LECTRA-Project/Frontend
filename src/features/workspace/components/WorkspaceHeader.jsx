@@ -5,6 +5,7 @@ import Brand from "../../../components/Brand.jsx";
 import Button from "../../../components/ui/Button.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
 import ProfileMenu from "./ProfileMenu.jsx";
+import { useI18n } from "../../../i18n/i18n.js";
 import { getInitials, useAuth } from "../../auth/authContext.js";
 
 /*
@@ -26,6 +27,7 @@ function withoutExam(search) {
 }
 
 export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null, notebookOpen = false, onToggleNotebook = null }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
@@ -42,13 +44,13 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
           <IconButton
             icon="menu"
             className="ws-header__menu"
-            label={menuOpen ? "Close menu" : "Open menu"}
+            label={menuOpen ? t("Close menu") : t("Open menu")}
             aria-expanded={menuOpen}
             aria-controls="chat-menu"
             onClick={onToggleMenu}
           />
         )}
-        <Link to="/workspace/home" className="ws-header__home" aria-label="LECTRA — go to home">
+        <Link to="/workspace/home" className="ws-header__home" aria-label={t("LECTRA — go to home")}>
           <Brand />
         </Link>
       </div>
@@ -56,7 +58,7 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
       <div className="ws-header__actions">
         {onToggleNotebook && (
           <Button icon="code" active={notebookOpen} aria-pressed={notebookOpen} onClick={onToggleNotebook}>
-            <span className="ws-header__label">Notebook</span>
+            <span className="ws-header__label">{t("Notebook")}</span>
           </Button>
         )}
         {!isHome && (
@@ -69,7 +71,7 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
             // the exam (?exam=…) belongs to the Exam view only, which opens on its setup step.
             onClick={() => navigate({ pathname: isExamOpen ? "/workspace" : "/workspace/exam", search: withoutExam(location.search) })}
           >
-            <span className="ws-header__label">Exam</span>
+            <span className="ws-header__label">{t("Exam")}</span>
           </Button>
         )}
 
@@ -77,7 +79,7 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
           <button
             type="button"
             className="avatar ws-header__avatar"
-            aria-label="Open profile menu"
+            aria-label={t("Open profile menu")}
             aria-haspopup="menu"
             aria-expanded={menuOpenProfile}
             onClick={() => setProfileOpen((open) => !open)}

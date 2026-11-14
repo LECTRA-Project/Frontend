@@ -19,6 +19,8 @@
     interrupt restarts the kernel and the cell's output says so.
 */
 
+import { t } from "../../i18n/i18n.js";
+
 export const PYODIDE_VERSION = "314.0.7";
 export const PYODIDE_INDEX_URL =
   import.meta.env.VITE_PYODIDE_INDEX_URL || `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
@@ -36,6 +38,24 @@ export class KernelError extends Error {
     this.name = "KernelError";
     this.code = code; // "restarted" | "unavailable" | "disposed"
   }
+}
+
+/*
+  The kernel's progress message (getSnapshot().message) in the interface language.
+  The message is kept in English (the worker writes it); it is translated when shown.
+*/
+export function describeProgress(message) {
+  if (!message) return message;
+  if (message === "Starting Python…") return t("Starting Python…");
+  if (message === "Downloading Python…") return t("Downloading Python…");
+  if (message === "Loading the package installer (micropip)…") return t("Loading the package installer (micropip)…");
+  let match = /^Loading (.+) \(included with Pyodide\)…$/.exec(message);
+  if (match) return t("Loading {packages} (included with Pyodide)…", { packages: match[1] });
+  match = /^Loading (.+)…$/.exec(message);
+  if (match) return t("Loading {packages}…", { packages: match[1] });
+  match = /^Installing (.+)…$/.exec(message);
+  if (match) return t("Installing {packages}…", { packages: match[1] });
+  return message;
 }
 
 function createPyodideWorker() {
@@ -113,8 +133,10 @@ export class PythonKernel {
       const timer = setTimeout(() => {
         this.failStart(
           generation,
-          `Python did not finish loading within ${Math.round(this.loadTimeoutMs / 1000)} seconds. ` +
-            "Check your internet connection (Python is downloaded from the Pyodide CDN) and retry."
+          t(
+            "Python did not finish loading within {seconds} seconds. Check your internet connection (Python is downloaded from the Pyodide CDN) and retry.",
+            { seconds: Math.round(this.loadTimeoutMs / 1000) }
+          )
         );
       }, this.loadTimeoutMs);
       this.pendingStart = { resolve, reject, timer };
@@ -127,7 +149,7 @@ export class PythonKernel {
     try {
       worker = this.createWorker();
     } catch (error) {
-      this.failStart(generation, `This browser could not start a Python worker: ${error.message}`);
+      this.failStart(generation, t("This browser could not start a Python worker: {error}", { error: error.message }));
       return ready;
     }
     this.worker = worker;
@@ -295,7 +317,7 @@ export class PythonKernel {
         break;
 
       case "init-error":
-        this.failStart(generation, `Python could not be loaded: ${message.message}`);
+        this.failStart(generation, t("Python could not be loaded: {error}", { error: message.message }));
         break;
 
       case "started":
@@ -340,7 +362,7 @@ export class PythonKernel {
   handleCrash(generation, reason) {
     if (generation !== this.generation) return;
     if (this.pendingStart) {
-      this.failStart(generation, `Python could not be loaded: ${reason}`);
+      this.failStart(generation, t("Python could not be loaded: {error}", { error: reason }));
       return;
     }
     const execution = this.current;

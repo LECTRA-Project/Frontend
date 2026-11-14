@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Icon from "../../../components/ui/Icon.jsx";
+import { useI18n } from "../../../i18n/i18n.js";
 import { getInitials, useAuth } from "../../auth/authContext.js";
 
 /*
@@ -9,6 +10,7 @@ import { getInitials, useAuth } from "../../auth/authContext.js";
   Closes when the user clicks outside it, presses Escape, or chooses a row.
 */
 export default function ProfileMenu({ onClose }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const menuRef = useRef(null);
@@ -45,7 +47,7 @@ export default function ProfileMenu({ onClose }) {
   }
 
   return (
-    <div className="profile-menu" ref={menuRef} role="menu" aria-label="Profile menu">
+    <div className="profile-menu" ref={menuRef} role="menu" aria-label={t("Profile menu")}>
       <div className="profile-menu__user">
         <span className="avatar avatar--lg">{getInitials(user)}</span>
         <div>
@@ -55,28 +57,29 @@ export default function ProfileMenu({ onClose }) {
       </div>
 
       <div className="profile-menu__group">
-        <MenuRow icon="user" label="My profile" onClick={() => goTo("/profile")} />
-        <MenuRow icon="sliders" label="Account settings" onClick={() => goTo("/settings")} />
-        <MenuRow icon="chart" label="Statistics" onClick={() => goTo("/statistics")} />
+        <MenuRow icon="user" label={t("My profile")} onClick={() => goTo("/profile")} />
+        <MenuRow icon="sliders" label={t("Account settings")} onClick={() => goTo("/settings")} />
+        <MenuRow icon="chart" label={t("Statistics")} onClick={() => goTo("/statistics")} />
         {/* No help page exists yet, so this row is shown but marked as coming later. */}
-        <MenuRow icon="help" label="Help & Support" hint="Later" disabled />
+        <MenuRow icon="help" label={t("Help & Support")} hint={t("Later")} disabled />
       </div>
 
       <div className="profile-menu__group">
-        <MenuRow icon="logout" label="Sign out" muted onClick={signOut} />
+        <MenuRow icon="logout" label={t("Sign out")} muted onClick={signOut} />
       </div>
     </div>
   );
 }
 
 function MenuRow({ icon, label, hint, muted = false, disabled = false, onClick }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
       role="menuitem"
       className={`profile-menu__row ${muted ? "profile-menu__row--muted" : ""}`}
       aria-disabled={disabled || undefined}
-      title={disabled ? `${label} will be added in a later phase` : undefined}
+      title={disabled ? t("{feature} will be added in a later phase", { feature: label }) : undefined}
       onClick={disabled ? undefined : onClick}
     >
       <Icon name={icon} />

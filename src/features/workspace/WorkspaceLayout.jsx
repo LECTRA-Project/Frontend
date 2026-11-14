@@ -23,6 +23,7 @@ import { fetchLectureFile } from "../../api/services/lectures.js";
 import { getChatSession, MAX_MESSAGE_LENGTH } from "../../api/services/chat.js";
 import { cellContextLabel, displayChatTitle, isSameCellContext, withNotebookContext } from "../../services/notebook/cellContext.js";
 import { useLectureChat } from "./useLectureChat.js";
+import { useChatModel } from "./useChatModel.js";
 import { examChatTitle, examQuestionMessage } from "../exam/askAboutAnswer.js";
 import {
   computeLayout,
@@ -35,6 +36,7 @@ import {
   splitPanels,
   VIEWER_MIN,
 } from "./chatLayout.js";
+import { t, useI18n } from "../../i18n/i18n.js";
 import "./workspace.css";
 
 // Opened with their original file (fetched from the backend).
@@ -43,7 +45,7 @@ const FILE_VIEWERS = new Set(["pdf", "notes"]);
 /* Basic mode: the stored file's public URL (needs the bucket to allow this origin). */
 async function downloadFromStorage(url) {
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`The file could not be downloaded (HTTP ${response.status}).`);
+  if (!response.ok) throw new Error(t("The file could not be downloaded (HTTP {status}).", { status: response.status }));
   return response.blob();
 }
 
@@ -123,12 +125,15 @@ export default function WorkspaceLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  useI18n(); // re-render in the chosen language (the texts below use the plain t())
   const userKey = user?.id ?? user?.email ?? "signed-in-user";
   const library = useLectureLibrary();
   const basic = library.features?.ai === false;
   // null while unknown; the chat-first workspace needs the chat API.
   const chatAvailable = library.features ? library.features.chat === true : null;
   const chat = useLectureChat({ enabled: chatAvailable === true });
+  // The model the chat asks with (Lectra, or one unlocked by the student's own API key).
+  const chatModel = useChatModel(userKey, { enabled: chatAvailable === true });
   const { kernel, kernelState } = usePythonKernel();
   const notebookState = useNotebook(kernel, userKey);
 
@@ -237,7 +242,7 @@ export default function WorkspaceLayout() {
   }
   const rightWidth = switched ? layout.notebookWidth : layout.viewerWidth;
   const divider = {
-    label: "Resize the notebook and the material viewer (drag, or use the left and right arrow keys)",
+    label: t("Resize the notebook and the material viewer (drag, or use the left and right arrow keys)"),
     onResize: (x) => resizeSplit(rowRight() - x),
     onStep: (step) => resizeSplit(rightWidth + step),
   };
@@ -275,7 +280,7 @@ export default function WorkspaceLayout() {
         setOpenedFile({ key: fileKey, url, file, error: null });
       },
       (err) => {
-        if (!controller.signal.aborted) setOpenedFile({ key: fileKey, url: null, file: null, error: err.message || "The file could not be loaded." });
+        if (!controller.signal.aborted) setOpenedFile({ key: fileKey, url: null, file: null, error: err.message || t("The file could not be loaded.") });
       }
     );
     return () => {
@@ -308,7 +313,7 @@ export default function WorkspaceLayout() {
         if (appliedChat.current !== wanted) return; // the URL changed meanwhile
         if (session) chat.openSession(wanted);
         else {
-          setNotice("That chat isn’t in your chats.");
+          setNotice(t("That chat isn’t in your chats."));
           navigate(hrefFor(pagePath, { chatId: null, lectureId: urlLectureId }), { replace: true });
         }
       });
@@ -331,7 +336,7 @@ export default function WorkspaceLayout() {
   useEffect(() => {
     if (!urlLectureId || library.loading || library.error || viewerLecture) return;
     if (chatAvailable === null || (chatAvailable && appliedChat.current !== urlChatId)) return; // the chat in the URL first (effects above)
-    if (urlLectureId !== deletedLecture.current) setNotice("That lecture isn’t in your materials.");
+    if (urlLectureId !== deletedLecture.current) setNotice(t("That lecture isn’t in your materials."));
     navigate(hrefFor(pagePath), { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlLectureId, urlChatId, chat.activeId, library.loading, library.error, viewerLecture, chatAvailable]);
@@ -355,7 +360,7 @@ export default function WorkspaceLayout() {
     try {
       await chat.remove(session.id);
     } catch (err) {
-      setNotice(err.message || "The chat could not be removed.");
+      setNotice(err.message || t("The chat could not be removed."));
       return false;
     }
     if (wasOpen) {
@@ -365,7 +370,7 @@ export default function WorkspaceLayout() {
       appliedChat.current = null;
       if (!isHome) navigate(hrefFor(pagePath, { chatId: null }), { replace: true });
     }
-    setNotice("Chat removed.");
+    setNotice(t("Chat removed."));
     return true;
   }
 
@@ -388,21 +393,23 @@ export default function WorkspaceLayout() {
     const created = await library.upload(files, target === "chat" ? { chatId: sessionId } : {});
     if (created.length === 0) return;
     if (target !== "chat") {
-      setNotice(`${created.length === 1 ? "1 file" : `${created.length} files`} uploaded.`);
+      setNotice(created.length === 1 ? t("1 file uploaded.") : t("{count} files uploaded.", { count: created.length }));
       return;
     }
     try {
       await chat.attachLectures(sessionId, created.map((item) => item.id));
-      setNotice(`${created.length === 1 ? "1 material" : `${created.length} materials`} added to this chat.`);
+      setNotice(
+        created.length === 1 ? t("1 material added to this chat.") : t("{count} materials added to this chat.", { count: created.length })
+      );
     } catch (err) {
-      setNotice(err.message || "The upload could not be added to this chat.");
+      setNotice(err.message || t("The upload could not be added to this chat."));
     }
   }
 
   async function addToChat(material) {
     try {
       await chat.attachLectures(session?.id ?? null, [material.id]);
-      setNotice(`${material.name} added to this chat.`);
+      setNotice(t("{name} added to this chat.", { name: material.name }));
     } catch (err) {
       setNotice(err.message);
     }
@@ -413,7 +420,7 @@ export default function WorkspaceLayout() {
     try {
       await chat.detachLecture(session.id, material.id);
       if (urlLectureId === material.id) closeViewer({ replace: true });
-      setNotice(`${material.name} removed from this chat.`);
+      setNotice(t("{name} removed from this chat.", { name: material.name }));
     } catch (err) {
       setNotice(err.message);
     }
@@ -427,7 +434,7 @@ export default function WorkspaceLayout() {
   // `citedIn` names where the source was cited, for the viewer's "Opened from a source in …".
   function openSource(chip, citedIn = "the answer") {
     if (!findLecture(chip.lectureId)) {
-      setNotice("That lecture is no longer in your materials.");
+      setNotice(t("That lecture is no longer in your materials."));
       return;
     }
     openViewer(chip.lectureId, { sourceType: chip.sourceType, sourceNumber: chip.number }, true, citedIn);
@@ -441,8 +448,8 @@ export default function WorkspaceLayout() {
     } catch (err) {
       setNotice(
         basic
-          ? "This notebook can’t be loaded here (the file storage blocks this site). You can download it instead."
-          : err.message || "The notebook could not be opened."
+          ? t("This notebook can’t be loaded here (the file storage blocks this site). You can download it instead.")
+          : err.message || t("The notebook could not be opened.")
       );
     }
   }
@@ -460,7 +467,7 @@ export default function WorkspaceLayout() {
     const updated = await library.rename(renaming.id, title);
     chat.updateLecture(updated);
     setRenaming(null);
-    setNotice("Lecture renamed.");
+    setNotice(t("Lecture renamed."));
   }
 
   // Deleted for good: from the library and from every chat that had it.
@@ -471,7 +478,7 @@ export default function WorkspaceLayout() {
     chat.forgetLecture(id);
     if (urlLectureId === id) closeViewer({ replace: true });
     setDeleting(null);
-    setNotice("Lecture deleted.");
+    setNotice(t("Lecture deleted."));
   }
 
   /* ---------- Notebook cells as context ---------- */
@@ -482,11 +489,11 @@ export default function WorkspaceLayout() {
     (item) => {
       const label = cellContextLabel(item);
       if (cellContext.some((existing) => isSameCellContext(existing, item))) {
-        announce(`${label} is already in your message to the study assistant.`);
+        announce(t("{label} is already in your message to the study assistant.", { label }));
         return;
       }
       setCellContext((list) => [...list, item]);
-      announce(`${label} added to your message to the study assistant.`);
+      announce(t("{label} added to your message to the study assistant.", { label }));
     },
     [cellContext, announce]
   );
@@ -496,7 +503,7 @@ export default function WorkspaceLayout() {
       const item = cellContext.find((existing) => existing.id === id);
       if (!item) return;
       setCellContext((list) => list.filter((existing) => existing.id !== id));
-      announce(`${cellContextLabel(item)} removed from your message.`);
+      announce(t("{label} removed from your message.", { label: cellContextLabel(item) }));
     },
     [cellContext, announce]
   );
@@ -517,14 +524,17 @@ export default function WorkspaceLayout() {
     const content = withNotebookContext(text, cells);
     if (content.length > MAX_MESSAGE_LENGTH) {
       setTooLong(
-        `Your question with the added notebook cells is ${content.length} characters; the limit is ${MAX_MESSAGE_LENGTH}. Remove a cell or shorten the question.`
+        t("Your question with the added notebook cells is {length} characters; the limit is {limit}. Remove a cell or shorten the question.", {
+          length: content.length,
+          limit: MAX_MESSAGE_LENGTH,
+        })
       );
       return false;
     }
     setTooLong(null);
     // The question shown is the full message: the chat shows the added cells as code cards
     // (parseNotebookContext), the same way it shows them when the chat is opened again.
-    chat.send({ question: content, content }).then((ok) => {
+    chat.send({ question: content, content, model: chatModel.selected.id }).then((ok) => {
       // Clear the sent cells only once answered; on failure they stay in the draft.
       if (ok) setCellContext((list) => list.filter((item) => !cells.some((cell) => cell.id === item.id)));
     });
@@ -542,7 +552,7 @@ export default function WorkspaceLayout() {
   */
   async function askAboutExamAnswer(exam, question) {
     const content = examQuestionMessage(question);
-    if (content.length > MAX_MESSAGE_LENGTH) throw new Error("This question is too long to send to the chat.");
+    if (content.length > MAX_MESSAGE_LENGTH) throw new Error(t("This question is too long to send to the chat."));
     const lectureIds = [...new Set((exam.lectures ?? []).map((item) => item.lecture_id).filter(Boolean))];
     // The open chat; read from the server if it isn't loaded yet (clicked right after a reload).
     let open = urlChatId && session?.id === urlChatId ? session : null;
@@ -556,7 +566,7 @@ export default function WorkspaceLayout() {
     if (reuse && urlLectureId) params.set("lecture", urlLectureId);
     params.set("exam", exam.id);
     navigate(`/workspace?${params}`);
-    chat.askIn(target.id, { question: content, content });
+    chat.askIn(target.id, { question: content, content, model: chatModel.selected.id });
   }
 
   /* ---------- Keyboard ---------- */
@@ -596,10 +606,19 @@ export default function WorkspaceLayout() {
       navigate("/workspace", { replace: true });
     },
     onSend: handleSend,
+    model: chatModel,
     olderMessages: chat.olderMessages,
     loadingOlder: chat.loadingOlderMessages,
     onLoadOlder: chat.loadOlderMessages,
-    note: chatAvailable === false ? "This server has no chat assistant yet." : tooLong,
+    note:
+      chatAvailable === false
+        ? t("This server has no chat assistant yet.")
+        : (tooLong ??
+          (chatModel.missing
+            ? t("{name} isn't available right now. Choose another model, or check your API key in Account settings.", {
+                name: chatModel.selected.name,
+              })
+            : null)),
     cellContext,
     cellDragActive,
     cellDragOver,
@@ -655,17 +674,21 @@ export default function WorkspaceLayout() {
       setViewerWidth(null);
       setNotebookWidth(nextLayout.notebookWidth);
     }
-    announce(next ? "The material viewer is now next to the chat, the notebook at the right edge." : "The notebook is now next to the chat, the material viewer at the right edge.");
+    announce(
+      next
+        ? t("The material viewer is now next to the chat, the notebook at the right edge.")
+        : t("The notebook is now next to the chat, the material viewer at the right edge.")
+    );
   }
   const switchTitle = canSwitch
     ? undefined
     : phone
       ? undefined
       : !notebookOpen || !viewerOpen
-        ? "Open both the notebook and the material viewer to switch their places"
-        : "Not enough room to show the notebook and the material viewer side by side";
+        ? t("Open both the notebook and the material viewer to switch their places")
+        : t("Not enough room to show the notebook and the material viewer side by side");
   const switcher = (other) => ({
-    label: `Switch places with the ${other}`,
+    label: other === "notebook" ? t("Switch places with the notebook") : t("Switch places with the material viewer"),
     title: switchTitle,
     disabled: !canSwitch,
     onClick: switchPanels,
@@ -737,7 +760,7 @@ export default function WorkspaceLayout() {
         <IconButton
           icon="swap"
           className={`cf-panel-toggle ${switched ? "cf-panel-toggle--on" : ""}`}
-          label="Switch places with the material viewer"
+          label={t("Switch places with the material viewer")}
           aria-pressed={switched}
           title={switchTitle}
           disabled={!canSwitch}
@@ -747,10 +770,10 @@ export default function WorkspaceLayout() {
       <IconButton
         icon="dock"
         className={`cf-panel-toggle ${layout.pinned ? "cf-panel-toggle--on" : ""}`}
-        label={layout.pinned ? "Float over the chat" : "Pin beside the chat"}
+        label={layout.pinned ? t("Float over the chat") : t("Pin beside the chat")}
         aria-pressed={layout.pinned}
         disabled={!layout.canPin && !layout.pinned}
-        title={!layout.canPin ? "Not enough room to pin the notebook beside the chat" : undefined}
+        title={!layout.canPin ? t("Not enough room to pin the notebook beside the chat") : undefined}
         onClick={() => {
           const next = !layout.pinned;
           setNotebookPinned(next);
@@ -772,11 +795,11 @@ export default function WorkspaceLayout() {
       <IconButton
         icon={layout.wide ? "collapse" : "expand"}
         className="cf-panel-toggle cf-panel-wide"
-        label={layout.wide ? "Restore notebook width" : "Widen notebook"}
+        label={layout.wide ? t("Restore notebook width") : t("Widen notebook")}
         disabled={!layout.canWiden}
         onClick={() => setNotebookWidth(layout.toggledWidth)}
       />
-      <IconButton icon="close" label="Close notebook" onClick={() => setNotebookOpen(false)} />
+      <IconButton icon="close" label={t("Close notebook")} onClick={() => setNotebookOpen(false)} />
     </>
   );
 
@@ -803,7 +826,7 @@ export default function WorkspaceLayout() {
           mode={sidebarMode}
           onToggle={() => setSidebarOpen((value) => !value)}
           onNewChat={newChat}
-          chatTitle={displayChatTitle(session?.title) ?? "New chat"}
+          chatTitle={displayChatTitle(session?.title) ?? t("New chat")}
           materials={chatMaterials}
           // Only the files being uploaded into this chat (not those from Home or for another chat).
           uploads={library.uploads.filter((item) => item.chatId !== undefined && item.chatId === (session?.id ?? null))}
@@ -841,11 +864,11 @@ export default function WorkspaceLayout() {
         {notebookOpen && (
           <aside
             className={`cf-notebook ${layout.pinned ? "cf-notebook--pinned" : "cf-notebook--floating"}`}
-            aria-label="Notebook panel"
+            aria-label={t("Notebook panel")}
             style={{ width: layout.notebookWidth, right: layout.pinned ? undefined : layout.viewerWidth, order: switched ? 2 : 1 }}
           >
             <ResizeHandle
-              label="Resize notebook (drag, or use the left and right arrow keys)"
+              label={t("Resize notebook (drag, or use the left and right arrow keys)")}
               onResize={(x) => setNotebookWidth(clampNotebook(rowRight() - (switched ? 0 : layout.viewerWidth) - x))}
               onStep={(step) => setNotebookWidth(clampNotebook(layout.notebookWidth + step))}
               onReset={() => setNotebookWidth(NOTEBOOK_DEFAULT)}
@@ -863,9 +886,9 @@ export default function WorkspaceLayout() {
         )}
 
         {viewerOpen && (
-          <aside className="cf-viewer" aria-label={`${viewerMaterial.name}, open beside the chat`} style={{ width: layout.viewerWidth, order: switched ? 1 : 2 }}>
+          <aside className="cf-viewer" aria-label={t("{name}, open beside the chat", { name: viewerMaterial.name })} style={{ width: layout.viewerWidth, order: switched ? 1 : 2 }}>
             <ResizeHandle
-              label="Resize the material viewer (drag, or use the left and right arrow keys)"
+              label={t("Resize the material viewer (drag, or use the left and right arrow keys)")}
               onResize={(x) => setViewerWidth(clampViewer(rowRight() - (switched ? layout.notebookWidth : 0) - x))}
               onStep={(step) => setViewerWidth(clampViewer(layout.viewerWidth + step))}
               onReset={() => setViewerWidth(null)}
@@ -883,7 +906,11 @@ export default function WorkspaceLayout() {
       {uploadTarget && (
         <UploadDialog
           basic={basic}
-          note={uploadTarget === "chat" ? "Files are saved to your account and added to this chat. The answers in this chat then come from them." : undefined}
+          note={
+            uploadTarget === "chat"
+              ? t("Files are saved to your account and added to this chat. The answers in this chat then come from them.")
+              : undefined
+          }
           onCancel={() => setUploadTarget(null)}
           onUpload={handleUpload}
         />

@@ -13,6 +13,8 @@
     row is too narrow for both does the floating notebook lie over the chat.
   All widths are in CSS pixels; `width` is the width of the whole row.
 */
+import { t } from "../../i18n/i18n.js";
+
 export const SIDEBAR_WIDTH = 272;
 export const RAIL_WIDTH = 64;
 export const CHAT_MIN = 380;
@@ -137,6 +139,14 @@ export function resizeStep(key) {
 
 const GROUPS = ["Today", "Yesterday", "Previous 7 days", "Older"];
 
+/* The heading shown for a group (GROUPS holds the English names). */
+function groupLabel(group) {
+  if (group === "Today") return t("Today");
+  if (group === "Yesterday") return t("Yesterday");
+  if (group === "Previous 7 days") return t("Previous 7 days");
+  return t("Older");
+}
+
 /* Sessions grouped by their last activity (updated_at): [{ label, items }], empty groups left out. */
 export function groupChats(sessions, now = new Date()) {
   const startOf = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -148,14 +158,20 @@ export function groupChats(sessions, now = new Date()) {
     const label = days <= 0 ? "Today" : days === 1 ? "Yesterday" : days <= 7 ? "Previous 7 days" : "Older";
     groups.get(label).push(session);
   }
-  return GROUPS.map((label) => ({ label, items: groups.get(label) })).filter((group) => group.items.length > 0);
+  return GROUPS.map((group) => ({ label: groupLabel(group), items: groups.get(group) })).filter((group) => group.items.length > 0);
 }
 
 /* ---------- Sources under an answer ---------- */
 
 // Where a cited page_number points, by material type (for answers saved without source_type).
 const SOURCE_TYPE_BY_MATERIAL = { pdf: "page", slides: "slide", notebook: "cell", notes: "section" };
-const SHORT = { page: "p.", slide: "Slide", cell: "Cell", section: "Section" };
+/* The chip's short location, e.g. "p. 12" | "Slide 3" | "Cell 16". */
+function shortLocation(sourceType, number) {
+  if (sourceType === "slide") return t("Slide {number}", { number });
+  if (sourceType === "cell") return t("Cell {number}", { number });
+  if (sourceType === "section") return t("Section {number}", { number });
+  return t("p. {number}", { number });
+}
 
 /*
   A source chip: { key, lectureId, sourceType, number, loc: "p. 12" | "Slide 3" | "Cell 16", doc }.
@@ -169,7 +185,7 @@ export function sourceChip(source, materialType = () => undefined, titleOf = () 
     lectureId: source.lecture_id,
     sourceType,
     number: source.page_number,
-    loc: `${SHORT[sourceType] ?? "p."} ${source.page_number}`,
+    loc: shortLocation(sourceType, source.page_number),
     doc: titleOf(source.lecture_id) ?? source.lecture_title,
   };
 }

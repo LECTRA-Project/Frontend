@@ -11,6 +11,8 @@
   notebookToIpynb splits them again, so files round-trip.
 */
 
+import { t } from "../../i18n/i18n.js";
+
 export const NBFORMAT = 4;
 export const NBFORMAT_MINOR = 5;
 const CELL_TYPES = ["code", "markdown", "raw"];
@@ -135,21 +137,23 @@ export function parseIpynb(text, { title = "Untitled notebook" } = {}) {
   try {
     json = JSON.parse(text);
   } catch (error) {
-    throw new NotebookFormatError(`The file is not valid JSON (${error.message}).`);
+    throw new NotebookFormatError(t("The file is not valid JSON ({error}).", { error: error.message }));
   }
   if (!json || typeof json !== "object" || !Array.isArray(json.cells)) {
-    throw new NotebookFormatError("The file is not a Jupyter notebook: it has no list of cells.");
+    throw new NotebookFormatError(t("The file is not a Jupyter notebook: it has no list of cells."));
   }
   if (json.nbformat !== NBFORMAT) {
     throw new NotebookFormatError(
-      `Only Jupyter notebook format 4 is supported; this file uses format ${json.nbformat ?? "unknown"}.`
+      json.nbformat == null
+        ? t("Only Jupyter notebook format 4 is supported; this file uses format unknown.")
+        : t("Only Jupyter notebook format 4 is supported; this file uses format {format}.", { format: json.nbformat })
     );
   }
 
   const usedIds = new Set();
   const cells = json.cells.map((raw, index) => {
     if (!CELL_TYPES.includes(raw?.cell_type)) {
-      throw new NotebookFormatError(`Cell ${index + 1} has an unknown type “${raw?.cell_type}”.`);
+      throw new NotebookFormatError(t("Cell {number} has an unknown type “{type}”.", { number: index + 1, type: raw?.cell_type }));
     }
     let id = typeof raw.id === "string" && VALID_ID.test(raw.id) ? raw.id : newCellId();
     if (usedIds.has(id)) id = newCellId();

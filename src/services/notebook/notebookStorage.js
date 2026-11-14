@@ -1,3 +1,4 @@
+import { t } from "../../i18n/i18n.js";
 import { notebookToIpynb, parseIpynb } from "./ipynb.js";
 
 /*
@@ -35,8 +36,10 @@ export function saveNotebook(userKey, notebook) {
     const full = error?.name === "QuotaExceededError" || error?.code === 22;
     throw new Error(
       full
-        ? "Browser storage is full (large outputs such as images take a lot of space). Clear some outputs or download the notebook as .ipynb."
-        : `The browser refused to save the notebook (${error?.message ?? error}).`,
+        ? t(
+            "Browser storage is full (large outputs such as images take a lot of space). Clear some outputs or download the notebook as .ipynb."
+          )
+        : t("The browser refused to save the notebook ({error}).", { error: error?.message ?? error }),
       { cause: error }
     );
   }

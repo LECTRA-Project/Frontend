@@ -1,0 +1,68 @@
+/* German interface texts: English text → German. See src/i18n/i18n.js. */
+/* Account settings, including the AI provider API keys. */
+export default {
+  "Account settings": "Kontoeinstellungen",
+  "Manage preferences for your account.": "Verwalte die Einstellungen für dein Konto.",
+  "Settings": "Einstellungen",
+  "Language & region": "Sprache & Region",
+  "Interface language": "Sprache der Oberfläche",
+  "Language used across the workspace.": "Sprache, die im gesamten Arbeitsbereich verwendet wird.",
+  "Notifications": "Benachrichtigungen",
+  "Study reminders": "Lernerinnerungen",
+  "Email reminders for planned study sessions.": "E-Mail-Erinnerungen an geplante Lerneinheiten.",
+  "Product updates": "Produktneuigkeiten",
+  "Occasional news about new LECTRA features.": "Gelegentliche Neuigkeiten zu neuen LECTRA-Funktionen.",
+  "Privacy": "Datenschutz",
+  "Show statistics on my profile": "Statistiken in meinem Profil anzeigen",
+  "Only you can see your statistics by default.": "Standardmäßig kannst nur du deine Statistiken sehen.",
+  "Save settings": "Einstellungen speichern",
+  "Demo mode — settings are not saved yet.": "Demomodus – Einstellungen werden noch nicht gespeichert.",
+
+  "AI provider API keys": "API-Schlüssel für KI-Anbieter",
+  "Use your own Claude, Gemini or GPT account in the chat. Each key is checked with its provider, stored encrypted on the LECTRA server for your account only, and never shown again in full.":
+    "Nutze dein eigenes Claude-, Gemini- oder GPT-Konto im Chat. Jeder Schlüssel wird beim Anbieter geprüft, verschlüsselt auf dem LECTRA-Server nur für dein Konto gespeichert und danach nie wieder vollständig angezeigt.",
+  "Loading your API keys…": "Deine API-Schlüssel werden geladen …",
+  "Unable to load your API keys.": "Deine API-Schlüssel konnten nicht geladen werden.",
+  "Unable to save the API key.": "Der API-Schlüssel konnte nicht gespeichert werden.",
+  "Unable to remove the API key.": "Der API-Schlüssel konnte nicht entfernt werden.",
+  "No key saved": "Kein Schlüssel gespeichert",
+  "Key saved": "Schlüssel gespeichert",
+  "Ends in {last4} · updated {date}": "Endet auf {last4} · aktualisiert am {date}",
+  "Ends in {last4}": "Endet auf {last4}",
+  "Add key": "Schlüssel hinzufügen",
+  "Add a {provider} API key": "API-Schlüssel für {provider} hinzufügen",
+  "Replace": "Ersetzen",
+  "Replace the {provider} API key": "API-Schlüssel für {provider} ersetzen",
+  "Remove": "Entfernen",
+  "Remove the {provider} API key": "API-Schlüssel für {provider} entfernen",
+  "Remove the {provider} API key?": "API-Schlüssel für {provider} entfernen?",
+  "Remove key": "Schlüssel entfernen",
+  "Its models are no longer offered in the chat. You can add a key again at any time.":
+    "Seine Modelle werden im Chat dann nicht mehr angeboten. Du kannst jederzeit wieder einen Schlüssel hinzufügen.",
+  "Removing the key…": "Schlüssel wird entfernt …",
+  "The key was removed. Its models are no longer offered in the chat.":
+    "Der Schlüssel wurde entfernt. Seine Modelle werden im Chat nicht mehr angeboten.",
+  "{provider} API key": "API-Schlüssel für {provider}",
+  "Show the key": "Schlüssel anzeigen",
+  "Hide the key": "Schlüssel verbergen",
+  "Save key": "Schlüssel speichern",
+  "Checking…": "Wird geprüft …",
+  "Cancel": "Abbrechen",
+  "Create a key in your {provider} account:": "Erstelle einen Schlüssel in deinem {provider}-Konto:",
+  "Enter your API key first.": "Gib zuerst deinen API-Schlüssel ein.",
+  "An API key has no spaces. Check that you copied the whole key and nothing else.":
+    "Ein API-Schlüssel enthält keine Leerzeichen. Prüfe, ob du den ganzen Schlüssel und nichts anderes kopiert hast.",
+  "Checking the key with {provider}…": "Der Schlüssel wird bei {provider} geprüft …",
+  "Key saved. {provider} accepted it.": "Schlüssel gespeichert. {provider} hat ihn akzeptiert.",
+  "Test key": "Schlüssel testen",
+  "Testing…": "Wird getestet …",
+  "Testing the key with {provider}…": "Der Schlüssel wird bei {provider} getestet …",
+  "The key works: {provider} offers 1 chat model with it.":
+    "Der Schlüssel funktioniert: {provider} bietet damit 1 Chatmodell an.",
+  "The key works: {provider} offers {count} chat models with it.":
+    "Der Schlüssel funktioniert: {provider} bietet damit {count} Chatmodelle an.",
+  "{provider} accepted the key but offers no chat models for it.":
+    "{provider} hat den Schlüssel akzeptiert, bietet dafür aber keine Chatmodelle an.",
+  "Try again": "Erneut versuchen",
+  "Back to the chat to choose a model": "Zurück zum Chat, um ein Modell auszuwählen",
+};

@@ -1,4 +1,5 @@
 import { ApiError } from "../client.js";
+import { t } from "../../i18n/i18n.js";
 import { del, get, post } from "../http.js";
 
 /*
@@ -37,9 +38,20 @@ import { del, get, post } from "../http.js";
 const BASE = "/exams";
 
 export const QUESTION_COUNTS = [3, 5, 7, 10];
+// `label` is a getter so it is read in the current interface language.
 export const QUESTION_TYPES = [
-  { value: "multiple_choice", label: "Multiple choice" },
-  { value: "short_answer", label: "Short answer" },
+  {
+    value: "multiple_choice",
+    get label() {
+      return t("Multiple choice");
+    },
+  },
+  {
+    value: "short_answer",
+    get label() {
+      return t("Short answer");
+    },
+  },
 ];
 // The longest short answer the backend accepts.
 export const MAX_ANSWER_LENGTH = 4000;
@@ -54,9 +66,10 @@ const MAX_PAGE_SIZE = 100;
 */
 const GRADE_TIMEOUT_MS = 600000;
 
-function unwrap(response, action) {
+/* `fallback`: the message when the server gives none (translated by the caller). */
+function unwrap(response, fallback) {
   if (response?.status !== true) {
-    throw new ApiError({ message: response?.message || `Unable to ${action}.`, data: response });
+    throw new ApiError({ message: response?.message || fallback, data: response });
   }
   return response.data;
 }
@@ -64,16 +77,16 @@ function unwrap(response, action) {
 /* Starts generating an exam; the questions are written afterwards (poll getExam). */
 export async function startExam({ lectureIds, questionCount, types }, { signal } = {}) {
   const body = { lecture_ids: lectureIds, question_count: questionCount, types };
-  return unwrap(await post(BASE, body, { timeout: START_TIMEOUT_MS, signal }), "start the exam");
+  return unwrap(await post(BASE, body, { timeout: START_TIMEOUT_MS, signal }), t("Unable to start the exam."));
 }
 
 export async function getExam(id, { signal } = {}) {
-  return unwrap(await get(`${BASE}/${id}`, { signal }), "load the exam");
+  return unwrap(await get(`${BASE}/${id}`, { signal }), t("Unable to load the exam."));
 }
 
 /* One page of the history: { exams, page, page_size, total, total_pages }. */
 export async function listExams({ page = 1, pageSize = 20, signal } = {}) {
-  return unwrap(await get(BASE, { params: { page, page_size: pageSize }, signal }), "load your exams");
+  return unwrap(await get(BASE, { params: { page, page_size: pageSize }, signal }), t("Unable to load your exams."));
 }
 
 export async function listAllExams({ signal } = {}) {
@@ -91,7 +104,7 @@ export function isUnfinished(exam) {
 }
 
 export async function deleteExam(id) {
-  return unwrap(await del(`${BASE}/${id}`), "discard the exam");
+  return unwrap(await del(`${BASE}/${id}`), t("Unable to discard the exam."));
 }
 
 /*
@@ -110,10 +123,10 @@ export async function submitExam(id, questions, answers) {
       return typeof answer === "string" && answer.trim() !== "" ? [{ task_id: question.id, answer_text: answer }] : [];
     }),
   };
-  return unwrap(await post(`${BASE}/${id}/submit`, body, { timeout: GRADE_TIMEOUT_MS }), "submit the exam");
+  return unwrap(await post(`${BASE}/${id}/submit`, body, { timeout: GRADE_TIMEOUT_MS }), t("Unable to submit the exam."));
 }
 
 /* Grades the answers of a submitted exam that couldn't be graded yet. */
 export async function regradeExam(id) {
-  return unwrap(await post(`${BASE}/${id}/regrade`, {}, { timeout: GRADE_TIMEOUT_MS }), "grade the exam again");
+  return unwrap(await post(`${BASE}/${id}/regrade`, {}, { timeout: GRADE_TIMEOUT_MS }), t("Unable to grade the exam again."));
 }

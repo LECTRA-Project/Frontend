@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import IconButton from "../../components/ui/IconButton.jsx";
+import { useI18n } from "../../i18n/i18n.js";
 import { formatFileSize } from "../../services/materials/materialTypes.js";
 import { canRenderPdf, loadPdfjs } from "./pdfDocument.js";
 import { PdfPagesView, PdfThumbnails } from "./PdfPages.jsx";
 import { getFitZoomIndex, ZOOM_STEPS } from "./pdfZoom.js";
+import { citedBannerText, pageTileLabel, sourcePlace } from "./citedText.js";
 import { ViewerBanner, ViewerHead, ZoomControls } from "./ViewerChrome.jsx";
 import "./files.css";
 
@@ -39,6 +41,7 @@ import "./files.css";
 const PAGES_OPEN_WIDTH = 600;
 
 export default function PdfViewerPanel({ material, initialPage = 1, cited = false, citedIn = "the answer", onCollapse, widen = null, switcher = null }) {
+  const { t } = useI18n();
   const usePdfjs = canRenderPdf();
   const ready = Boolean(material.url) && !material.loading && !material.loadError;
 
@@ -148,7 +151,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
   if (!ready || (!framed && !drawn)) {
     content = (
       <div className="viewer__content viewer__message-wrap" role={material.loadError ? "alert" : "status"}>
-        <p className="notice">{material.loadError || "Loading PDF…"}</p>
+        <p className="notice">{material.loadError || t("Loading PDF…")}</p>
       </div>
     );
   } else if (drawn) {
@@ -181,25 +184,25 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
   }
 
   return (
-    <section ref={panelRef} className="viewer pdf" aria-label={`PDF viewer: ${material.name}`}>
+    <section ref={panelRef} className="viewer pdf" aria-label={t("PDF viewer: {name}", { name: material.name })}>
       <ViewerHead title={material.name} meta={meta} newTabUrl={material.url ?? null} widen={widen} switcher={switcher} onClose={onCollapse} />
 
       <div className="viewer__toolbar">
         {hasPages && (
           <IconButton
             icon="sidebar"
-            label={showPages ? "Hide pages" : "Show pages"}
+            label={showPages ? t("Hide pages") : t("Show pages")}
             aria-expanded={showPages}
             aria-controls="pdf-pages"
             className={showPages ? "pdf__pages-toggle--on" : ""}
             onClick={() => setPagesChoice(!showPages)}
           />
         )}
-        <IconButton icon="arrowUp" label="First page" disabled={!canGoBack} onClick={() => goToPage(1)} />
-        <IconButton icon="chevronLeft" label="Previous page" disabled={!canGoBack} onClick={() => goToPage(page - 1)} />
+        <IconButton icon="arrowUp" label={t("First page")} disabled={!canGoBack} onClick={() => goToPage(1)} />
+        <IconButton icon="chevronLeft" label={t("Previous page")} disabled={!canGoBack} onClick={() => goToPage(page - 1)} />
         <span className={`viewer__position ${onCitedPage ? "viewer__position--cited" : ""}`}>
           <label className="visually-hidden" htmlFor="pdf-page">
-            Page number
+            {t("Page number")}
           </label>
           <input
             id="pdf-page"
@@ -209,16 +212,16 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
             aria-describedby={onCitedPage ? "pdf-cited" : undefined}
             onChange={(event) => goToPage(event.target.value)}
           />
-          <span className="pdf__page-count">{pageCount ? `of ${pageCount}` : "page"}</span>
+          <span className="pdf__page-count">{pageCount ? t("of {total}", { total: pageCount }) : t("page")}</span>
         </span>
-        <IconButton icon="chevronRight" label="Next page" disabled={!canGoForward} onClick={() => goToPage(page + 1)} />
+        <IconButton icon="chevronRight" label={t("Next page")} disabled={!canGoForward} onClick={() => goToPage(page + 1)} />
         {pageCount !== null && (
-          <IconButton icon="arrowDown" label="Last page" disabled={!canGoForward} onClick={() => goToPage(pageCount)} />
+          <IconButton icon="arrowDown" label={t("Last page")} disabled={!canGoForward} onClick={() => goToPage(pageCount)} />
         )}
         <span className="viewer__spacer" />
         <ZoomControls
           zoom={zoom}
-          label={fit ? "Fit" : undefined}
+          label={fit ? t("Fit") : undefined}
           canZoomOut={zoomIndex > 0 || (fit && Boolean(drawn) && fitPercent > ZOOM_STEPS[0] + 0.5)}
           canZoomIn={zoomIndex < ZOOM_STEPS.length - 1}
           onZoomOut={() => zoomBy(fit && drawn && fitPercent > ZOOM_STEPS[zoomIndex] + 0.5 ? 0 : -1)}
@@ -226,14 +229,14 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
         />
         {!fit && (
           <button type="button" className="viewer__fit" onClick={() => setManualZoomIndex(null)}>
-            Fit
+            {t("Fit")}
           </button>
         )}
       </div>
 
       {onCitedPage && (
         <ViewerBanner>
-          <span id="pdf-cited">Opened from a source in {citedIn}: page {citedPage}</span>
+          <span id="pdf-cited">{citedBannerText(citedIn, sourcePlace("page", citedPage))}</span>
         </ViewerBanner>
       )}
 
@@ -250,7 +253,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
               onSelect={goToPage}
             />
           ) : (
-            <nav id="pdf-pages" className="pdf__pages" aria-label="Pages" ref={tilesRef}>
+            <nav id="pdf-pages" className="pdf__pages" aria-label={t("Pages")} ref={tilesRef}>
               <ol>
                 {Array.from({ length: pageCount }, (_, index) => index + 1).map((number) => (
                   <li key={number}>
@@ -258,7 +261,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
                       type="button"
                       className={`pdf__page-tile ${number === citedPage ? "pdf__page-tile--cited" : ""}`}
                       aria-current={number === page ? "page" : undefined}
-                      aria-label={`Page ${number}${number === citedPage ? ` (cited in ${citedIn})` : ""}`}
+                      aria-label={pageTileLabel(number, number === citedPage, citedIn)}
                       onClick={() => goToPage(number)}
                     >
                       <span className="pdf__page-sheet" aria-hidden="true" />

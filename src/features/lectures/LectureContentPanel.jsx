@@ -4,11 +4,23 @@ import Button from "../../components/ui/Button.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import IconButton from "../../components/ui/IconButton.jsx";
 import { fetchLectureFile, getLectureContent } from "../../api/services/lectures.js";
+import { t, useI18n } from "../../i18n/i18n.js";
+import { citedBannerText, sourcePlace } from "../files/citedText.js";
 import { ViewerBanner, ViewerHead, ZoomControls } from "../files/ViewerChrome.jsx";
 import { lectureMeta, STATUS_LABEL, displayStatus } from "./materialTypes.js";
 import "./lectures.css";
 
-const UNIT = { page: "Page", slide: "Slide", cell: "Cell", section: "Section" };
+// What the toolbar says for each kind of block (functions: read in the current language).
+const UNIT = {
+  page: { position: (number) => t("Page {number}", { number }), previous: () => t("Previous page"), next: () => t("Next page") },
+  slide: { position: (number) => t("Slide {number}", { number }), previous: () => t("Previous slide"), next: () => t("Next slide") },
+  cell: { position: (number) => t("Cell {number}", { number }), previous: () => t("Previous cell"), next: () => t("Next cell") },
+  section: {
+    position: (number) => t("Section {number}", { number }),
+    previous: () => t("Previous section"),
+    next: () => t("Next section"),
+  },
+};
 const ZOOM_MIN = 50;
 const ZOOM_MAX = 200;
 
@@ -43,6 +55,7 @@ const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?
     onOpenInNotebook  optional (notebooks): opens the file in the runnable notebook
 */
 export default function LectureContentPanel({ lecture, focus, cited = false, citedIn = "the answer", onRetry, onClose, onOpenInNotebook = null, widen = null, switcher = null }) {
+  useI18n(); // re-render in a new interface language
   const [content, setContent] = useState(null);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
@@ -96,7 +109,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
   }
   const focusIndex = focus ? groups.findIndex((group) => group.type === focus.sourceType && group.number === focus.sourceNumber) : -1;
   const shown = current ?? Math.max(0, focusIndex);
-  const unit = UNIT[groups[shown]?.type ?? lecture.source_type] ?? "Section";
+  const unit = UNIT[groups[shown]?.type ?? lecture.source_type] ?? UNIT.section;
 
   // Open at the focused slide or cell once the content is there.
   useEffect(() => {
@@ -146,31 +159,31 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
   const icon = lecture.source_type === "cell" ? "code" : lecture.source_type === "slide" ? "slides" : "book";
 
   return (
-    <section className="viewer lecture-view" aria-label={`Lecture: ${lecture.title}`}>
+    <section className="viewer lecture-view" aria-label={t("Lecture: {title}", { title: lecture.title })}>
       <ViewerHead icon={icon} title={lecture.title} meta={`${lecture.original_filename} · ${lectureMeta(lecture)}`} widen={widen} switcher={switcher} onClose={onClose}>
         {onOpenInNotebook && (
-          <Button size="sm" icon="play" onClick={onOpenInNotebook} title="Open this notebook in the runnable notebook">
-            Run in notebook
+          <Button size="sm" icon="play" onClick={onOpenInNotebook} title={t("Open this notebook in the runnable notebook")}>
+            {t("Run in notebook")}
           </Button>
         )}
         {basic ? (
-          <a className="icon-btn" href={lecture.s3_url} target="_blank" rel="noopener noreferrer" download aria-label="Download" title="Download">
+          <a className="icon-btn" href={lecture.s3_url} target="_blank" rel="noopener noreferrer" download aria-label={t("Download")} title={t("Download")}>
             <Icon name="download" />
           </a>
         ) : (
-          <IconButton icon="download" label={downloading ? "Downloading…" : "Download"} onClick={download} disabled={downloading} />
+          <IconButton icon="download" label={downloading ? t("Downloading…") : t("Download")} onClick={download} disabled={downloading} />
         )}
       </ViewerHead>
 
       {groups.length > 0 && (
         <div className="viewer__toolbar">
-          <IconButton icon="chevronLeft" label={`Previous ${unit.toLowerCase()}`} disabled={shown <= 0} onClick={() => goTo(shown - 1)} />
+          <IconButton icon="chevronLeft" label={unit.previous()} disabled={shown <= 0} onClick={() => goTo(shown - 1)} />
           <span className={`viewer__position ${citedActive && shown === focusIndex ? "viewer__position--cited" : ""}`}>
-            {unit} {groups[shown]?.number}
+            {unit.position(groups[shown]?.number)}
           </span>
           <IconButton
             icon="chevronRight"
-            label={`Next ${unit.toLowerCase()}`}
+            label={unit.next()}
             disabled={shown >= groups.length - 1}
             onClick={() => goTo(shown + 1)}
           />
@@ -187,7 +200,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
 
       {citedActive && focusIndex >= 0 && (
         <ViewerBanner>
-          Opened from a source in {citedIn}: {(UNIT[focus.sourceType] ?? "Section").toLowerCase()} {focus.sourceNumber}
+          {citedBannerText(citedIn, sourcePlace(focus.sourceType, focus.sourceNumber))}
         </ViewerBanner>
       )}
 
@@ -199,21 +212,22 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
           {officeSlides && (
             <iframe
               className="lecture-view__slides"
-              title={`Slides: ${lecture.title}`}
+              title={t("Slides: {title}", { title: lecture.title })}
               src={`${OFFICE_VIEWER}${encodeURIComponent(lecture.s3_url)}`}
               allowFullScreen
             />
           )}
           {basic && !isImage && !officeSlides && (
             <p className="lecture-view__notice" role="status">
-              This file can’t be previewed in the browser — use Download to open it. Reading slides and notebook
-              text for the study assistant needs the AI-enabled backend, which this server doesn’t run yet.
+              {t(
+                "This file can’t be previewed in the browser — use Download to open it. Reading slides and notebook text for the study assistant needs the AI-enabled backend, which this server doesn’t run yet."
+              )}
             </p>
           )}
 
           {status === "processing" && (
             <p className="lecture-view__notice" role="status">
-              Lectra is reading this file. Its content appears here when processing is complete.
+              {t("Lectra is reading this file. Its content appears here when processing is complete.")}
             </p>
           )}
           {(status === "failed" || status === "skipped") && (
@@ -223,7 +237,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
               </p>
               {status === "failed" && (
                 <Button size="sm" icon="refresh" onClick={onRetry}>
-                  Retry processing
+                  {t("Retry processing")}
                 </Button>
               )}
             </div>
@@ -233,7 +247,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
               {error.message}
             </p>
           )}
-          {status === "completed" && !officeSlides && !content && !error && <p className="lecture-view__notice">Loading content…</p>}
+          {status === "completed" && !officeSlides && !content && !error && <p className="lecture-view__notice">{t("Loading content…")}</p>}
 
           {groups.map((group, index) => {
             const highlighted = citedActive && index === focusIndex;
