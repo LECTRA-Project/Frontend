@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DEFAULT_MODEL_ID, listModels } from "../../api/services/apiKeys.js";
+import { readPreferredModels } from "../profile/preferredModels.js";
 
 /*
   The model the chat asks with: "lectra" (our own models, the default) or one of the
@@ -21,13 +22,14 @@ import { DEFAULT_MODEL_ID, listModels } from "../../api/services/apiKeys.js";
     unavailable [{ provider, name, message }]
     loading, error (message or null)
     missing    true when the list is loaded and doesn't contain the selected model
+    preferred  { provider: modelId }, the preferred model per provider (Account settings)
     select(model), refresh()
   }
 */
 const KEY_PREFIX = "lectra:chat-model:v1:";
 const LECTRA = { id: DEFAULT_MODEL_ID, name: "Lectra", provider: "lectra" };
 
-function readChoice(userKey) {
+export function readChoice(userKey) {
   try {
     const saved = JSON.parse(localStorage.getItem(`${KEY_PREFIX}${userKey}`) ?? "null");
     if (saved && typeof saved.id === "string" && saved.id) {
@@ -39,7 +41,7 @@ function readChoice(userKey) {
   return LECTRA;
 }
 
-function writeChoice(userKey, choice) {
+export function writeChoice(userKey, choice) {
   try {
     if (choice.id === DEFAULT_MODEL_ID) localStorage.removeItem(`${KEY_PREFIX}${userKey}`);
     else localStorage.setItem(`${KEY_PREFIX}${userKey}`, JSON.stringify(choice));
@@ -52,12 +54,15 @@ export function useChatModel(userKey, { enabled = true } = {}) {
   const [selected, setSelected] = useState(() => readChoice(userKey));
   const [list, setList] = useState({ models: null, unavailable: [], loading: enabled, error: null });
   const request = useRef(null);
+  // Re-read with each list request: it may have changed in Account settings.
+  const [preferred, setPreferred] = useState(() => readPreferredModels(userKey));
 
   // Another user on this device: their own choice.
   const [shownFor, setShownFor] = useState(userKey);
   if (shownFor !== userKey) {
     setShownFor(userKey);
     setSelected(readChoice(userKey));
+    setPreferred(readPreferredModels(userKey));
   }
 
   // Asks the server for the list; state is only set once it answers.
@@ -68,6 +73,9 @@ export function useChatModel(userKey, { enabled = true } = {}) {
     return listModels({ signal: controller.signal }).then(
       (result) => {
         if (request.current !== controller) return;
+        // Account settings may have changed the preferred models (and the chat's choice with them).
+        setPreferred(readPreferredModels(userKey));
+        setSelected(readChoice(userKey));
         setList({ models: result.models, unavailable: result.unavailable, loading: false, error: null });
       },
       (err) => {
@@ -75,7 +83,7 @@ export function useChatModel(userKey, { enabled = true } = {}) {
         setList((current) => ({ ...current, loading: false, error: err.message }));
       }
     );
-  }, []);
+  }, [userKey]);
 
   const refresh = useCallback(() => {
     setList((current) => ({ ...current, loading: true, error: null }));
@@ -100,5 +108,5 @@ export function useChatModel(userKey, { enabled = true } = {}) {
   const missing =
     selected.id !== DEFAULT_MODEL_ID && Array.isArray(list.models) && !list.models.some((item) => item.id === selected.id);
 
-  return { selected, ...list, missing, select, refresh };
+  return { selected, ...list, missing, preferred, select, refresh };
 }

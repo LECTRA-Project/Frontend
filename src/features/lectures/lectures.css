@@ -26,10 +26,19 @@
   flex-direction: column;
   gap: var(--space-3);
 }
+/* Uploaded image: kept inside the viewer at its own aspect ratio (a flex item would be
+   stretched to the column's width with its original height). */
 .lecture-view__image {
+  display: block;
+  flex: none;
+  align-self: center;
+  width: auto;
+  height: auto;
   max-width: 100%;
+  object-fit: contain;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-default);
+  box-sizing: border-box;
 }
 .lecture-view__notice {
   width: 100%;

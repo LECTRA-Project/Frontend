@@ -171,3 +171,19 @@ describe("the chat in German", () => {
     expect(within(dialog).getByRole("button", { name: "Fertig" })).toBeInTheDocument();
   });
 });
+
+describe("preferred model from Account settings", () => {
+  it("is listed first for its provider and marked as preferred", async () => {
+    const HAIKU = { id: "anthropic:claude-haiku-5-5", provider: "anthropic", model: "claude-haiku-5-5", name: "Claude Haiku 5.5" };
+    setup({ default: "lectra", models: [LECTRA, OPUS, HAIKU], unavailable: [] });
+    localStorage.setItem(`lectra:preferred-models:v1:${TEST_USER.id}`, JSON.stringify({ anthropic: HAIKU.id }));
+    const user = userEvent.setup();
+    renderApp("/workspace?chat=s-1");
+    await user.click(await modelButton());
+    const dialog = screen.getByRole("dialog", { name: "Choose a model" });
+    const group = await within(dialog).findByRole("group", { name: "Anthropic Claude" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios[0]).toHaveAccessibleName(/Claude Haiku 5\.5.*Your preferred Anthropic Claude model/);
+    expect(radios[1]).toHaveAccessibleName("Claude Opus 5.5");
+  });
+});

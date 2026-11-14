@@ -192,3 +192,99 @@ describe("notifications and privacy", () => {
     expect(screen.getByText("Demo mode — settings are not saved yet.")).toBeInTheDocument();
   });
 });
+
+describe("model dropdown per provider", () => {
+  const PREFS_KEY = `lectra:preferred-models:v1:${TEST_USER.id}`;
+  const CHAT_KEY = `lectra:chat-model:v1:${TEST_USER.id}`;
+  const select = (name) => screen.getByRole("combobox", { name: `${name} model` });
+
+  it("is disabled without a key and lists the key's live models once one is saved", async () => {
+    renderApp("/settings");
+    await waitFor(() => expect(select("Anthropic Claude")).toBeEnabled());
+    const options = within(select("Anthropic Claude")).getAllByRole("option").map((option) => option.textContent);
+    expect(options).toEqual(["Choose a model", "Claude Opus 5.5", "Claude Haiku 5.5"]);
+
+    expect(select("Google Gemini")).toBeDisabled();
+    expect(within(select("Google Gemini")).getByRole("option")).toHaveTextContent("Add a key first");
+    expect(within(row("Google Gemini")).getByText("Add your Google Gemini API key to see the models it offers.")).toBeInTheDocument();
+    expect(select("OpenAI GPT")).toBeDisabled();
+  });
+
+  it("saves the preferred model per user (never the key) and uses it in the chat for that provider", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(CHAT_KEY, JSON.stringify({ id: "anthropic:claude-haiku-5-5", name: "Claude Haiku 5.5", provider: "anthropic" }));
+    renderApp("/settings");
+    await waitFor(() => expect(select("Anthropic Claude")).toBeEnabled());
+    await user.selectOptions(select("Anthropic Claude"), "anthropic:claude-opus-5-5");
+
+    expect(await screen.findByText("Claude Opus 5.5 is your preferred Anthropic Claude model in the chat.")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(PREFS_KEY))).toEqual({ anthropic: "anthropic:claude-opus-5-5" });
+    expect(JSON.parse(localStorage.getItem(CHAT_KEY)).id).toBe("anthropic:claude-opus-5-5");
+    expect(select("Anthropic Claude")).toHaveValue("anthropic:claude-opus-5-5");
+  });
+
+  it("leaves a Lectra chat choice alone", async () => {
+    const user = userEvent.setup();
+    renderApp("/settings");
+    await waitFor(() => expect(select("Anthropic Claude")).toBeEnabled());
+    await user.selectOptions(select("Anthropic Claude"), "anthropic:claude-haiku-5-5");
+    expect(localStorage.getItem(CHAT_KEY)).toBeNull();
+  });
+
+  it("shows loading, then a failure that can be retried without entering the key again", async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    api.onGet("/users/me/models").reply(() => (fail ? [503, { detail: "The models could not be loaded right now" }] : [200, ok(models)]));
+    renderApp("/settings");
+    await waitFor(() => expect(within(row("Anthropic Claude")).getByText("Key saved")).toBeInTheDocument());
+    expect(await within(row("Anthropic Claude")).findByText(/The models could not be loaded right now/)).toBeInTheDocument();
+    expect(select("Anthropic Claude")).toBeDisabled();
+
+    fail = false;
+    await user.click(within(row("Anthropic Claude")).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(select("Anthropic Claude")).toBeEnabled());
+    expect(requests).toEqual([]);
+  });
+
+  it("reports a rejected key and a key without chat models instead of offering models", async () => {
+    models = {
+      ...models,
+      models: [models.models[0]],
+      unavailable: [{ provider: "anthropic", name: "Claude", message: "Your Claude API key was rejected. Check or replace it in your settings" }],
+    };
+    const first = renderApp("/settings");
+    await screen.findByText("Anthropic Claude", { selector: ".settings__label" });
+    expect(await within(row("Anthropic Claude")).findByText(/Your Claude API key was rejected/)).toBeInTheDocument();
+    expect(select("Anthropic Claude")).toBeDisabled();
+    expect(within(select("Anthropic Claude")).getByRole("option")).toHaveTextContent("Not available");
+    first.unmount();
+
+    models = { ...models, unavailable: [] };
+    renderApp("/settings");
+    await screen.findByText("Anthropic Claude", { selector: ".settings__label" });
+    expect(await within(row("Anthropic Claude")).findByText("Anthropic Claude offers no chat models LECTRA can use with this key.")).toBeInTheDocument();
+    expect(select("Anthropic Claude")).toBeDisabled();
+  });
+
+  it("marks a preferred model the key can no longer use as not available", async () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ anthropic: "anthropic:claude-retired-1" }));
+    renderApp("/settings");
+    await screen.findByText("Anthropic Claude", { selector: ".settings__label" });
+    expect(
+      await within(row("Anthropic Claude")).findByText(/Your preferred model claude-retired-1 isn't available with this key/)
+    ).toBeInTheDocument();
+    const missing = within(select("Anthropic Claude")).getByRole("option", { name: "claude-retired-1 (not available)" });
+    expect(missing).toBeDisabled();
+  });
+
+  it("clears the preferred model when the key is removed", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ anthropic: "anthropic:claude-opus-5-5" }));
+    renderApp("/settings");
+    await waitFor(() => expect(select("Anthropic Claude")).toHaveValue("anthropic:claude-opus-5-5"));
+    await user.click(screen.getByRole("button", { name: "Remove the Anthropic Claude API key" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove key" }));
+    await waitFor(() => expect(select("Anthropic Claude")).toBeDisabled());
+    expect(localStorage.getItem(PREFS_KEY)).toBeNull();
+  });
+});
