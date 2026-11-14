@@ -4,8 +4,11 @@ export {
   ApiError,
   API_BASE_URL,
   AUTH_EXPIRED_EVENT,
+  AUTH_REFRESHED_EVENT,
   getAuthToken,
   setAuthToken,
+  getRefreshToken,
+  refreshSession,
   getTokenExpiry,
   isTokenExpired,
 } from "./client.js";

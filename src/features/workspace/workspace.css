@@ -1195,6 +1195,20 @@ button.cf-material__open:hover {
   position: relative;
   margin: 0 0 var(--space-3);
 }
+/* A Mermaid diagram in an answer (services/notebook/diagrams.js); wide ones scroll sideways. */
+.chat-answer .chat-diagram {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  overflow-x: auto;
+  text-align: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+.chat-answer .chat-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
 .chat-answer .chat-code > pre {
   margin: 0;
   padding-top: 40px;
