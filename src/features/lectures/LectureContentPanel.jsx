@@ -7,7 +7,7 @@ import { fetchLectureFile, getLectureContent } from "../../api/services/lectures
 import { t, useI18n } from "../../i18n/i18n.js";
 import { citedBannerText, sourcePlace } from "../files/citedText.js";
 import { ViewerBanner, ViewerHead, ZoomControls } from "../files/ViewerChrome.jsx";
-import { lectureMeta, STATUS_LABEL, displayStatus } from "./materialTypes.js";
+import { lectureMeta, materialType, STATUS_LABEL, displayStatus } from "./materialTypes.js";
 import "./lectures.css";
 
 // What the toolbar says for each kind of block (functions: read in the current language).
@@ -69,17 +69,21 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
   // A backend without AI processing sends no processing fields and has no file/content
   // endpoints; the stored file is then opened from its S3 URL.
   const basic = lecture.processing_status === undefined;
-  const isImage = basic ? !/(pdf|powerpoint|presentation|ipynb|markdown)/.test(lecture.file_type) : lecture.source_type == null;
+  // An image is shown as the picture only: the text the backend reads from it (for the
+  // study assistant's search) is not shown in the viewer.
+  const isImage = basic
+    ? !/(pdf|powerpoint|presentation|ipynb|markdown)/.test(lecture.file_type)
+    : materialType(lecture.file_type) === "image" || lecture.source_type == null;
   const officeSlides = isSlides(lecture) && /^https:\/\//.test(lecture.s3_url ?? "") && !(cited && focus);
 
   useEffect(() => {
-    if (status !== "completed" || officeSlides) return undefined;
+    if (status !== "completed" || officeSlides || isImage) return undefined;
     const controller = new AbortController();
     getLectureContent(lecture.id, { signal: controller.signal }).then(setContent, (err) => {
       if (!controller.signal.aborted) setError(err);
     });
     return () => controller.abort();
-  }, [lecture.id, lecture.content_version, status, officeSlides]);
+  }, [lecture.id, lecture.content_version, status, officeSlides, isImage]);
 
   useEffect(() => {
     if (!isImage || basic) return undefined;
@@ -175,6 +179,18 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
         )}
       </ViewerHead>
 
+      {isImage && (
+        <div className="viewer__toolbar">
+          <span className="viewer__spacer" />
+          <ZoomControls
+            zoom={zoom}
+            canZoomOut={zoom > ZOOM_MIN}
+            canZoomIn={zoom < ZOOM_MAX}
+            onZoomOut={() => setZoom(zoom - 10)}
+            onZoomIn={() => setZoom(zoom + 10)}
+          />
+        </div>
+      )}
       {groups.length > 0 && (
         <div className="viewer__toolbar">
           <IconButton icon="chevronLeft" label={unit.previous()} disabled={shown <= 0} onClick={() => goTo(shown - 1)} />
@@ -225,7 +241,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
             </p>
           )}
 
-          {status === "processing" && (
+          {status === "processing" && !isImage && (
             <p className="lecture-view__notice" role="status">
               {t("Lectra is reading this file. Its content appears here when processing is complete.")}
             </p>
@@ -247,7 +263,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
               {error.message}
             </p>
           )}
-          {status === "completed" && !officeSlides && !content && !error && <p className="lecture-view__notice">{t("Loading content…")}</p>}
+          {status === "completed" && !officeSlides && !isImage && !content && !error && <p className="lecture-view__notice">{t("Loading content…")}</p>}
 
           {groups.map((group, index) => {
             const highlighted = citedActive && index === focusIndex;

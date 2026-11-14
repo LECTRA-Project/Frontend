@@ -65,4 +65,20 @@ export default {
     "{provider} hat den Schlüssel akzeptiert, bietet dafür aber keine Chatmodelle an.",
   "Try again": "Erneut versuchen",
   "Back to the chat to choose a model": "Zurück zum Chat, um ein Modell auszuwählen",
+  "{model} is your preferred {provider} model in the chat.": "{model} ist dein bevorzugtes {provider}-Modell im Chat.",
+  "Add a key first": "Zuerst einen Schlüssel hinzufügen",
+  "Add your {provider} API key to see the models it offers.":
+    "Füge deinen API-Schlüssel für {provider} hinzu, um die verfügbaren Modelle zu sehen.",
+  "Loading models…": "Modelle werden geladen …",
+  "Loading the models available with your key…": "Die mit deinem Schlüssel verfügbaren Modelle werden geladen …",
+  "Not available": "Nicht verfügbar",
+  "Models not loaded": "Modelle nicht geladen",
+  "No chat models available": "Keine Chatmodelle verfügbar",
+  "{provider} offers no chat models LECTRA can use with this key.":
+    "{provider} bietet mit diesem Schlüssel keine Chatmodelle an, die LECTRA nutzen kann.",
+  "Your preferred model {model} isn't available with this key. Choose another model.":
+    "Dein bevorzugtes Modell {model} ist mit diesem Schlüssel nicht verfügbar. Wähle ein anderes Modell.",
+  "Model": "Modell",
+  "{provider} model": "{provider}-Modell",
+  "{model} (not available)": "{model} (nicht verfügbar)",
 };

@@ -12,7 +12,8 @@ import { PROVIDERS, providerName } from "../../profile/providers.js";
   dialog it opens.
 
   The dialog lists Lectra (always) and, per provider with a saved key, the models the
-  backend says it can call with that key (GET /users/me/models). Choosing applies to the
+  backend says it can call with that key (GET /users/me/models), the provider's preferred
+  model (chosen in Account settings) first. Choosing applies to the
   next question. A provider without a usable key is not selectable: it is listed as locked
   (no key yet) or unavailable (its key failed, with the backend's message), and opening it
   goes straight to that provider's row in Account settings (/settings#api-key-<provider>).
@@ -68,6 +69,7 @@ function ModelDialog({ model, returnTo, onClose }) {
   const { t } = useI18n();
   const groupName = useId();
   const { selected, models, unavailable, loading, error, missing } = model;
+  const preferred = model.preferred ?? {};
   const lectra = models?.find((item) => item.provider === "lectra") ?? { id: "lectra", provider: "lectra", name: "Lectra" };
   const own = (models ?? []).filter((item) => item.provider !== "lectra");
   const providers = [...new Set(own.map((item) => item.provider))];
@@ -114,6 +116,8 @@ function ModelDialog({ model, returnTo, onClose }) {
             <div className="model-picker__list">
               {own
                 .filter((item) => item.provider === provider)
+                // The provider's preferred model (Account settings) comes first.
+                .sort((a, b) => (b.id === preferred[provider]) - (a.id === preferred[provider]))
                 .map((option) => (
                   <ModelOption
                     key={option.id}
@@ -121,6 +125,7 @@ function ModelDialog({ model, returnTo, onClose }) {
                     name={groupName}
                     checked={selected.id === option.id}
                     onChoose={choose}
+                    help={option.id === preferred[provider] ? t("Your preferred {provider} model", { provider: providerName(provider) }) : null}
                   />
                 ))}
             </div>
