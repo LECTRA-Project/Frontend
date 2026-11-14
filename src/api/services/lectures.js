@@ -1,4 +1,5 @@
 import { apiClient, ApiError } from "../client.js";
+import { t } from "../../i18n/i18n.js";
 import { del, get, patch, post } from "../http.js";
 
 /*
@@ -22,9 +23,10 @@ const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 // Tells axios to keep the FormData (the browser then sets the multipart boundary itself).
 const MULTIPART = { "Content-Type": "multipart/form-data" };
 
-function unwrap(response, action) {
+/* `fallback`: the message when the server gives none (translated by the caller). */
+function unwrap(response, fallback) {
   if (response?.status !== true) {
-    throw new ApiError({ message: response?.message || `Unable to ${action}.`, data: response });
+    throw new ApiError({ message: response?.message || fallback, data: response });
   }
   return response.data;
 }
@@ -33,7 +35,7 @@ export async function listLectures({ page = 1, pageSize = 100, search, fileType,
   const params = { page, page_size: pageSize };
   if (search) params.search = search;
   if (fileType) params.file_type = fileType;
-  return unwrap(await get(`${BASE}/lectures`, { params, signal }), "load your lectures");
+  return unwrap(await get(`${BASE}/lectures`, { params, signal }), t("Unable to load your lectures."));
 }
 
 /* All lectures across pages (the backend allows at most 100 per page). */
@@ -58,16 +60,16 @@ export async function uploadLecture({ file, title, onProgress, signal }) {
       if (onProgress && event.total) onProgress(Math.round((event.loaded / event.total) * 100));
     },
   });
-  return unwrap(response, "upload the lecture");
+  return unwrap(response, t("Unable to upload the lecture."));
 }
 
 /* Renames a lecture. The backend accepts only { title } (1–255 characters) and rejects other fields. */
 export async function renameLecture(id, title) {
-  return unwrap(await patch(`${BASE}/lectures/${id}`, { title }), "rename the lecture");
+  return unwrap(await patch(`${BASE}/lectures/${id}`, { title }), t("Unable to rename the lecture."));
 }
 
 export async function deleteLecture(id) {
-  return unwrap(await del(`${BASE}/lectures/${id}`), "delete the lecture");
+  return unwrap(await del(`${BASE}/lectures/${id}`), t("Unable to delete the lecture."));
 }
 
 /*
@@ -89,12 +91,12 @@ export async function detectServerFeatures({ signal } = {}) {
 }
 
 export async function reprocessLecture(id) {
-  return unwrap(await post(`${BASE}/lectures/${id}/reprocess`), "retry processing");
+  return unwrap(await post(`${BASE}/lectures/${id}/reprocess`), t("Unable to retry processing."));
 }
 
 export async function getLectureContent(id, { page = 1, pageSize = 1000, signal } = {}) {
   const response = await get(`${BASE}/lectures/${id}/content`, { params: { page, page_size: pageSize }, signal });
-  return unwrap(response, "load the lecture content");
+  return unwrap(response, t("Unable to load the lecture content."));
 }
 
 /* The original file as a Blob (the request carries the auth token, so a plain link would not work). */

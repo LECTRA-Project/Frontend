@@ -3,7 +3,8 @@ import { useRef, useState } from "react";
 import Modal from "../../components/ui/Modal.jsx";
 import Button from "../../components/ui/Button.jsx";
 import Icon from "../../components/ui/Icon.jsx";
-import { ACCEPTED_EXTENSIONS, materialTypeOf, SUPPORTED_LABEL } from "../../services/materials/materialTypes.js";
+import { useI18n } from "../../i18n/i18n.js";
+import { ACCEPTED_EXTENSIONS, materialTypeOf, supportedLabel } from "../../services/materials/materialTypes.js";
 import "./files.css";
 
 /*
@@ -23,12 +24,10 @@ import "./files.css";
     onUpload   called with the accepted files
 */
 const MAX_BYTES = 100 * 1024 * 1024;
-const DEFAULT_NOTE =
-  "Files are saved to your account. Lectra then reads them so the study assistant can answer questions about them.";
-const BASIC_NOTE = "Files are saved to your account.";
 const isAccepted = (name) => materialTypeOf(name) !== null;
 
 export default function UploadDialog({ basic = false, note, onCancel, onUpload }) {
+  const { t } = useI18n();
   const inputRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [rejected, setRejected] = useState([]);
@@ -48,7 +47,7 @@ export default function UploadDialog({ basic = false, note, onCancel, onUpload }
   }
 
   return (
-    <Modal title="Upload lecture materials" width={480} onClose={onCancel}>
+    <Modal title={t("Upload lecture materials")} width={480} onClose={onCancel}>
       <div className="upload">
         <div
           className={`upload__drop ${dragging ? "upload__drop--active" : ""}`}
@@ -62,9 +61,9 @@ export default function UploadDialog({ basic = false, note, onCancel, onUpload }
           <span className="upload__drop-icon">
             <Icon name="uploadCloud" />
           </span>
-          <p className="upload__drop-title">Drag and drop files here</p>
-          <p className="upload__or">or</p>
-          <Button onClick={() => inputRef.current?.click()}>Choose files</Button>
+          <p className="upload__drop-title">{t("Drag and drop files here")}</p>
+          <p className="upload__or">{t("or")}</p>
+          <Button onClick={() => inputRef.current?.click()}>{t("Choose files")}</Button>
           <input
             ref={inputRef}
             type="file"
@@ -79,16 +78,16 @@ export default function UploadDialog({ basic = false, note, onCancel, onUpload }
           />
         </div>
 
-        <p className="upload__help">Supported: {SUPPORTED_LABEL}, up to 100 MB each.</p>
+        <p className="upload__help">{t("Supported: {types}, up to 100 MB each.", { types: supportedLabel() })}</p>
 
         {rejected.length > 0 && (
           <p className="field__error" role="alert">
-            Not added (unsupported type, empty or over 100 MB): {rejected.join(", ")}
+            {t("Not added (unsupported type, empty or over 100 MB): {files}", { files: rejected.join(", ") })}
           </p>
         )}
 
         {files.length > 0 && (
-          <ul className="upload__list" aria-label="Selected files">
+          <ul className="upload__list" aria-label={t("Selected files")}>
             {files.map((file, index) => (
               <li key={`${file.name}-${index}`}>
                 <Icon name="fileText" size={16} />
@@ -96,7 +95,7 @@ export default function UploadDialog({ basic = false, note, onCancel, onUpload }
                 <button
                   type="button"
                   className="upload__remove"
-                  aria-label={`Remove ${file.name}`}
+                  aria-label={t("Remove {name}", { name: file.name })}
                   onClick={() => setFiles(files.filter((_, i) => i !== index))}
                 >
                   <Icon name="close" size={14} />
@@ -106,12 +105,15 @@ export default function UploadDialog({ basic = false, note, onCancel, onUpload }
           </ul>
         )}
 
-        <p className="upload__local-note">{note ?? (basic ? BASIC_NOTE : DEFAULT_NOTE)}</p>
+        <p className="upload__local-note">{note ??
+            (basic
+              ? t("Files are saved to your account.")
+              : t("Files are saved to your account. Lectra then reads them so the study assistant can answer questions about them."))}</p>
 
         <div className="upload__actions">
-          <Button onClick={onCancel}>Cancel</Button>
+          <Button onClick={onCancel}>{t("Cancel")}</Button>
           <Button variant="primary" disabled={files.length === 0} onClick={() => onUpload(files)}>
-            Upload
+            {t("Upload")}
           </Button>
         </div>
       </div>

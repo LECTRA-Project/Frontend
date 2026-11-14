@@ -39,8 +39,9 @@ export function daysAgo(days, hour = 10) {
   return date.toISOString();
 }
 
-export function installChatBackend(api, { lectures = [], sessions = [], messages = {}, chat = true } = {}) {
+export function installChatBackend(api, { lectures = [], sessions = [], messages = {}, chat = true, models } = {}) {
   const state = {
+    models: models ?? { default: "lectra", models: [{ id: "lectra", provider: "lectra", model: null, name: "Lectra" }], unavailable: [] },
     lectures: [...lectures],
     // { id, title, lectureIds, created_at, updated_at }
     sessions: sessions.map((item) => ({ lectureIds: [], created_at: item.updated_at, ...item })),
@@ -67,6 +68,8 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
   const newId = (prefix) => `${prefix}-${state.nextId++}`;
 
   api.onGet("/users/me").reply(200, ok(TEST_USER));
+  // The models beside the chat input: Lectra only (no own API keys) unless a test says otherwise.
+  api.onGet("/users/me/models").reply(() => [200, ok(state.models)]);
   api.onGet("/student_profile/lectures").reply(() => [
     200,
     ok({ lectures: state.lectures, page: 1, page_size: 100, total: state.lectures.length, total_pages: 1 }),
@@ -171,8 +174,8 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
   });
   api.onPost(/\/chat\/sessions\/[^/]+\/messages$/).reply((config) => {
     const session = find(config);
-    const { content } = JSON.parse(config.data);
-    state.sent.push({ id: session.id, content });
+    const { content, model } = JSON.parse(config.data);
+    state.sent.push(model === undefined ? { id: session.id, content } : { id: session.id, content, model });
     const general = content.includes("1+1") || session.lectureIds.length === 0;
     const sources = general
       ? []

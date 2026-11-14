@@ -5,39 +5,41 @@ import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
 import { groupOf } from "../../../services/materials/materialTypes.js";
 import { useAuth } from "../../auth/authContext.js";
+import { dateLocale, t, useI18n } from "../../../i18n/i18n.js";
 
 const RECENT_LIMIT = 20;
-const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
-const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
+const timeFormat = () => new Intl.DateTimeFormat(dateLocale(undefined), { hour: "2-digit", minute: "2-digit" });
+const dateFormat = () => new Intl.DateTimeFormat(dateLocale(undefined), { dateStyle: "medium" });
 
-/* "Good morning" / "Good afternoon" / "Good evening" for the given time. */
-function greetingFor(date = new Date()) {
+/* "Good morning" / "Good afternoon" / "Good evening" (with the first name, when known) for the given time. */
+function greetingFor(name, date = new Date()) {
   const hour = date.getHours();
-  if (hour >= 5 && hour < 12) return "Good morning";
-  if (hour >= 12 && hour < 17) return "Good afternoon";
-  return "Good evening";
+  if (hour >= 5 && hour < 12) return name ? t("Good morning, {name}", { name }) : t("Good morning");
+  if (hour >= 12 && hour < 17) return name ? t("Good afternoon, {name}", { name }) : t("Good afternoon");
+  return name ? t("Good evening, {name}", { name }) : t("Good evening");
 }
 
-/* "Today", "Yesterday" or the date, for a day heading. */
+/* "today", "yesterday" or the date, for a day heading: { key, label }. */
 function dayLabel(date, now = new Date()) {
   const startOf = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
   const days = Math.round((startOf(now) - startOf(date)) / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  return dateFormat.format(date);
+  if (days === 0) return { key: "today", label: t("Today") };
+  if (days === 1) return { key: "yesterday", label: t("Yesterday") };
+  const label = dateFormat().format(date);
+  return { key: label, label };
 }
 
-/* Materials, newest upload first, grouped by day: [{ label, items }]. */
+/* Materials, newest upload first, grouped by day: [{ key, label, items }]. */
 function groupByDay(materials) {
   const uploaded = (item) => item.lecture?.uploaded_at ?? "";
   const sorted = [...materials].sort((a, b) => uploaded(b).localeCompare(uploaded(a))).slice(0, RECENT_LIMIT);
   const groups = [];
   for (const item of sorted) {
     const date = uploaded(item) ? new Date(uploaded(item)) : null;
-    const label = date && !Number.isNaN(date.getTime()) ? dayLabel(date) : "Earlier";
+    const { key, label } = date && !Number.isNaN(date.getTime()) ? dayLabel(date) : { key: "earlier", label: t("Earlier") };
     const last = groups.at(-1);
-    if (last?.label === label) last.items.push({ item, date });
-    else groups.push({ label, items: [{ item, date }] });
+    if (last?.key === key) last.items.push({ item, date });
+    else groups.push({ key, label, items: [{ item, date }] });
   }
   return groups;
 }
@@ -58,23 +60,23 @@ function groupByDay(materials) {
     onOpenMaterial(material)  opens a material in the workspace
 */
 export default function HomePage() {
+  const { t } = useI18n();
   const { home } = useOutletContext();
   const { materials, uploads = [], loading, onUploadClick, onDismissUpload, onOpenMaterial } = home;
   const { user } = useAuth();
   const firstName = (user?.full_name ?? "").trim().split(/\s+/)[0];
   const groups = groupByDay(materials);
   // Files being uploaded show first, under Today (a first upload shows the card too).
-  if (uploads.length && groups[0]?.label !== "Today") groups.unshift({ label: "Today", items: [] });
+  if (uploads.length && groups[0]?.key !== "today") groups.unshift({ key: "today", label: t("Today"), items: [] });
 
   const greeting = (
     <h2 id="home-title" className="home__greeting">
-      {greetingFor()}
-      {firstName && `, ${firstName}`}
+      {greetingFor(firstName)}
     </h2>
   );
   const uploadButton = (
     <Button variant="primary" icon="upload" onClick={onUploadClick}>
-      Upload materials
+      {t("Upload materials")}
     </Button>
   );
 
@@ -85,7 +87,7 @@ export default function HomePage() {
           <div className="home__welcome">
             {greeting}
             <p className="home__text" role="status">
-              Loading your materials…
+              {t("Loading your materials…")}
             </p>
           </div>
         ) : groups.length === 0 ? (
@@ -93,8 +95,9 @@ export default function HomePage() {
           <div className="home__welcome">
             {greeting}
             <p className="home__text">
-              Your study space for lectures: read your PDFs and slides, run Python notebooks, and ask the study assistant
-              questions answered from your own materials.
+              {t(
+                "Your study space for lectures: read your PDFs and slides, run Python notebooks, and ask the study assistant questions answered from your own materials.",
+              )}
             </p>
             <div className="home__actions">{uploadButton}</div>
           </div>
@@ -104,15 +107,15 @@ export default function HomePage() {
             <section className="home__recent" aria-labelledby="home-recent-title">
               <div className="home__recent-head">
                 <h3 id="home-recent-title" className="home__recent-title">
-                  Recent uploads
+                  {t("Recent uploads")}
                 </h3>
                 {uploadButton}
               </div>
               {groups.map((group) => (
-                <div key={group.label} className="home__day">
+                <div key={group.key} className="home__day">
                   <h4 className="home__day-title">{group.label}</h4>
                   <ul className="home__recent-list" aria-label={group.label}>
-                    {group.label === "Today" &&
+                    {group.key === "today" &&
                       uploads.map((upload) => <UploadRow key={upload.id} upload={upload} onDismiss={onDismissUpload} />)}
                     {group.items.map(({ item, date }) => (
                       <li key={item.id}>
@@ -122,16 +125,16 @@ export default function HomePage() {
                             <span className="material-row__name">{item.name}</span>
                             <span className="material-row__meta">
                               {item.meta}
-                              {date && ` · ${timeFormat.format(date)}`}
+                              {date && ` · ${timeFormat().format(date)}`}
                             </span>
                             {item.status === "processing" && (
                               <span className="home__state">
                                 <span className="home__spinner" aria-hidden="true" />
-                                Processing…
+                                {t("Processing…")}
                               </span>
                             )}
                             {item.status === "failed" && (
-                              <span className="home__state home__state--error">Processing failed — open it to retry</span>
+                              <span className="home__state home__state--error">{t("Processing failed — open it to retry")}</span>
                             )}
                           </span>
                         </button>
@@ -153,6 +156,7 @@ export default function HomePage() {
   server reads it (it answers only once the text is extracted), or the error.
 */
 function UploadRow({ upload, onDismiss }) {
+  const { t } = useI18n();
   const sent = upload.progress >= 100;
   return (
     <li className="material-row home__recent-row home__upload" aria-busy={!upload.error}>
@@ -161,13 +165,13 @@ function UploadRow({ upload, onDismiss }) {
         <span className="material-row__name">{upload.name}</span>
         {upload.error ? (
           <span className="home__state home__state--error" role="alert">
-            Upload failed: {upload.error}
+            {t("Upload failed: {error}", { error: upload.error })}
           </span>
         ) : (
           <>
             <span className="home__state" role="status">
               <span className="home__spinner" aria-hidden="true" />
-              {sent ? "Processing…" : `Uploading… ${upload.progress}%`}
+              {sent ? t("Processing…") : t("Uploading… {progress}%", { progress: upload.progress })}
             </span>
             <span className={`material-progress ${sent ? "material-progress--busy" : ""}`} aria-hidden="true">
               <span className="material-progress__bar" style={{ width: sent ? undefined : `${upload.progress}%` }} />
@@ -175,7 +179,7 @@ function UploadRow({ upload, onDismiss }) {
           </>
         )}
       </span>
-      {upload.error && <IconButton icon="close" label={`Dismiss ${upload.name}`} onClick={() => onDismiss(upload.id)} />}
+      {upload.error && <IconButton icon="close" label={t("Dismiss {name}", { name: upload.name })} onClick={() => onDismiss(upload.id)} />}
     </li>
   );
 }

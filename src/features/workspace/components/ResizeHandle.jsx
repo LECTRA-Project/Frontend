@@ -1,5 +1,6 @@
 import { useRef } from "react";
 
+import { useI18n } from "../../../i18n/i18n.js";
 import { resizeStep } from "../chatLayout.js";
 
 /*
@@ -14,6 +15,7 @@ import { resizeStep } from "../chatLayout.js";
     onResizing(active)  a drag started / ended
 */
 export default function ResizeHandle({ label, onResize, onStep, onReset, onResizing }) {
+  const { t } = useI18n();
   const dragging = useRef(false);
 
   function handlePointerDown(event) {
@@ -46,7 +48,7 @@ export default function ResizeHandle({ label, onResize, onStep, onReset, onResiz
       type="button"
       className="resize-handle"
       aria-label={label}
-      title="Drag to resize · double-click to reset"
+      title={t("Drag to resize · double-click to reset")}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={finish}

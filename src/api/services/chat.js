@@ -1,4 +1,5 @@
 import { ApiError } from "../client.js";
+import { t } from "../../i18n/i18n.js";
 import { del, get, patch, post } from "../http.js";
 
 /*
@@ -41,9 +42,9 @@ export const ANSWER_TIMEOUT_MS = 330000;
 const CREATE_TIMEOUT_MS = 60000;
 const MAX_PAGE_SIZE = 100;
 
-function unwrap(response, action) {
+function unwrap(response, fallback) {
   if (response?.status !== true) {
-    throw new ApiError({ message: response?.message || `Unable to ${action}.`, data: response });
+    throw new ApiError({ message: response?.message || fallback, data: response });
   }
   return response.data;
 }
@@ -52,23 +53,23 @@ function unwrap(response, action) {
 export async function createChatSession({ lectureIds = [], title, signal } = {}) {
   const body = { lecture_ids: lectureIds };
   if (title) body.title = title;
-  return unwrap(await post(BASE, body, { timeout: CREATE_TIMEOUT_MS, signal }), "start a chat");
+  return unwrap(await post(BASE, body, { timeout: CREATE_TIMEOUT_MS, signal }), t("Unable to start a chat."));
 }
 
 /* Adds one of the student's lectures to a chat; returns the updated session. */
 export async function attachChatLecture(id, lectureId) {
-  return unwrap(await post(`${BASE}/${id}/lectures`, { lecture_id: lectureId }), "add the material to this chat");
+  return unwrap(await post(`${BASE}/${id}/lectures`, { lecture_id: lectureId }), t("Unable to add the material to this chat."));
 }
 
 /* Removes a lecture from a chat (the lecture itself is kept); returns the updated session. */
 export async function detachChatLecture(id, lectureId) {
-  return unwrap(await del(`${BASE}/${id}/lectures/${lectureId}`), "remove the material from this chat");
+  return unwrap(await del(`${BASE}/${id}/lectures/${lectureId}`), t("Unable to remove the material from this chat."));
 }
 
 /* One page, most recently active first: { sessions, page, page_size, total, total_pages }. */
 export async function listChatSessions({ page = 1, pageSize = 20, signal } = {}) {
   const response = await get(BASE, { params: { page, page_size: pageSize }, signal });
-  return unwrap(response, "load your chats");
+  return unwrap(response, t("Unable to load your chats."));
 }
 
 export async function listAllChatSessions({ signal } = {}) {
@@ -81,27 +82,33 @@ export async function listAllChatSessions({ signal } = {}) {
 }
 
 export async function getChatSession(id, { signal } = {}) {
-  return unwrap(await get(`${BASE}/${id}`, { signal }), "load the chat");
+  return unwrap(await get(`${BASE}/${id}`, { signal }), t("Unable to load the chat."));
 }
 
 export async function renameChatSession(id, title) {
-  return unwrap(await patch(`${BASE}/${id}`, { title }), "rename the chat");
+  return unwrap(await patch(`${BASE}/${id}`, { title }), t("Unable to rename the chat."));
 }
 
 export async function deleteChatSession(id) {
-  return unwrap(await del(`${BASE}/${id}`), "delete the chat");
+  return unwrap(await del(`${BASE}/${id}`), t("Unable to delete the chat."));
 }
 
-/* Asks a question. Returns { question, answer, session } (both messages are saved). */
-export async function sendChatMessage(id, content, { signal } = {}) {
-  const response = await post(`${BASE}/${id}/messages`, { content }, { timeout: ANSWER_TIMEOUT_MS, signal });
-  return unwrap(response, "get an answer");
+/*
+  Asks a question. Returns { question, answer, session } (both messages are saved).
+  `model` is an id from GET /users/me/models; without it (or "lectra") Lectra answers.
+  A student's own model has no fallback: when it fails, the error says why.
+*/
+export async function sendChatMessage(id, content, { signal, model } = {}) {
+  const body = { content };
+  if (model && model !== "lectra") body.model = model;
+  const response = await post(`${BASE}/${id}/messages`, body, { timeout: ANSWER_TIMEOUT_MS, signal });
+  return unwrap(response, t("Unable to get an answer."));
 }
 
 /* One page, oldest first: { messages, page, page_size, total, total_pages }. */
 export async function listChatMessages(id, { page = 1, pageSize = 50, signal } = {}) {
   const response = await get(`${BASE}/${id}/messages`, { params: { page, page_size: pageSize }, signal });
-  return unwrap(response, "load the messages");
+  return unwrap(response, t("Unable to load the messages."));
 }
 
 export async function listAllChatMessages(id, { signal } = {}) {

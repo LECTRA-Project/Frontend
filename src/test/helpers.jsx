@@ -5,6 +5,7 @@ import MockAdapter from "axios-mock-adapter";
 import { apiClient, AUTH_TOKEN_KEY } from "../api/client.js";
 import { routes } from "../app/router.jsx";
 import AuthProvider from "../features/auth/AuthProvider.jsx";
+import I18nProvider from "../i18n/I18nProvider.jsx";
 
 /* Intercepts every request made through apiClient. Call .restore() after each test. */
 export function mockApi() {
@@ -39,12 +40,14 @@ export function ok(data, message = "OK") {
   return { status: true, message, data };
 }
 
-/* Renders the real app routes at `path`, inside the real AuthProvider. */
+/* Renders the real app routes at `path`, inside the real AuthProvider and I18nProvider (as App does). */
 export function renderApp(path = "/") {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const utils = render(
     <AuthProvider>
-      <RouterProvider router={router} />
+      <I18nProvider>
+        <RouterProvider router={router} />
+      </I18nProvider>
     </AuthProvider>
   );
   return { router, ...utils };

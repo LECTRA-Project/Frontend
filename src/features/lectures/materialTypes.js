@@ -10,6 +10,7 @@
     "processing" (backend: pending or processing)
     "completed" | "failed" | "skipped" (images are stored but not searchable)
 */
+import { t } from "../../i18n/i18n.js";
 
 const TYPE_BY_MIME = {
   "application/pdf": "pdf",
@@ -19,22 +20,39 @@ const TYPE_BY_MIME = {
   "text/markdown": "notes",
 };
 
+// Functions, so the labels are read in the current interface language.
 const FORMAT_LABEL = {
-  "application/pdf": "PDF",
-  "application/vnd.ms-powerpoint": "PPT",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
-  "application/x-ipynb+json": "Notebook",
-  "text/markdown": "Notes",
+  "application/pdf": () => "PDF",
+  "application/vnd.ms-powerpoint": () => "PPT",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": () => "PPTX",
+  "application/x-ipynb+json": () => t("Notebook"),
+  "text/markdown": () => t("Notes"),
 };
 
-const UNIT = { page: ["page", "pages"], slide: ["slide", "slides"], cell: ["cell", "cells"], section: ["section", "sections"] };
+const UNIT = {
+  page: (count) => (count === 1 ? t("1 page") : t("{count} pages", { count })),
+  slide: (count) => (count === 1 ? t("1 slide") : t("{count} slides", { count })),
+  cell: (count) => (count === 1 ? t("1 cell") : t("{count} cells", { count })),
+  section: (count) => (count === 1 ? t("1 section") : t("{count} sections", { count })),
+};
 
+/* Getters: each label is read in the current interface language. */
 export const STATUS_LABEL = {
-  uploading: "Uploading",
-  processing: "Processing",
-  completed: "Completed",
-  failed: "Failed",
-  skipped: "Not searchable",
+  get uploading() {
+    return t("Uploading");
+  },
+  get processing() {
+    return t("Processing");
+  },
+  get completed() {
+    return t("Completed");
+  },
+  get failed() {
+    return t("Failed");
+  },
+  get skipped() {
+    return t("Not searchable");
+  },
 };
 
 export function materialType(fileType) {
@@ -56,9 +74,9 @@ export function titleFromFileName(name) {
 
 /* "PDF · 12 pages" */
 export function lectureMeta(lecture) {
-  const parts = [FORMAT_LABEL[lecture.file_type] ?? "Image"];
+  const parts = [FORMAT_LABEL[lecture.file_type]?.() ?? t("Image")];
   const unit = UNIT[lecture.source_type];
-  if (unit && lecture.source_count) parts.push(`${lecture.source_count} ${unit[lecture.source_count === 1 ? 0 : 1]}`);
+  if (unit && lecture.source_count) parts.push(unit(lecture.source_count));
   return parts.join(" · ");
 }
 

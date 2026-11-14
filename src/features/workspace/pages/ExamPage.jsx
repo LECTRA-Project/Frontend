@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useOutletContext } from "react-router-d
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
+import { t as translateNow, useI18n } from "../../../i18n/i18n.js";
 import { deleteExam, getExam, listAllExams, QUESTION_TYPES, regradeExam, startExam, submitExam } from "../../../api/services/exams.js";
 import { clearExamProgress, loadExamProgress, saveExamProgress, updateExamProgress } from "../../../services/exam/examStorage.js";
 import { toMaterial } from "../../lectures/materialTypes.js";
@@ -37,30 +38,35 @@ import "../../exam/exam.css";
   "New exam on the same materials" opens the setup with that exam's lectures, number and
   types chosen (kept in the history entry's state, so a reload keeps them too).
 */
-const STEPS = {
-  setup: "Step 1 of 3 · Set up",
-  generating: "Step 1 of 3 · Generating",
-  failed: "Step 1 of 3 · Generating",
-  ready: "Step 2 of 3 · Answer",
-  grading: "Step 3 of 3 · Checking",
-  submitted: "Step 3 of 3 · Results",
-};
+function stepLabel(step, t) {
+  return {
+    setup: t("Step 1 of 3 · Set up"),
+    generating: t("Step 1 of 3 · Generating"),
+    failed: t("Step 1 of 3 · Generating"),
+    ready: t("Step 2 of 3 · Answer"),
+    grading: t("Step 3 of 3 · Checking"),
+    submitted: t("Step 3 of 3 · Results"),
+  }[step];
+}
 
 // Lectures without readable text yet: the backend can't write questions from them (422).
-const NOT_READY = {
-  uploading: "Still uploading",
-  processing: "Still processing, not ready for an exam yet",
-  failed: "Processing failed, so no questions can be made from it",
-  skipped: "No readable text (images can’t be used for exams)",
-};
+function notReadyReason(status, t) {
+  return {
+    uploading: t("Still uploading"),
+    processing: t("Still processing, not ready for an exam yet"),
+    failed: t("Processing failed, so no questions can be made from it"),
+    skipped: t("No readable text (images can’t be used for exams)"),
+  }[status];
+}
 
 function toExamMaterial(lecture) {
   const material = toMaterial(lecture);
-  const reason = NOT_READY[material.status] ?? null;
+  const reason = notReadyReason(material.status, translateNow) ?? null;
   return { id: lecture.id, title: lecture.title, meta: material.meta, selectable: !reason, reason };
 }
 
 export default function ExamPage() {
+  const { t } = useI18n();
   const { examView } = useOutletContext();
   const { userKey, chatLectures, library, loading: materialsLoading, sourceType, onOpenSource, onAskAbout } = examView;
   const location = useLocation();
@@ -106,7 +112,7 @@ export default function ExamPage() {
   const missing = examState.error?.status === 404 || examState.error?.status === 422;
   useEffect(() => {
     if (!examId || !missing) return;
-    setNotice("That exam isn’t in your exams. It may have been discarded.");
+    setNotice(t("That exam isn’t in your exams. It may have been discarded."));
     navigate({ pathname: location.pathname, search: searchWith(null) }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId, missing]);
@@ -133,7 +139,7 @@ export default function ExamPage() {
           busyId = null;
         }
       }
-      setStartError({ message: err.message || "The exam could not be started.", busyId });
+      setStartError({ message: err.message || t("The exam could not be started."), busyId });
       return null;
     } finally {
       setStarting(false);
@@ -192,7 +198,7 @@ export default function ExamPage() {
         if (current?.status === "submitted") {
           forgetAnswers(target.id);
           examState.seed(current);
-          setNotice(err.status === 409 ? "This exam was already submitted. These are its results." : "Your exam was submitted. These are its results.");
+          setNotice(err.status === 409 ? t("This exam was already submitted. These are its results.") : t("Your exam was submitted. These are its results."));
           return;
         }
       }
@@ -227,7 +233,7 @@ export default function ExamPage() {
   async function discard(target) {
     await unfinished.discard(target.id);
     clearExamProgress(userKey, target.id);
-    setNotice("Exam discarded.");
+    setNotice(t("Exam discarded."));
   }
 
   /* ---------- What to show ---------- */
@@ -260,8 +266,10 @@ export default function ExamPage() {
         <>
           <p className="exam-notice" role="status">
             {presetIds.length === 0 || presetGone === presetIds.length
-              ? "The materials of that exam were deleted, so pick others."
-              : `${presetGone === 1 ? "1 material" : `${presetGone} materials`} of that exam ${presetGone === 1 ? "was" : "were"} deleted, so ${presetGone === 1 ? "it isn’t" : "they aren’t"} chosen.`}
+              ? t("The materials of that exam were deleted, so pick others.")
+              : presetGone === 1
+                ? t("1 material of that exam was deleted, so it isn’t chosen.")
+                : t("{count} materials of that exam were deleted, so they aren’t chosen.", { count: presetGone })}
           </p>
           {body}
         </>
@@ -270,8 +278,8 @@ export default function ExamPage() {
     if (!unfinished.available) {
       body = (
         <section className="exam-card exam-card--center">
-          <h3 className="exam-card__title">Exams aren’t available</h3>
-          <p className="exam-muted">This server can’t generate exams yet.</p>
+          <h3 className="exam-card__title">{t("Exams aren’t available")}</h3>
+          <p className="exam-muted">{t("This server can’t generate exams yet.")}</p>
         </section>
       );
     }
@@ -279,18 +287,18 @@ export default function ExamPage() {
     body = examState.error && !missing ? (
       <section className="exam-card exam-card--center">
         <p className="exam-error" role="alert">
-          {examState.error.message || "The exam could not be loaded."}
+          {examState.error.message || t("The exam could not be loaded.")}
         </p>
         <div className="exam-actions">
           <Button variant="primary" onClick={examState.reload}>
-            Try again
+            {t("Try again")}
           </Button>
-          <Button onClick={() => toSetup()}>Back</Button>
+          <Button onClick={() => toSetup()}>{t("Back")}</Button>
         </div>
       </section>
     ) : (
       <p className="exam-muted exam-loading" role="status">
-        Loading the exam…
+        {t("Loading the exam…")}
       </p>
     );
   } else if (exam.status === "generating" || exam.status === "failed") {
@@ -328,25 +336,25 @@ export default function ExamPage() {
     body = examState.error ? (
       <section className="exam-card exam-card--center">
         <p className="exam-error" role="alert">
-          {examState.error.message || "The results could not be loaded."}
+          {examState.error.message || t("The results could not be loaded.")}
         </p>
         <div className="exam-actions">
           <Button variant="primary" onClick={examState.reload}>
-            Try again
+            {t("Try again")}
           </Button>
         </div>
       </section>
     ) : (
       <p className="exam-muted exam-loading" role="status">
-        Loading the results…
+        {t("Loading the results…")}
       </p>
     );
   } else {
     body = (
       <section className="exam-card exam-card--center">
-        <h3 className="exam-card__title">This exam has no questions</h3>
+        <h3 className="exam-card__title">{t("This exam has no questions")}</h3>
         <div className="exam-actions">
-          <Button onClick={() => toSetup()}>New exam</Button>
+          <Button onClick={() => toSetup()}>{t("New exam")}</Button>
         </div>
       </section>
     );
@@ -358,13 +366,13 @@ export default function ExamPage() {
       <header className="exam-head">
         <div className="exam-head__text">
           <h2 id="exam-title" className="exam-head__title">
-            Exam{title ? ` · ${title}` : ""}
+            {title ? t("Exam · {title}", { title }) : t("Exam")}
           </h2>
-          <span className="exam-head__step">{STEPS[step] ?? ""}</span>
+          <span className="exam-head__step">{stepLabel(step, t) ?? ""}</span>
         </div>
         <Link to={backToChat} className="btn btn--secondary exam-head__back">
           <Icon name="arrowLeft" />
-          Back to chat
+          {t("Back to chat")}
         </Link>
       </header>
 

@@ -12,6 +12,7 @@ import {
   renameChatSession,
   sendChatMessage,
 } from "../../api/services/chat.js";
+import { t } from "../../i18n/i18n.js";
 
 // Chats in the menu are loaded this many at a time (more as the list is scrolled).
 export const SESSIONS_PAGE_SIZE = 50;
@@ -91,7 +92,7 @@ export function useLectureChat({ enabled }) {
       setSessionsError(null);
     } catch (err) {
       if (signal?.aborted || err?.name === "CanceledError") return;
-      setSessionsError(err.message || "Your chats could not be loaded.");
+      setSessionsError(err.message || t("Your chats could not be loaded."));
     } finally {
       if (!signal?.aborted) setSessionsLoading(false);
     }
@@ -109,7 +110,7 @@ export function useLectureChat({ enabled }) {
       },
       (err) => {
         if (controller.signal.aborted) return;
-        setSessionsError(err.message || "Your chats could not be loaded.");
+        setSessionsError(err.message || t("Your chats could not be loaded."));
         setSessionsLoading(false);
       }
     );
@@ -200,7 +201,7 @@ export function useLectureChat({ enabled }) {
         setOlderPage(older);
       } catch (err) {
         if (controller.signal.aborted || err?.name === "CanceledError") return;
-        setMessages([{ id: crypto.randomUUID(), role: "system", content: err.message || "This chat could not be loaded." }]);
+        setMessages([{ id: crypto.randomUUID(), role: "system", content: err.message || t("This chat could not be loaded.") }]);
       } finally {
         if (!controller.signal.aborted) setMessagesLoading(false);
       }
@@ -272,10 +273,11 @@ export function useLectureChat({ enabled }) {
   /*
     Asks `content` in the open chat (a new chat is created first). `question` is what the
     student typed (shown in the list); `content` is what is sent (it may carry notebook
-    context). Resolves true once answered, false on failure (the error is shown in the chat).
+    context). `model` is the chosen model's id (none: Lectra). Resolves true once answered,
+    false on failure (the error is shown in the chat).
   */
   const send = useCallback(
-    async ({ question, content, extras = [] }) => {
+    async ({ question, content, extras = [], model }) => {
       const pendingId = crypto.randomUUID();
       let sessionId = activeRef.current;
       let key = sessionId ?? NEW;
@@ -297,7 +299,7 @@ export function useLectureChat({ enabled }) {
           key = sessionId;
           if (activeRef.current === null) select(created.id);
         }
-        const result = await sendChatMessage(sessionId, content);
+        const result = await sendChatMessage(sessionId, content, { model });
         putSession(result.session, { toTop: true });
         if (activeRef.current === sessionId) {
           setMessages((list) => [
@@ -323,8 +325,8 @@ export function useLectureChat({ enabled }) {
         }
         const message =
           err?.code === "ECONNABORTED" && sessionId
-            ? "The assistant is taking longer than usual. Your answer may still arrive — open this chat again from Chats in a minute."
-            : err.message || "The assistant could not answer right now.";
+            ? t("The assistant is taking longer than usual. Your answer may still arrive — open this chat again from Chats in a minute.")
+            : err.message || t("The assistant could not answer right now.");
         if (activeRef.current === sessionId || activeRef.current === null) {
           setMessages((list) => [
             ...list.map((item) => (item.id === pendingId ? { ...item, pending: false } : item)),

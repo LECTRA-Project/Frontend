@@ -1,4 +1,5 @@
 import Button from "../../../components/ui/Button.jsx";
+import { useI18n } from "../../../i18n/i18n.js";
 
 /*
   Step 1, while the questions are written: "2 of 5 questions ready" with a progress bar.
@@ -9,21 +10,22 @@ import Button from "../../../components/ui/Button.jsx";
          loadError (a failed read while polling) with onReload
 */
 export default function ExamGenerating({ exam, onRetry, onBack, retrying, retryError, onOpenExam, loadError, onReload }) {
+  const { t } = useI18n();
   if (exam.status === "failed") {
     return (
       <section className="exam-card exam-card--center" aria-labelledby="exam-failed-title">
         <h3 id="exam-failed-title" className="exam-card__title">
-          The exam couldn’t be generated
+          {t("The exam couldn’t be generated")}
         </h3>
         <p className="exam-error" role="alert">
-          {exam.error || "Something went wrong while writing the questions."}
+          {exam.error || t("Something went wrong while writing the questions.")}
         </p>
         <div className="exam-actions">
           <Button variant="primary" icon="refresh" onClick={onRetry} disabled={retrying}>
-            {retrying ? "Starting…" : "Retry"}
+            {retrying ? t("Starting…") : t("Retry")}
           </Button>
           <Button icon="arrowLeft" onClick={onBack}>
-            Back
+            {t("Back")}
           </Button>
         </div>
         {retryError && (
@@ -31,7 +33,7 @@ export default function ExamGenerating({ exam, onRetry, onBack, retrying, retryE
             <p>{retryError.message}</p>
             {retryError.busyId && (
               <Button size="sm" onClick={() => onOpenExam(retryError.busyId)}>
-                Open that exam
+                {t("Open that exam")}
               </Button>
             )}
           </div>
@@ -45,20 +47,20 @@ export default function ExamGenerating({ exam, onRetry, onBack, retrying, retryE
   return (
     <section className="exam-card exam-card--center" aria-labelledby="exam-generating-title">
       <h3 id="exam-generating-title" className="exam-card__title">
-        Writing your questions…
+        {t("Writing your questions…")}
       </h3>
       <p className="exam-muted" role="status" aria-live="polite">
-        {ready} of {total} questions ready
+        {t("{ready} of {total} questions ready", { ready, total })}
       </p>
-      <div className="exam-bar exam-bar--wide exam-bar--busy" role="progressbar" aria-label="Questions ready" aria-valuemin={0} aria-valuemax={total} aria-valuenow={ready}>
+      <div className="exam-bar exam-bar--wide exam-bar--busy" role="progressbar" aria-label={t("Questions ready")} aria-valuemin={0} aria-valuemax={total} aria-valuenow={ready}>
         <span style={{ width: `${Math.round((ready / total) * 100)}%` }} />
       </div>
-      <p className="exam-muted exam-small">You can leave this page: the exam waits for you under “Continue an exam”.</p>
+      <p className="exam-muted exam-small">{t("You can leave this page: the exam waits for you under “Continue an exam”.")}</p>
       {loadError && (
         <div className="exam-alert" role="alert">
-          <p>{loadError.message || "The exam could not be loaded."}</p>
+          <p>{loadError.message || t("The exam could not be loaded.")}</p>
           <Button size="sm" onClick={onReload}>
-            Try again
+            {t("Try again")}
           </Button>
         </div>
       )}

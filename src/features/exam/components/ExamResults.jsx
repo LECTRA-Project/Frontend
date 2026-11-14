@@ -3,6 +3,7 @@ import "katex/dist/katex.min.css";
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
+import { useI18n } from "../../../i18n/i18n.js";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
 import { choiceLetter, formatPoints, pointsOutOf, verdictOf } from "../examFormat.js";
 import { canAskAbout } from "../askAboutAnswer.js";
@@ -31,6 +32,7 @@ import { canAskAbout } from "../askAboutAnswer.js";
                       the error to show); null hides "Ask about this"
 */
 export default function ExamResults({ exam, onOpenSource, onRegrade, onNewExam, onAsk = null }) {
+  const { t } = useI18n();
   const questions = exam.questions ?? [];
   const counts = { correct: 0, partially_correct: 0, incorrect: 0, waiting: 0 };
   for (const question of questions) {
@@ -43,7 +45,7 @@ export default function ExamResults({ exam, onOpenSource, onRegrade, onNewExam, 
   return (
     <>
       <ScoreSummary exam={exam} counts={counts} ungraded={ungraded} onRegrade={onRegrade} onNewExam={onNewExam} />
-      <ol className="exam-results" aria-label="Your answers">
+      <ol className="exam-results" aria-label={t("Your answers")}>
         {questions.map((question, index) => (
           <li key={question.id}>
             <ResultCard question={question} number={index + 1} onOpenSource={onOpenSource} onAsk={onAsk} />
@@ -55,12 +57,14 @@ export default function ExamResults({ exam, onOpenSource, onRegrade, onNewExam, 
 }
 
 function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam }) {
+  const { t } = useI18n();
   const [regrading, setRegrading] = useState(false);
   const [regradeError, setRegradeError] = useState(null);
   const percent = ungraded > 0 ? null : exam.score_percent;
   const known = percent !== null && percent !== undefined && exam.total_points !== null && exam.total_points !== undefined;
   const ratio = known ? Math.max(0, Math.min(100, percent)) : 0;
-  const points = known ? `${formatPoints(exam.total_points)} of ${formatPoints(exam.max_points)} ${exam.max_points === 1 ? "point" : "points"}` : null;
+  const pointVars = { points: formatPoints(exam.total_points), max: formatPoints(exam.max_points) };
+  const points = known ? (exam.max_points === 1 ? t("{points} of {max} point", pointVars) : t("{points} of {max} points", pointVars)) : null;
 
   async function regrade() {
     setRegrading(true);
@@ -68,7 +72,7 @@ function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam }) {
     try {
       await onRegrade();
     } catch (err) {
-      setRegradeError(err?.message || "The answers could not be graded.");
+      setRegradeError(err?.message || t("The answers could not be graded."));
     } finally {
       setRegrading(false);
     }
@@ -80,42 +84,44 @@ function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam }) {
         className={`exam-ring ${known ? "" : "exam-ring--unknown"}`}
         style={{ "--exam-score": `${ratio * 3.6}deg` }}
         role="img"
-        aria-label={known ? `Score ${percent} %, ${points}` : "Score not known yet"}
+        aria-label={known ? t("Score {percent} %, {points}", { percent, points }) : t("Score not known yet")}
       >
         <div className="exam-ring__inner" aria-hidden="true">
           <span className="exam-ring__percent">{known ? `${percent}%` : "–"}</span>
-          <span className="exam-ring__points">{known ? points : `of ${formatPoints(exam.max_points)}`}</span>
+          <span className="exam-ring__points">{known ? points : t("of {max}", { max: formatPoints(exam.max_points) })}</span>
         </div>
       </div>
 
       <div className="exam-score__text">
         <h3 id="exam-score-title" className="exam-card__title">
-          {ungraded > 0 ? "Some answers are still waiting to be graded" : "Your answers are checked"}
+          {ungraded > 0 ? t("Some answers are still waiting to be graded") : t("Your answers are checked")}
         </h3>
         {!known && (
           <p className="exam-score__total">
-            {ungraded === 1 ? "1 answer couldn’t" : `${ungraded} answers couldn’t`} be graded yet, so the total isn’t known. Grade again to try now.
+            {ungraded === 1
+              ? t("1 answer couldn’t be graded yet, so the total isn’t known. Grade again to try now.")
+              : t("{count} answers couldn’t be graded yet, so the total isn’t known. Grade again to try now.", { count: ungraded })}
           </p>
         )}
-        <ul className="exam-verdicts" aria-label="Answers by verdict">
-          <li className="exam-verdict exam-verdict--ok">{counts.correct} correct</li>
-          <li className="exam-verdict exam-verdict--part">{counts.partially_correct} partly correct</li>
-          <li className="exam-verdict exam-verdict--bad">{counts.incorrect} wrong</li>
-          {counts.waiting > 0 && <li className="exam-verdict exam-verdict--wait">{counts.waiting} waiting</li>}
+        <ul className="exam-verdicts" aria-label={t("Answers by verdict")}>
+          <li className="exam-verdict exam-verdict--ok">{t("{count} correct", { count: counts.correct })}</li>
+          <li className="exam-verdict exam-verdict--part">{t("{count} partly correct", { count: counts.partially_correct })}</li>
+          <li className="exam-verdict exam-verdict--bad">{t("{count} wrong", { count: counts.incorrect })}</li>
+          {counts.waiting > 0 && <li className="exam-verdict exam-verdict--wait">{t("{count} waiting", { count: counts.waiting })}</li>}
         </ul>
         <div className="exam-score__actions">
           {ungraded > 0 && (
             <Button variant="primary" icon="refresh" onClick={regrade} disabled={regrading}>
-              {regrading ? "Grading…" : "Grade again"}
+              {regrading ? t("Grading…") : t("Grade again")}
             </Button>
           )}
           <Button variant={ungraded > 0 ? "secondary" : "primary"} onClick={onNewExam}>
-            New exam on the same materials
+            {t("New exam on the same materials")}
           </Button>
         </div>
         {regrading && (
           <p className="exam-muted exam-small" role="status">
-            Grading the waiting answers, a few seconds each…
+            {t("Grading the waiting answers, a few seconds each…")}
           </p>
         )}
         {regradeError && (
@@ -129,6 +135,7 @@ function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam }) {
 }
 
 function ResultCard({ question, number, onOpenSource, onAsk }) {
+  const { t } = useI18n();
   const result = question.result ?? {};
   const verdict = verdictOf(result);
   const isChoice = question.type === "multiple_choice";
@@ -140,9 +147,9 @@ function ResultCard({ question, number, onOpenSource, onAsk }) {
       <div className="exam-question__meta">
         <span className={`exam-verdict exam-verdict--${verdict.tone}`}>{verdict.label}</span>
         <span className="exam-muted exam-small">
-          Question {number} · {pointsOutOf(result.graded ? result.points : null, result.max_points ?? question.points)}
+          {t("Question {number} · {points}", { number, points: pointsOutOf(result.graded ? result.points : null, result.max_points ?? question.points) })}
         </span>
-        {result.corrected && <span className="exam-tag">Corrected by your lecturer</span>}
+        {result.corrected && <span className="exam-tag">{t("Corrected by your lecturer")}</span>}
       </div>
       <div
         id={headingId}
@@ -154,9 +161,9 @@ function ResultCard({ question, number, onOpenSource, onAsk }) {
 
       <div className="exam-compare">
         <div className="exam-compare__box">
-          <h4 className="exam-compare__label">Your answer</h4>
+          <h4 className="exam-compare__label">{t("Your answer")}</h4>
           {!result.answered ? (
-            <p className="exam-muted">Not answered</p>
+            <p className="exam-muted">{t("Not answered")}</p>
           ) : isChoice ? (
             <ChoiceList question={question} ids={result.selected_choice_ids} correct={result.correct_choice_ids} marked />
           ) : (
@@ -164,23 +171,23 @@ function ResultCard({ question, number, onOpenSource, onAsk }) {
           )}
         </div>
         <div className="exam-compare__box exam-compare__box--correct">
-          <h4 className="exam-compare__label">Correct answer</h4>
+          <h4 className="exam-compare__label">{t("Correct answer")}</h4>
           {isChoice ? (
             <ChoiceList question={question} ids={result.correct_choice_ids} />
           ) : result.reference_solution ? (
             <div className="exam-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(result.reference_solution) }} />
           ) : (
-            <p className="exam-muted">No reference answer was saved.</p>
+            <p className="exam-muted">{t("No reference answer was saved.")}</p>
           )}
         </div>
       </div>
 
-      {!result.graded && result.answered && <p className="exam-muted exam-small">This answer couldn’t be graded yet. Use “Grade again” above.</p>}
+      {!result.graded && result.answered && <p className="exam-muted exam-small">{t("This answer couldn’t be graded yet. Use “Grade again” above.")}</p>}
 
       {result.corrected && (
         <div className="exam-correction">
           <p className="exam-correction__title">
-            <Icon name="edit" /> Your lecturer corrected the points
+            <Icon name="edit" /> {t("Your lecturer corrected the points")}
           </p>
           {result.correction_comment && <p>{result.correction_comment}</p>}
         </div>
@@ -189,14 +196,14 @@ function ResultCard({ question, number, onOpenSource, onAsk }) {
       {/* An unanswered question's feedback only repeats the correct answer. */}
       {result.feedback && result.answered && (
         <div className="exam-feedback">
-          <h4 className="exam-feedback__label">Feedback</h4>
+          <h4 className="exam-feedback__label">{t("Feedback")}</h4>
           <div className="exam-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(result.feedback) }} />
         </div>
       )}
 
       {scores.length > 0 && result.answered && (
         <details className="exam-criteria" open={!isChoice}>
-          <summary>Points per criterion</summary>
+          <summary>{t("Points per criterion")}</summary>
           <ul>
             {scores.map((score) => (
               <li key={score.criterion_id} className="exam-criterion">
@@ -223,6 +230,7 @@ function ResultCard({ question, number, onOpenSource, onAsk }) {
 
 /* "Ask about this": opens the chat with a prepared question; says why if it can't. */
 function AskButton({ question, number, onAsk }) {
+  const { t } = useI18n();
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState(null);
 
@@ -232,7 +240,7 @@ function AskButton({ question, number, onAsk }) {
     try {
       await onAsk(question);
     } catch (err) {
-      setError(err?.message || "The chat could not be opened.");
+      setError(err?.message || t("The chat could not be opened."));
       setOpening(false);
     }
   }
@@ -245,10 +253,10 @@ function AskButton({ question, number, onAsk }) {
         className="exam-ask__button"
         onClick={ask}
         disabled={opening}
-        aria-label={opening ? undefined : `Ask about this: question ${number}`}
-        title="Ask the study assistant to explain this question from your lectures"
+        aria-label={opening ? undefined : t("Ask about this: question {number}", { number })}
+        title={t("Ask the study assistant to explain this question from your lectures")}
       >
-        {opening ? "Opening the chat…" : "Ask about this"}
+        {opening ? t("Opening the chat…") : t("Ask about this")}
       </Button>
       {error && (
         <p className="exam-alert exam-small" role="alert">
@@ -261,10 +269,11 @@ function AskButton({ question, number, onAsk }) {
 
 /* The choices `ids` in the order they were shown, "B · text"; `marked` adds right / wrong. */
 function ChoiceList({ question, ids, correct = [], marked = false }) {
+  const { t } = useI18n();
   const picked = new Set(ids ?? []);
   const right = new Set(correct ?? []);
   const shown = (question.choices ?? []).map((choice, index) => ({ ...choice, letter: choiceLetter(index) })).filter((choice) => picked.has(choice.id));
-  if (shown.length === 0) return <p className="exam-muted">None</p>;
+  if (shown.length === 0) return <p className="exam-muted">{t("None")}</p>;
   return (
     <ul className="exam-picks">
       {shown.map((choice) => {
@@ -278,7 +287,7 @@ function ChoiceList({ question, ids, correct = [], marked = false }) {
             {marked && (
               <span className="exam-pick__mark">
                 <Icon name={ok ? "check" : "close"} />
-                <span className="visually-hidden">{ok ? "right" : "wrong"}</span>
+                <span className="visually-hidden">{ok ? t("right") : t("wrong")}</span>
               </span>
             )}
           </li>
@@ -293,6 +302,7 @@ function ChoiceList({ question, ids, correct = [], marked = false }) {
   (named "Open page 12 of <lecture>"); a deleted lecture's pages are plain text.
 */
 function Sources({ sources, onOpenSource }) {
+  const { t, language } = useI18n();
   const groups = [];
   const seen = new Set();
   for (const source of sources) {
@@ -304,23 +314,27 @@ function Sources({ sources, onOpenSource }) {
       group = { lectureId: source.lecture_id, title: source.lecture_title, sources: [] };
       groups.push(group);
     }
-    group.sources.push({ ...source, key, location: source.location || `Page ${source.page_number}` });
+    group.sources.push({ ...source, key, location: source.location || t("Page {number}", { number: source.page_number }) });
   }
   if (groups.length === 0) return null;
   return (
     <div className="exam-sources">
       {groups.map((group) => (
         <div key={group.lectureId ?? "deleted"} className="exam-sources__group">
-          <span className="exam-sources__doc">{group.lectureId ? `In ${group.title ?? "the lecture"}` : "The lecture was deleted"}</span>
-          <ul className="exam-result__actions" aria-label={group.lectureId ? `Pages in ${group.title ?? "the lecture"}` : "Pages of a deleted lecture"}>
+          <span className="exam-sources__doc">{group.lectureId ? ((group.title ?? null) !== null ? t("In {title}", { title: group.title }) : t("In the lecture")) : t("The lecture was deleted")}</span>
+          <ul className="exam-result__actions" aria-label={group.lectureId ? ((group.title ?? null) !== null ? t("Pages in {title}", { title: group.title }) : t("Pages in the lecture")) : t("Pages of a deleted lecture")}>
             {group.sources.map((source) =>
               group.lectureId ? (
                 <li key={source.key}>
                   <button
                     type="button"
                     className="exam-source"
-                    title="Open this page beside the exam"
-                    aria-label={`Open ${source.location.toLowerCase()}${group.title ? ` of ${group.title}` : ""}`}
+                    title={t("Open this page beside the exam")}
+                    aria-label={
+                      group.title
+                        ? t("Open {location} of {title}", { location: language === "de" ? source.location : source.location.toLowerCase(), title: group.title })
+                        : t("Open {location}", { location: language === "de" ? source.location : source.location.toLowerCase() })
+                    }
                     onClick={() => onOpenSource(source)}
                   >
                     {source.location}

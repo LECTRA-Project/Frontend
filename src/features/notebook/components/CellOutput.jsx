@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { useI18n } from "../../../i18n/i18n.js";
 import { renderMarkdown, sanitizeHtml } from "../../../services/notebook/markdown.js";
 
 // Richest representation first, like Jupyter.
@@ -11,12 +12,13 @@ const ANSI_PATTERN = /\u001b\[[0-9;]*[A-Za-z]/g;
 const stripAnsi = (text) => text.replace(ANSI_PATTERN, "");
 
 function RichData({ data }) {
+  const { t } = useI18n();
   const mime = MIME_ORDER.find((type) => typeof data[type] === "string");
-  if (!mime) return <pre className="nb-output__text">[output in an unsupported format: {Object.keys(data).join(", ")}]</pre>;
+  if (!mime) return <pre className="nb-output__text">{t("[output in an unsupported format: {formats}]", { formats: Object.keys(data).join(", ") })}</pre>;
   const value = data[mime];
 
   if (mime === "image/png" || mime === "image/jpeg") {
-    return <img className="nb-output__image" src={`data:${mime};base64,${value.trim()}`} alt={data["text/plain"] ?? "Output image"} />;
+    return <img className="nb-output__image" src={`data:${mime};base64,${value.trim()}`} alt={data["text/plain"] ?? t("Output image")} />;
   }
   if (mime === "image/svg+xml" || mime === "text/html") {
     return <div className="nb-output__html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(value) }} />;

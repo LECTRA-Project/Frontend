@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import IconButton from "./IconButton.jsx";
+import { useI18n } from "../../i18n/i18n.js";
 
 /*
   TextField — a labelled input.
@@ -7,6 +8,7 @@ import IconButton from "./IconButton.jsx";
   `error` shows a short message under the field and marks it invalid.
 */
 export default function TextField({ label, type = "text", error, className = "", ...inputProps }) {
+  const { t } = useI18n();
   const id = useId();
   const errorId = `${id}-error`;
   const [showPassword, setShowPassword] = useState(false);
@@ -32,7 +34,7 @@ export default function TextField({ label, type = "text", error, className = "",
           <IconButton
             className="field__action"
             icon={showPassword ? "eyeOff" : "eye"}
-            label={showPassword ? "Hide password" : "Show password"}
+            label={showPassword ? t("Hide password") : t("Show password")}
             onClick={() => setShowPassword((value) => !value)}
           />
         )}

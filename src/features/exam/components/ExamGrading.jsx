@@ -1,3 +1,4 @@
+import { useI18n } from "../../../i18n/i18n.js";
 import { isAnswered } from "../../../services/exam/examStorage.js";
 
 /*
@@ -7,19 +8,22 @@ import { isAnswered } from "../../../services/exam/examStorage.js";
   Props: questions, answers (what was submitted)
 */
 export default function ExamGrading({ questions, answers }) {
+  const { t } = useI18n();
   const short = questions.filter((question) => question.type === "short_answer" && isAnswered(answers[question.id])).length;
   return (
     <section className="exam-card exam-card--center" aria-labelledby="exam-grading-title" aria-busy="true">
       <h3 id="exam-grading-title" className="exam-card__title">
-        Checking your answers…
+        {t("Checking your answers…")}
       </h3>
       <div className="exam-bar exam-bar--wide exam-bar--busy exam-bar--sweep" aria-hidden="true">
         <span />
       </div>
       <p className="exam-muted" role="status">
         {short === 0
-          ? "This takes only a moment."
-          : `${short === 1 ? "Your short answer is" : `Your ${short} short answers are`} graded against the lecture, a few seconds each.`}
+          ? t("This takes only a moment.")
+          : short === 1
+            ? t("Your short answer is graded against the lecture, a few seconds each.")
+            : t("Your {count} short answers are graded against the lecture, a few seconds each.", { count: short })}
       </p>
     </section>
   );

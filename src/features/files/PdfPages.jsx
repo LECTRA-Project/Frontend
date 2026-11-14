@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { useI18n } from "../../i18n/i18n.js";
 import { CSS_PX_PER_POINT } from "./pdfDocument.js";
+import { pageTileLabel } from "./citedText.js";
 
 /*
   The PDF drawn with pdf.js, like Chrome's PDF viewer:
@@ -78,6 +80,7 @@ function useVisiblePages(rootRef, selector, count, margin) {
 }
 
 function PdfPage({ lib, doc, number, size, scale, visible, cited }) {
+  const { t } = useI18n();
   const canvasRef = useRef(null);
   const textRef = useRef(null);
 
@@ -95,7 +98,7 @@ function PdfPage({ lib, doc, number, size, scale, visible, cited }) {
     <div
       className={`pdf-page ${cited ? "pdf-page--cited" : ""}`}
       data-page={number}
-      aria-label={`Page ${number}`}
+      aria-label={t("Page {number}", { number })}
       style={{ width: Math.floor(size.width * scale), height: Math.floor(size.height * scale), "--scale-factor": scale }}
     >
       <canvas ref={canvasRef} className="pdf-page__canvas" aria-hidden="true" />
@@ -105,6 +108,7 @@ function PdfPage({ lib, doc, number, size, scale, visible, cited }) {
 }
 
 export function PdfPagesView({ lib, doc, sizes, zoom, scrollRequest, citedPage, onPageChange, onFitPercent }) {
+  const { t } = useI18n();
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
   // Where the reader is: page and how far into it, kept when the zoom or width changes.
@@ -185,7 +189,7 @@ export function PdfPagesView({ lib, doc, sizes, zoom, scrollRequest, citedPage, 
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
   return (
-    <div ref={scrollRef} className="viewer__content pdf__scroll" tabIndex={0} aria-label="PDF pages" onScroll={handleScroll}>
+    <div ref={scrollRef} className="viewer__content pdf__scroll" tabIndex={0} aria-label={t("PDF pages")} onScroll={handleScroll}>
       <div className="pdf__column" style={{ padding: PAD, gap: PAGE_GAP }}>
         {sizes.map((size, index) => (
           <PdfPage
@@ -205,6 +209,7 @@ export function PdfPagesView({ lib, doc, sizes, zoom, scrollRequest, citedPage, 
 }
 
 function Thumbnail({ lib, doc, number, size, visible, current, cited, citedIn, onSelect }) {
+  useI18n(); // re-render in a new interface language
   const canvasRef = useRef(null);
   const drawn = useRef(false);
   const scale = THUMB_WIDTH / size.width;
@@ -221,7 +226,7 @@ function Thumbnail({ lib, doc, number, size, visible, current, cited, citedIn, o
         type="button"
         className={`pdf__thumb ${cited ? "pdf__thumb--cited" : ""}`}
         aria-current={current ? "page" : undefined}
-        aria-label={`Page ${number}${cited ? ` (cited in ${citedIn})` : ""}`}
+        aria-label={pageTileLabel(number, cited, citedIn)}
         onClick={() => onSelect(number)}
       >
         <span className="pdf__thumb-sheet" style={{ width: THUMB_WIDTH, height: Math.round(size.height * scale) }}>
@@ -234,6 +239,7 @@ function Thumbnail({ lib, doc, number, size, visible, current, cited, citedIn, o
 }
 
 export function PdfThumbnails({ lib, doc, sizes, page, citedPage, citedIn = "the answer", onSelect }) {
+  const { t } = useI18n();
   const navRef = useRef(null);
   const visible = useVisiblePages(navRef, "li[data-page]", sizes.length, 600);
 
@@ -243,7 +249,7 @@ export function PdfThumbnails({ lib, doc, sizes, page, citedPage, citedIn = "the
   }, [page]);
 
   return (
-    <nav id="pdf-pages" ref={navRef} className="pdf__pages pdf__pages--thumbs" aria-label="Pages">
+    <nav id="pdf-pages" ref={navRef} className="pdf__pages pdf__pages--thumbs" aria-label={t("Pages")}>
       <ol>
         {sizes.map((size, index) => (
           <Thumbnail

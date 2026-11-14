@@ -16,6 +16,12 @@ const PATHS = {
     </>
   ),
   menu: <path d="M3 5h14M3 10h14M3 15h14" />,
+  lock: (
+    <>
+      <rect x="4.5" y="9" width="11" height="8.5" rx="1.5" />
+      <path d="M7 9V6.5a3 3 0 0 1 6 0V9" />
+    </>
+  ),
   slides: (
     <>
       <rect x="2.5" y="3.5" width="15" height="10" rx="1" />

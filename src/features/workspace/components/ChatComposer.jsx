@@ -2,7 +2,9 @@ import { useLayoutEffect, useRef, useState } from "react";
 
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
+import ModelPicker from "./ModelPicker.jsx";
 import { cellContextLabel, lineCount } from "../../../services/notebook/cellContext.js";
+import { useI18n } from "../../../i18n/i18n.js";
 
 const CELL_ICONS = { code: "code", markdown: "text", raw: "fileText" };
 
@@ -20,6 +22,7 @@ const CELL_ICONS = { code: "code", markdown: "text", raw: "fileText" };
 
   Props:
     scope   { label, onClick } for the materials chip, or null
+    model   what useChatModel() returns: the model button beside the chip (none: no button)
 */
 export default function ChatComposer({
   cellContext = [],
@@ -30,11 +33,15 @@ export default function ChatComposer({
   onRemoveCell,
   disabled = false,
   attachDisabled = false,
-  dropHint = "Drop to add this cell to your question",
+  dropHint: dropHintProp,
   note = null,
-  placeholder = "Ask about this chat's materials…",
+  placeholder: placeholderProp,
   scope = null,
+  model = null,
 }) {
+  const { t } = useI18n();
+  const dropHint = dropHintProp ?? t("Drop to add this cell to your question");
+  const placeholder = placeholderProp ?? t("Ask about this chat's materials…");
   const [text, setText] = useState("");
   const inputRef = useRef(null);
 
@@ -80,7 +87,7 @@ export default function ChatComposer({
       {cellContext.length > 0 && (
         <div className="composer__section">
           <p className="composer__section-title" id="composer-cells-title">
-            Notebook cells
+            {t("Notebook cells")}
           </p>
           <ul className="composer__cells" aria-labelledby="composer-cells-title">
             {cellContext.map((item) => {
@@ -91,19 +98,19 @@ export default function ChatComposer({
                   <div className="composer__cell-head">
                     <Icon name={CELL_ICONS[item.cellType]} size={14} />
                     <span className="composer__cell-label">{label}</span>
-                    <span className="composer__cell-meta">{lines === 1 ? "1 line" : `${lines} lines`}</span>
+                    <span className="composer__cell-meta">{lines === 1 ? t("1 line") : t("{count} lines", { count: lines })}</span>
                     <button
                       type="button"
                       className="composer__remove"
-                      aria-label={`Remove ${label} from your message`}
+                      aria-label={t("Remove {label} from your message", { label })}
                       onClick={() => onRemoveCell(item.id)}
                     >
                       ×
                     </button>
                   </div>
                   {/* The full source, scrollable — never cut off. */}
-                  <pre className="composer__cell-source" tabIndex={0} aria-label={`Source of ${label}`}>
-                    {item.source || "(empty cell)"}
+                  <pre className="composer__cell-source" tabIndex={0} aria-label={t("Source of {label}", { label })}>
+                    {item.source || t("(empty cell)")}
                   </pre>
                 </li>
               );
@@ -120,7 +127,7 @@ export default function ChatComposer({
 
       <div className="composer__box">
         <label className="visually-hidden" htmlFor="composer-input">
-          Message to the study assistant
+          {t("Message to the study assistant")}
         </label>
         <textarea
           ref={inputRef}
@@ -137,20 +144,21 @@ export default function ChatComposer({
         <div className="composer__row">
           <IconButton
             icon="plus"
-            label="Upload a material to this chat"
+            label={t("Upload a material to this chat")}
             outlined
             className="composer__attach"
             onClick={onAttachClick}
             disabled={attachDisabled}
           />
           {scope && (
-            <button type="button" className="composer__scope" onClick={scope.onClick} title="Materials in this chat">
+            <button type="button" className="composer__scope" onClick={scope.onClick} title={t("Materials in this chat")}>
               <Icon name="fileText" size={15} />
               <span>{scope.label}</span>
             </button>
           )}
+          {model && <ModelPicker model={model} disabled={attachDisabled} />}
           <span className="composer__spacer" />
-          <button type="submit" className="composer__send" aria-label="Send message" disabled={!canSend}>
+          <button type="submit" className="composer__send" aria-label={t("Send message")} disabled={!canSend}>
             <Icon name="arrowUp" />
           </button>
         </div>

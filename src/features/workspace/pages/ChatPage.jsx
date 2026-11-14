@@ -19,6 +19,7 @@ import {
 } from "../../../services/notebook/cellContext.js";
 import { sourceChips } from "../chatLayout.js";
 import { copyText } from "../../../services/clipboard.js";
+import { t, useI18n } from "../../../i18n/i18n.js";
 
 // The backend's fixed answer when a chat's lectures have no extracted text saved.
 export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
@@ -71,7 +72,9 @@ export function ChatView({
   loadingOlder = false,
   onLoadOlder = () => {},
   examLink = null,
+  model = null,
 }) {
+  const { t } = useI18n();
   const [nativeDragOver, setNativeDragOver] = useState(false);
   const [renaming, setRenaming] = useState(null); // the title being typed
   const [deleting, setDeleting] = useState(false);
@@ -81,7 +84,7 @@ export function ChatView({
   const scrollRef = useRef(null);
   const slow = useSlow(busy, 15000);
   const dropOver = nativeDragOver || cellDragOver;
-  const title = displayChatTitle(session?.title) ?? "New chat";
+  const title = displayChatTitle(session?.title) ?? t("New chat");
   const count = materials.length;
   const empty = !loading && messages.length === 0;
 
@@ -134,6 +137,11 @@ export function ChatView({
     event.preventDefault();
     const value = renaming.trim();
     if (!value) return;
+    // Unchanged translated default name: keep the backend's "New chat" (it names the chat after the first question).
+    if (session?.title === "New chat" && value === title && value !== session.title) {
+      setRenaming(null);
+      return;
+    }
     try {
       await onRename(value);
       setRenaming(null);
@@ -144,9 +152,10 @@ export function ChatView({
   }
 
   // Copies text; on failure shows it in a dialog for copying by hand. Resolves to success.
-  async function copy(text, what) {
+  // `done` is announced to screen readers once copied ("Answer copied.").
+  async function copy(text, done) {
     const copied = await copyText(text);
-    if (copied) setCopyNote((note) => ({ text: `${what} copied.`, seq: note.seq + 1 }));
+    if (copied) setCopyNote((note) => ({ text: done, seq: note.seq + 1 }));
     else setCopyFallback(text);
     return copied;
   }
@@ -161,9 +170,13 @@ export function ChatView({
     }
   }
 
-  const scopeLabel = count === 1 ? materials[0].name : `${count} materials`;
+  const scopeLabel = count === 1 ? materials[0].name : t("{count} materials", { count });
   const status =
-    count === 0 ? "No materials in this chat yet." : count === 1 ? "1 material ready in this chat." : `${count} materials ready in this chat.`;
+    count === 0
+      ? t("No materials in this chat yet.")
+      : count === 1
+        ? t("1 material ready in this chat.")
+        : t("{count} materials ready in this chat.", { count });
 
   return (
     <section
@@ -179,7 +192,7 @@ export function ChatView({
         {renaming !== null ? (
           <form className="chat__rename" onSubmit={submitRename}>
             <label className="visually-hidden" htmlFor="chat-rename">
-              Chat title
+              {t("Chat title")}
             </label>
             <input
               id="chat-rename"
@@ -189,8 +202,8 @@ export function ChatView({
               onChange={(event) => setRenaming(event.target.value)}
               onKeyDown={(event) => event.key === "Escape" && setRenaming(null)}
             />
-            <IconButton icon="check" label="Save title" type="submit" disabled={!renaming.trim()} />
-            <IconButton icon="close" label="Cancel renaming" onClick={() => setRenaming(null)} />
+            <IconButton icon="check" label={t("Save title")} type="submit" disabled={!renaming.trim()} />
+            <IconButton icon="close" label={t("Cancel renaming")} onClick={() => setRenaming(null)} />
           </form>
         ) : (
           <h1 id="chat-title" className="chat__title" title={title}>
@@ -198,20 +211,20 @@ export function ChatView({
           </h1>
         )}
         {examLink && renaming === null && (
-          <Link to={examLink} className="btn btn--secondary btn--sm chat__exam-link" aria-label="Back to exam results">
+          <Link to={examLink} className="btn btn--secondary btn--sm chat__exam-link" aria-label={t("Back to exam results")}>
             <Icon name="arrowLeft" size={14} />
-            <span className="chat__exam-link-long">Back to exam results</span>
+            <span className="chat__exam-link-long">{t("Back to exam results")}</span>
             <span className="chat__exam-link-short" aria-hidden="true">
-              Exam results
+              {t("Exam results")}
             </span>
           </Link>
         )}
         {session && renaming === null && (
           <Menu
-            label="Chat actions"
+            label={t("Chat actions")}
             items={[
-              { label: "Rename chat", icon: "edit", onSelect: () => setRenaming(title) },
-              { label: "Delete chat", icon: "trash", danger: true, onSelect: () => setDeleting(true) },
+              { label: t("Rename chat"), icon: "edit", onSelect: () => setRenaming(title) },
+              { label: t("Delete chat"), icon: "trash", danger: true, onSelect: () => setDeleting(true) },
             ]}
           />
         )}
@@ -225,24 +238,26 @@ export function ChatView({
       <div className="chat__scroll" ref={scrollRef} onScroll={handleScroll}>
         {loading ? (
           <p className="chat__loading" role="status">
-            Loading the chat…
+            {t("Loading the chat…")}
           </p>
         ) : empty ? (
           <div className="chat__empty">
-            <h2 className="chat__empty-title">What are we studying today?</h2>
+            <h2 className="chat__empty-title">{t("What are we studying today?")}</h2>
             <p className="chat__empty-text">
               {available === false
-                ? "This server has no chat assistant yet, so questions can’t be answered here."
-                : "Each chat has its own materials. Upload the lectures for this chat and the answers will come from them, with the pages they are based on."}
+                ? t("This server has no chat assistant yet, so questions can’t be answered here.")
+                : t(
+                    "Each chat has its own materials. Upload the lectures for this chat and the answers will come from them, with the pages they are based on.",
+                  )}
             </p>
             <span className="chat__empty-status">{status}</span>
           </div>
         ) : (
-          <ol className="chat__thread" aria-label="Messages" aria-live="polite">
+          <ol className="chat__thread" aria-label={t("Messages")} aria-live="polite">
             {olderMessages && (
               <li className="chat__older">
                 <button type="button" className="cf-link-button" onClick={onLoadOlder} disabled={loadingOlder}>
-                  {loadingOlder ? "Loading earlier messages…" : "Show earlier messages"}
+                  {loadingOlder ? t("Loading earlier messages…") : t("Show earlier messages")}
                 </button>
               </li>
             )}
@@ -259,7 +274,7 @@ export function ChatView({
             ))}
             {busy && (
               <li className="chat-msg chat-msg--system" role="status">
-                {slow ? "Still working — the AI can take a minute or two when it’s busy…" : "Reading your materials…"}
+                {slow ? t("Still working — the AI can take a minute or two when it’s busy…") : t("Reading your materials…")}
               </li>
             )}
           </ol>
@@ -278,8 +293,9 @@ export function ChatView({
           onRemoveCell={onRemoveCell}
           disabled={busy || available !== true}
           scope={count > 0 ? { label: scopeLabel, onClick: onOpenMenu } : null}
+          model={model}
         />
-        <p className="chat__disclaimer">Answers cite this chat’s materials. General answers are marked “Not from your materials”.</p>
+        <p className="chat__disclaimer">{t("Answers cite this chat’s materials. General answers are marked “Not from your materials”.")}</p>
       </div>
 
       <p className="visually-hidden" role="status">
@@ -292,8 +308,8 @@ export function ChatView({
       {copyFallback !== null && <CopyFallbackDialog text={copyFallback} onClose={() => setCopyFallback(null)} />}
 
       {deleting && (
-        <ConfirmDialog title="Delete chat?" confirmLabel="Delete" danger onConfirm={confirmDelete} onCancel={() => setDeleting(false)}>
-          “{title}” and all its messages will be deleted. Its materials are kept.
+        <ConfirmDialog title={t("Delete chat?")} confirmLabel={t("Delete")} danger onConfirm={confirmDelete} onCancel={() => setDeleting(false)}>
+          {t("“{title}” and all its messages will be deleted. Its materials are kept.", { title })}
         </ConfirmDialog>
       )}
     </section>
@@ -301,6 +317,7 @@ export function ChatView({
 }
 
 function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy }) {
+  const { t } = useI18n();
   if (message.role === "system") {
     return (
       <li className="chat-msg chat-msg--system" role="alert">
@@ -317,7 +334,7 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
       <li className={`chat-msg chat-msg--student ${message.pending ? "chat-msg--pending" : ""}`}>
         <span className="chat-msg__text">{text}</span>
         {cells.length > 0 && (
-          <ul className="chat-cells" aria-label="Notebook cells added to this question">
+          <ul className="chat-cells" aria-label={t("Notebook cells added to this question")}>
             {cells.map((cell, index) => (
               <ChatCell key={`${cell.label}-${index}`} cell={cell} />
             ))}
@@ -336,11 +353,15 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
       <li className="chat-msg chat-msg--assistant chat-msg--no-text" role="note">
         <p className="chat-msg__no-text-title">
           <Icon name="alert" size={14} />
-          This chat’s materials have no readable text saved
+          {t("This chat’s materials have no readable text saved")}
         </p>
-        <p>The assistant can only answer from text read from the files when they were uploaded. Scanned PDFs (pages that are images) have no text to read.</p>
+        <p>
+          {t(
+            "The assistant can only answer from text read from the files when they were uploaded. Scanned PDFs (pages that are images) have no text to read.",
+          )}
+        </p>
         <button type="button" className="cf-link-button" onClick={onUploadAgain}>
-          Upload the file again
+          {t("Upload the file again")}
         </button>
       </li>
     );
@@ -353,13 +374,13 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
     if (!button) return;
     // Without the line break Markdown adds after the last line.
     const code = (button.parentElement.querySelector("pre")?.textContent ?? "").replace(/\n$/, "");
-    const copied = await onCopy(code, "Code");
+    const copied = await onCopy(code, t("Code copied."));
     if (!copied) return;
-    button.textContent = "Copied";
+    button.textContent = t("Copied");
     button.dataset.copied = "";
     clearTimeout(button.copyTimer);
     button.copyTimer = setTimeout(() => {
-      button.textContent = "Copy";
+      button.textContent = t("Copy");
       delete button.dataset.copied;
     }, COPIED_MS);
   }
@@ -370,7 +391,7 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
         {chips.length === 0 && (
           <span className="chat-answer__general">
             <Icon name="alert" size={14} />
-            Not from your materials
+            {t("Not from your materials")}
           </span>
         )}
         {/* The click handler only serves the code blocks' Copy buttons (native buttons, so keyboard works). */}
@@ -380,13 +401,13 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
           dangerouslySetInnerHTML={{ __html: withCodeCopyButtons(renderAnswerMarkdown(message.content)) }}
         />
         {chips.length > 0 && (
-          <ul className="chat-sources" aria-label="Sources">
+          <ul className="chat-sources" aria-label={t("Sources")}>
             {chips.map((chip) => (
               <li key={chip.key}>
                 <button
                   type="button"
                   className="chat-source"
-                  title="Open this page beside the chat"
+                  title={t("Open this page beside the chat")}
                   onClick={() => onOpenSource(chip)}
                 >
                   <span className="chat-source__loc">{chip.loc}</span>
@@ -410,11 +431,12 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
   the student's own answer is plain text.
 */
 function ExamQuestionMessage({ message, exam }) {
+  const { t } = useI18n();
   return (
     <li className={`chat-msg chat-msg--student chat-msg--exam ${message.pending ? "chat-msg--pending" : ""}`}>
       <span className="chat-exam__from">
         <Icon name="graduation" size={14} />
-        From your exam results
+        {t("From your exam results")}
       </span>
       <span className="chat-msg__text chat-exam__heading">{exam.heading}</span>
       <dl className="chat-exam">
@@ -472,9 +494,9 @@ function withCodeCopyButtons(html) {
     button.type = "button";
     button.className = "chat-code__copy";
     button.setAttribute("data-copy-code", "");
-    button.setAttribute("aria-label", "Copy code");
-    button.title = "Copy code";
-    button.textContent = "Copy";
+    button.setAttribute("aria-label", t("Copy code"));
+    button.title = t("Copy code");
+    button.textContent = t("Copy");
     pre.replaceWith(wrapper);
     wrapper.append(button, pre);
   }
@@ -484,10 +506,11 @@ function withCodeCopyButtons(html) {
 /* The whole answer for the clipboard: its Markdown, then its sources (if any). */
 function answerText(content, chips) {
   if (chips.length === 0) return content;
-  return `${content}\n\nSources:\n${chips.map((chip) => `- ${chip.loc} · ${chip.doc}`).join("\n")}`;
+  return `${content}\n\n${t("Sources:")}\n${chips.map((chip) => `- ${chip.loc} · ${chip.doc}`).join("\n")}`;
 }
 
 function CopyAnswerButton({ text, onCopy }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return undefined;
@@ -499,27 +522,28 @@ function CopyAnswerButton({ text, onCopy }) {
     <button
       type="button"
       className="btn btn--ghost btn--sm chat-answer__copy"
-      aria-label={copied ? "Answer copied" : "Copy answer"}
-      title="Copy answer"
-      onClick={async () => setCopied(await onCopy(text, "Answer"))}
+      aria-label={copied ? t("Answer copied") : t("Copy answer")}
+      title={t("Copy answer")}
+      onClick={async () => setCopied(await onCopy(text, t("Answer copied.")))}
     >
       <Icon name={copied ? "check" : "copy"} size={14} />
-      {copied ? "Copied" : "Copy"}
+      {copied ? t("Copied") : t("Copy")}
     </button>
   );
 }
 
 /* Shown when the clipboard can't be used: the text, selected, to copy with ⌘C / Ctrl+C. */
 function CopyFallbackDialog({ text, onClose }) {
+  const { t } = useI18n();
   return (
-    <Modal title="Copy manually" width={560} onClose={onClose}>
+    <Modal title={t("Copy manually")} width={560} onClose={onClose}>
       <div className="confirm">
         <p className="confirm__text" id="copy-fallback-hint">
-          Copying to the clipboard isn’t available here. The text is selected below — press ⌘C (Mac) or Ctrl+C to copy it.
+          {t("Copying to the clipboard isn’t available here. The text is selected below — press ⌘C (Mac) or Ctrl+C to copy it.")}
         </p>
         <textarea
           className="chat-copy-fallback"
-          aria-label="Text to copy"
+          aria-label={t("Text to copy")}
           aria-describedby="copy-fallback-hint"
           readOnly
           value={text}
@@ -528,7 +552,7 @@ function CopyFallbackDialog({ text, onClose }) {
         />
         <div className="confirm__actions">
           <button type="button" className="btn btn--secondary" onClick={onClose}>
-            Done
+            {t("Done")}
           </button>
         </div>
       </div>
@@ -555,6 +579,7 @@ const OPEN_CELL_LINES = 12;
 
 /* A notebook cell added to a question: its label and full source, foldable. */
 function ChatCell({ cell }) {
+  const { t } = useI18n();
   const lines = lineCount(cell.source);
   return (
     <li className={`chat-cell chat-cell--${cell.cellType}`}>
@@ -564,7 +589,7 @@ function ChatCell({ cell }) {
           <span className="chat-cell__label">{cell.label}</span>
           {cell.notebookTitle && <span className="chat-cell__meta">· {cell.notebookTitle}</span>}
           <span className="chat-cell__meta chat-cell__lines">
-            {lines} {lines === 1 ? "line" : "lines"}
+            {lines === 1 ? t("1 line") : t("{count} lines", { count: lines })}
           </span>
         </summary>
         <pre className="chat-cell__code">

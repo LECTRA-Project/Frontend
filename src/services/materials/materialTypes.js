@@ -3,25 +3,86 @@
   The extensions are exactly the ones the backend accepts (POST upload-lecture answers 422
   for anything else): PDF, PPTX, IPYNB and PNG / JPG / JPEG / GIF / WEBP images.
   Markdown notes can't be uploaded, but the type is kept so a notes lecture still opens.
+  `label` and `short` are getters so they are read in the current interface language.
 */
+import { t } from "../../i18n/i18n.js";
+
 export const MATERIAL_GROUPS = [
-  { type: "pdf", label: "PDFs", short: "PDF", icon: "fileText", extensions: ["pdf"] },
-  { type: "slides", label: "Slides", short: "Slides", icon: "slides", extensions: ["pptx"] },
-  { type: "notebook", label: "Notebook", short: "Notebook", icon: "notebook", extensions: ["ipynb"] },
-  { type: "image", label: "Images", short: "Image", icon: "image", extensions: ["png", "jpg", "jpeg", "gif", "webp"] },
-  { type: "notes", label: "Lecture notes", short: "Notes", icon: "book", extensions: [] },
+  {
+    type: "pdf",
+    get label() {
+      return t("PDFs");
+    },
+    short: "PDF",
+    icon: "fileText",
+    extensions: ["pdf"],
+  },
+  {
+    type: "slides",
+    get label() {
+      return t("Slides");
+    },
+    get short() {
+      return t("Slides");
+    },
+    icon: "slides",
+    extensions: ["pptx"],
+  },
+  {
+    type: "notebook",
+    get label() {
+      return t("Notebook");
+    },
+    get short() {
+      return t("Notebook");
+    },
+    icon: "notebook",
+    extensions: ["ipynb"],
+  },
+  {
+    type: "image",
+    get label() {
+      return t("Images");
+    },
+    get short() {
+      return t("Image");
+    },
+    icon: "image",
+    extensions: ["png", "jpg", "jpeg", "gif", "webp"],
+  },
+  {
+    type: "notes",
+    get label() {
+      return t("Lecture notes");
+    },
+    get short() {
+      return t("Notes");
+    },
+    icon: "book",
+    extensions: [],
+  },
 ];
 
 /* For <input type="file" accept>. */
 export const ACCEPTED_EXTENSIONS = MATERIAL_GROUPS.flatMap((group) => group.extensions.map((ext) => `.${ext}`)).join(",");
 
-/* A readable list for help text: "PDF, PPTX, IPYNB and images (PNG, JPG, JPEG, GIF, WEBP)". */
-export const SUPPORTED_LABEL = (() => {
+function supportedExtensions() {
   const upper = (group) => group.extensions.map((ext) => ext.toUpperCase());
   const files = MATERIAL_GROUPS.filter((group) => group.type !== "image").flatMap(upper);
   const images = upper(MATERIAL_GROUPS.find((group) => group.type === "image"));
-  return `${files.join(", ")} and images (${images.join(", ")})`;
+  return { files: files.join(", "), images: images.join(", ") };
+}
+
+/* A readable list for help text: "PDF, PPTX, IPYNB and images (PNG, JPG, JPEG, GIF, WEBP)" (English). */
+export const SUPPORTED_LABEL = (() => {
+  const { files, images } = supportedExtensions();
+  return `${files} and images (${images})`;
 })();
+
+/* The same list in the current interface language. */
+export function supportedLabel() {
+  return t("{files} and images ({images})", supportedExtensions());
+}
 
 function extensionOf(fileName) {
   const dot = fileName.lastIndexOf(".");

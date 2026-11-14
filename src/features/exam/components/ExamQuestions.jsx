@@ -3,6 +3,7 @@ import "katex/dist/katex.min.css";
 
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
+import { useI18n } from "../../../i18n/i18n.js";
 import { MAX_ANSWER_LENGTH } from "../../../api/services/exams.js";
 import { countAnswered, isAnswered, loadExamProgress, saveExamProgress } from "../../../services/exam/examStorage.js";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
@@ -32,6 +33,7 @@ import ExamSubmitDialog from "./ExamSubmitDialog.jsx";
          onSubmit(answers) → Promise (rejects with the ApiError to show), grading
 */
 export default function ExamQuestions({ exam, userKey, sourceType = () => "page", onSubmit = null, grading = false }) {
+  const { t } = useI18n();
   const questions = exam.questions;
   const total = questions.length;
   const [progress, setProgress] = useState(() => loadExamProgress(userKey, exam.id));
@@ -89,7 +91,7 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
     try {
       await onSubmit(answers);
     } catch (err) {
-      setSubmitError(err?.message || "The exam could not be submitted.");
+      setSubmitError(err?.message || t("The exam could not be submitted."));
     }
   }
 
@@ -106,15 +108,15 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
   return (
     <>
       <div className="exam-progress">
-        <div className="exam-bar" role="progressbar" aria-label="Questions answered" aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered}>
+        <div className="exam-bar" role="progressbar" aria-label={t("Questions answered")} aria-valuemin={0} aria-valuemax={total} aria-valuenow={answered}>
           <span style={{ width: `${Math.round((answered / total) * 100)}%` }} />
         </div>
         <span className="exam-muted exam-small">
-          {answered} of {total} answered
+          {t("{answered} of {total} answered", { answered, total })}
         </span>
       </div>
 
-      <nav aria-label="Questions">
+      <nav aria-label={t("Questions")}>
         <ol className="exam-map">
           {questions.map((item, position) => {
             const done = isAnswered(answers[item.id]);
@@ -124,7 +126,7 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
                 <button
                   type="button"
                   className={`exam-map__item ${done ? "exam-map__item--done" : ""} ${here ? "exam-map__item--current" : ""}`}
-                  aria-label={`Question ${position + 1}, ${done ? "answered" : "not answered"}`}
+                  aria-label={done ? t("Question {number}, answered", { number: position + 1 }) : t("Question {number}, not answered", { number: position + 1 })}
                   aria-current={here ? "step" : undefined}
                   onClick={() => go(position)}
                 >
@@ -138,7 +140,7 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
 
       {saveFailed && (
         <p className="exam-warning" role="alert">
-          <Icon name="alert" /> Your answers can’t be saved on this device (browser storage is unavailable or full). Keep this page open.
+          <Icon name="alert" /> {t("Your answers can’t be saved on this device (browser storage is unavailable or full). Keep this page open.")}
         </p>
       )}
 
@@ -154,7 +156,7 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
                   setConfirming(true);
                 }}
               >
-                Submit and check
+                {t("Submit and check")}
               </Button>
             )}
           </ExamReview>
@@ -180,10 +182,11 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
         <>
           <section className="exam-card exam-question" aria-labelledby={headingId}>
             <div className="exam-question__meta">
-              <span className="exam-tag">{isChoice ? "Multiple choice" : "Short answer"}</span>
+              <span className="exam-tag">{isChoice ? t("Multiple choice") : t("Short answer")}</span>
               <span className="exam-muted exam-small">
-                Question {index + 1} of {total} · {pointsLabel(question.points)}
-                {source && ` · from ${source}`}
+                {source
+                  ? t("Question {number} of {total} · {points} · from {source}", { number: index + 1, total, points: pointsLabel(question.points), source })
+                  : t("Question {number} of {total} · {points}", { number: index + 1, total, points: pointsLabel(question.points) })}
               </span>
             </div>
             {/* The question is Markdown (paragraphs, code, math), so a heading role on a block. */}
@@ -200,7 +203,7 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
             {isChoice ? (
               <fieldset className="exam-choices" aria-labelledby={`${headingId} ${headingId}-hint`}>
                 <p id={`${headingId}-hint`} className="exam-hint">
-                  Select every correct answer
+                  {t("Select every correct answer")}
                 </p>
                 {question.choices.map((choice, position) => {
                   const on = chosen.includes(choice.id);
@@ -218,19 +221,19 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
             ) : (
               <div className="exam-short">
                 <label htmlFor={`${headingId}-answer`} className="exam-hint">
-                  Your answer
+                  {t("Your answer")}
                 </label>
                 <textarea
                   id={`${headingId}-answer`}
                   className="exam-short__input"
                   rows={6}
                   maxLength={MAX_ANSWER_LENGTH}
-                  placeholder="Write your answer in your own words…"
+                  placeholder={t("Write your answer in your own words…")}
                   value={text}
                   onChange={(event) => setAnswer(event.target.value.slice(0, MAX_ANSWER_LENGTH))}
                 />
                 <div className="exam-short__foot exam-muted exam-small">
-                  <span>Your answer is saved on this device.</span>
+                  <span>{t("Your answer is saved on this device.")}</span>
                   <span aria-live={text.length >= MAX_ANSWER_LENGTH ? "polite" : "off"}>
                     {text.length} / {MAX_ANSWER_LENGTH}
                   </span>
@@ -241,16 +244,16 @@ export default function ExamQuestions({ exam, userKey, sourceType = () => "page"
 
           <div className="exam-nav">
             <Button icon="chevronLeft" disabled={index === 0} onClick={() => go(index - 1)}>
-              Previous
+              {t("Previous")}
             </Button>
             {index < total - 1 ? (
               <Button variant="primary" onClick={() => go(index + 1)}>
-                Next
+                {t("Next")}
                 <Icon name="chevronRight" />
               </Button>
             ) : (
               <Button variant="primary" onClick={finish}>
-                Finish
+                {t("Finish")}
               </Button>
             )}
           </div>

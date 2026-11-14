@@ -4,6 +4,7 @@ import Button from "../../../components/ui/Button.jsx";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
+import { useI18n } from "../../../i18n/i18n.js";
 import { QUESTION_COUNTS, QUESTION_TYPES } from "../../../api/services/exams.js";
 import { countAnswered, loadExamProgress } from "../../../services/exam/examStorage.js";
 import { formatExamDate } from "../examFormat.js";
@@ -43,6 +44,7 @@ export default function ExamSetup({
   onDiscard,
   preset = null,
 }) {
+  const { t } = useI18n();
   const hintId = useId();
   // null until the student changes the selection: then the defaults follow the materials.
   const [picked, setPicked] = useState(() => preset?.lectureIds ?? null);
@@ -68,9 +70,10 @@ export default function ExamSetup({
   }
 
   let hint;
-  if (selected.length === 0) hint = "Pick at least one material.";
-  else if (types.length === 0) hint = "Pick at least one question type.";
-  else hint = `${count} questions from ${selected.length === 1 ? "1 material" : `${selected.length} materials`}`;
+  if (selected.length === 0) hint = t("Pick at least one material.");
+  else if (types.length === 0) hint = t("Pick at least one question type.");
+  else if (selected.length === 1) hint = t("{count} questions from 1 material", { count });
+  else hint = t("{count} questions from {materials} materials", { count, materials: selected.length });
   const valid = selected.length > 0 && types.length > 0;
 
   function submit(event) {
@@ -88,25 +91,25 @@ export default function ExamSetup({
       <form className="exam-card exam-setup" aria-labelledby="exam-setup-title" onSubmit={submit} noValidate>
         <div>
           <h3 id="exam-setup-title" className="exam-card__title">
-            New exam
+            {t("New exam")}
           </h3>
           <p className="exam-card__lead">
             {preset
-              ? "The materials and settings of that exam are chosen. Change them if you like."
+              ? t("The materials and settings of that exam are chosen. Change them if you like.")
               : fromChat
-                ? "Questions are generated from this chat’s materials. Your answers are kept on this device."
-                : "This chat has no materials, so pick from your library. Your answers are kept on this device."}
+                ? t("Questions are generated from this chat’s materials. Your answers are kept on this device.")
+                : t("This chat has no materials, so pick from your library. Your answers are kept on this device.")}
           </p>
         </div>
 
         <fieldset className="exam-field">
-          <legend className="exam-field__legend">{fromChat ? "Materials in this chat" : "Your materials"}</legend>
+          <legend className="exam-field__legend">{fromChat ? t("Materials in this chat") : t("Your materials")}</legend>
           {loading ? (
             <p className="exam-muted" role="status">
-              Loading materials…
+              {t("Loading materials…")}
             </p>
           ) : materials.length === 0 ? (
-            <p className="exam-muted">You have no materials yet. Upload a lecture in the chat, then come back to start an exam.</p>
+            <p className="exam-muted">{t("You have no materials yet. Upload a lecture in the chat, then come back to start an exam.")}</p>
           ) : (
             <ul className="exam-materials">
               {materials.map((item) => {
@@ -132,7 +135,7 @@ export default function ExamSetup({
 
         <div className="exam-setup__row">
           <fieldset className="exam-field">
-            <legend className="exam-field__legend">Number of questions</legend>
+            <legend className="exam-field__legend">{t("Number of questions")}</legend>
             <div className="exam-pills">
               {QUESTION_COUNTS.map((value) => (
                 <label key={value} className={`exam-pill exam-pill--count ${count === value ? "exam-pill--on" : ""}`}>
@@ -143,14 +146,14 @@ export default function ExamSetup({
             </div>
           </fieldset>
           <fieldset className="exam-field">
-            <legend className="exam-field__legend">Question types</legend>
+            <legend className="exam-field__legend">{t("Question types")}</legend>
             <div className="exam-pills">
               {QUESTION_TYPES.map((type) => {
                 const on = types.includes(type.value);
                 return (
                   <label key={type.value} className={`exam-pill ${on ? "exam-pill--on" : ""}`}>
                     <input type="checkbox" checked={on} onChange={() => toggleType(type.value)} />
-                    {type.label}
+                    {{ multiple_choice: t("Multiple choice"), short_answer: t("Short answer") }[type.value] ?? type.label}
                   </label>
                 );
               })}
@@ -160,7 +163,7 @@ export default function ExamSetup({
 
         <div className="exam-setup__actions">
           <Button type="submit" variant="primary" className="exam-btn-lg" disabled={!valid || starting || loading} aria-describedby={hintId}>
-            {starting ? "Starting…" : "Generate exam"}
+            {starting ? t("Starting…") : t("Generate exam")}
           </Button>
           <span id={hintId} className={`exam-muted ${valid ? "" : "exam-setup__invalid"}`}>
             {hint}
@@ -172,7 +175,7 @@ export default function ExamSetup({
             <p>{startError.message}</p>
             {startError.busyId && (
               <Button size="sm" onClick={() => onOpenExam(startError.busyId)}>
-                Open that exam
+                {t("Open that exam")}
               </Button>
             )}
           </div>
@@ -183,6 +186,7 @@ export default function ExamSetup({
 }
 
 function UnfinishedExams({ exams, loading, error, onReload, userKey, onOpenExam, onDiscard }) {
+  const { t } = useI18n();
   const [discarding, setDiscarding] = useState(null);
   const [discardError, setDiscardError] = useState(null);
 
@@ -195,20 +199,20 @@ function UnfinishedExams({ exams, loading, error, onReload, userKey, onOpenExam,
     try {
       await onDiscard(exam);
     } catch (err) {
-      setDiscardError(err.message || "The exam could not be discarded.");
+      setDiscardError(err.message || t("The exam could not be discarded."));
     }
   }
 
   return (
     <section className="exam-card exam-unfinished" aria-labelledby="exam-unfinished-title">
       <h3 id="exam-unfinished-title" className="exam-card__subtitle">
-        Continue an exam
+        {t("Continue an exam")}
       </h3>
       {error ? (
         <div className="exam-alert" role="alert">
           <p>{error}</p>
           <Button size="sm" onClick={onReload}>
-            Try again
+            {t("Try again")}
           </Button>
         </div>
       ) : (
@@ -223,17 +227,17 @@ function UnfinishedExams({ exams, loading, error, onReload, userKey, onOpenExam,
                   <span className="exam-unfinished__title">{exam.title}</span>
                   <span className="exam-muted exam-unfinished__meta">
                     {generating
-                      ? `Generating · ${exam.questions_ready} of ${exam.question_count} questions ready`
-                      : `${answered} of ${total} answered`}
+                      ? t("Generating · {ready} of {total} questions ready", { ready: exam.questions_ready, total: exam.question_count })
+                      : t("{answered} of {total} answered", { answered, total })}
                     {" · "}
                     {formatExamDate(exam.created_at)}
                   </span>
                 </div>
                 <div className="exam-unfinished__actions">
-                  <Button size="sm" aria-label={`Continue ${exam.title}`} onClick={() => onOpenExam(exam.id)}>
-                    Continue
+                  <Button size="sm" aria-label={t("Continue {title}", { title: exam.title })} onClick={() => onOpenExam(exam.id)}>
+                    {t("Continue")}
                   </Button>
-                  <IconButton icon="trash" label={`Discard ${exam.title}`} onClick={() => setDiscarding(exam)} />
+                  <IconButton icon="trash" label={t("Discard {title}", { title: exam.title })} onClick={() => setDiscarding(exam)} />
                 </div>
               </li>
             );
@@ -246,9 +250,9 @@ function UnfinishedExams({ exams, loading, error, onReload, userKey, onOpenExam,
         </p>
       )}
       {discarding && (
-        <ConfirmDialog title="Discard this exam?" confirmLabel="Discard exam" danger onConfirm={confirmDiscard} onCancel={() => setDiscarding(null)}>
+        <ConfirmDialog title={t("Discard this exam?")} confirmLabel={t("Discard exam")} danger onConfirm={confirmDiscard} onCancel={() => setDiscarding(null)}>
           <p>
-            “{discarding.title}” and its questions are deleted, together with your answers on this device. This can’t be undone.
+            {t("“{title}” and its questions are deleted, together with your answers on this device. This can’t be undone.", { title: discarding.title })}
           </p>
         </ConfirmDialog>
       )}

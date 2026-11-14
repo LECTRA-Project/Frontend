@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from "react";
 import IconButton from "./IconButton.jsx";
+import { useI18n } from "../../i18n/i18n.js";
 
 /*
   Modal — a dialog shown over the page with a darkened background (scrim).
@@ -13,6 +14,7 @@ import IconButton from "./IconButton.jsx";
     onClose      called when the dialog should close
 */
 export default function Modal({ title, titleExtra, icon, width = 520, onClose, className = "", children }) {
+  const { t } = useI18n();
   const titleId = useId();
   const dialogRef = useRef(null);
 
@@ -61,7 +63,7 @@ export default function Modal({ title, titleExtra, icon, width = 520, onClose, c
             {title}
             {titleExtra}
           </h2>
-          <IconButton icon="close" label="Close" onClick={onClose} />
+          <IconButton icon="close" label={t("Close")} onClick={onClose} />
         </div>
         {children}
       </div>

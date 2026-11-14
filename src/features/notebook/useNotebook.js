@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
+import { t } from "../../i18n/i18n.js";
 import { createNotebook, NotebookFormatError, parseIpynb, titleFromFileName } from "../../services/notebook/ipynb.js";
 import { loadNotebook, saveNotebook } from "../../services/notebook/notebookStorage.js";
 import { initialNotebookState, notebookReducer } from "./notebookReducer.js";
@@ -35,7 +36,9 @@ function restoreNotebook(userKey) {
     return {
       notebook: createNotebook(),
       savedAt: null,
-      loadError: `The notebook saved in this browser could not be restored (${error.message}). Your next change will replace it.`,
+      loadError: t("The notebook saved in this browser could not be restored ({error}). Your next change will replace it.", {
+        error: error.message,
+      }),
     };
   }
   return { notebook: createNotebook(), savedAt: null, loadError: null };
@@ -47,13 +50,13 @@ async function readNotebookFile(file) {
   try {
     text = await file.text();
   } catch (error) {
-    throw new Error(`“${file.name}” could not be read (${error.message}).`, { cause: error });
+    throw new Error(t("“{name}” could not be read ({error}).", { name: file.name, error: error.message }), { cause: error });
   }
   try {
     return parseIpynb(text, { title: titleFromFileName(file.name) });
   } catch (error) {
     const reason = error instanceof NotebookFormatError ? error.message : String(error);
-    throw new Error(`“${file.name}” could not be opened: ${reason}`, { cause: error });
+    throw new Error(t("“{name}” could not be opened: {reason}", { name: file.name, reason }), { cause: error });
   }
 }
 

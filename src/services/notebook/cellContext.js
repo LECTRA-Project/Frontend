@@ -7,6 +7,8 @@
   shown and sent as text — adding or sending a cell never runs it.
 */
 
+import { t } from "../../i18n/i18n.js";
+
 // dataTransfer type used when a cell is dragged into the assistant composer.
 export const CELL_DRAG_TYPE = "application/x-lectra-notebook-cell";
 
@@ -23,9 +25,24 @@ export function createCellContext(cell, index, notebookTitle = "") {
   };
 }
 
-/* "Python cell 3" */
-export function cellContextLabel(item) {
+/* "Python cell 3", as written in the text sent to the chat (always English). */
+function contextBlockLabel(item) {
   return `${TYPE_LABELS[item.cellType] ?? "Notebook"} cell ${item.position}`;
+}
+
+/* "Python cell 3", in the interface language (for showing only). */
+export function cellContextLabel(item) {
+  const position = item.position;
+  switch (item.cellType) {
+    case "code":
+      return t("Python cell {position}", { position });
+    case "markdown":
+      return t("Markdown cell {position}", { position });
+    case "raw":
+      return t("Raw cell {position}", { position });
+    default:
+      return t("Notebook cell {position}", { position });
+  }
 }
 
 export function lineCount(source) {
@@ -93,7 +110,7 @@ export function withNotebookContext(text, items = []) {
   const blocks = items.map((item) => {
     const where = item.notebookTitle ? ` of notebook “${item.notebookTitle}”` : "";
     const fence = item.cellType === "code" ? "```python" : "```";
-    return `${cellContextLabel(item)}${where}:\n${fence}\n${item.source}\n\`\`\``;
+    return `${contextBlockLabel(item)}${where}:\n${fence}\n${item.source}\n\`\`\``;
   });
   return `${text}${CONTEXT_HEADING}${blocks.join("\n\n")}`;
 }
@@ -113,9 +130,10 @@ export function parseNotebookContext(content = "") {
   const cells = [];
   for (const match of content.slice(at + CONTEXT_HEADING.length).matchAll(BLOCK)) {
     const [, typeLabel, position, notebookTitle = "", source] = match;
+    const cellType = TYPE_BY_LABEL[typeLabel];
     cells.push({
-      label: `${typeLabel} cell ${position}`,
-      cellType: TYPE_BY_LABEL[typeLabel] ?? "raw",
+      label: cellType ? cellContextLabel({ cellType, position }) : `${typeLabel} cell ${position}`,
+      cellType: cellType ?? "raw",
       position: Number(position),
       notebookTitle,
       source,
@@ -132,9 +150,11 @@ export function parseNotebookContext(content = "") {
 */
 export function displayChatTitle(title) {
   if (typeof title !== "string") return title;
+  // The backend's name for a chat before its first question: shown in the interface language.
+  if (title === "New chat") return t("New chat");
   const cleaned = title
     .replace(/\s+Notebook context(?:\s*\(.*)?…?$/, "")
     .replace(/\s+Notebook…$/, "")
     .trim();
-  return cleaned || (title.trim() ? "Notebook question" : title);
+  return cleaned || (title.trim() ? t("Notebook question") : title);
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import "katex/dist/katex.min.css";
 
 import Icon from "../../components/ui/Icon.jsx";
+import { useI18n } from "../../i18n/i18n.js";
 import { renderMarkdown } from "../../services/notebook/markdown.js";
 import { formatFileSize, groupOf } from "../../services/materials/materialTypes.js";
 import { ViewerHead, ZoomControls } from "./ViewerChrome.jsx";
@@ -20,6 +21,7 @@ const ZOOM_MAX = 200;
     onCollapse  closes the viewer
 */
 export default function MaterialViewerPanel({ material, onCollapse, widen = null, switcher = null }) {
+  const { t } = useI18n();
   const group = groupOf(material.type);
   const [markdown, setMarkdown] = useState({ html: null, error: null });
   const [zoom, setZoom] = useState(100);
@@ -36,7 +38,7 @@ export default function MaterialViewerPanel({ material, onCollapse, widen = null
   }, [material]);
 
   return (
-    <section className="viewer" aria-label={`Viewer: ${material.name}`}>
+    <section className="viewer" aria-label={t("Viewer: {name}", { name: material.name })}>
       <ViewerHead
         icon={group.icon}
         title={material.name}
@@ -46,7 +48,7 @@ export default function MaterialViewerPanel({ material, onCollapse, widen = null
         switcher={switcher}
         onClose={onCollapse}
       >
-        <a className="icon-btn" href={material.url} download={material.name} aria-label={`Download ${material.name}`} title="Download">
+        <a className="icon-btn" href={material.url} download={material.name} aria-label={t("Download {name}", { name: material.name })} title={t("Download")}>
           <Icon name="download" />
         </a>
       </ViewerHead>
@@ -65,11 +67,11 @@ export default function MaterialViewerPanel({ material, onCollapse, widen = null
       <div className="viewer__content viewer__body" style={{ "--viewer-zoom": zoom / 100 }}>
         {markdown.error ? (
           <p className="viewer__message" role="alert">
-            This file could not be read ({markdown.error}).
+            {t("This file could not be read ({error}).", { error: markdown.error })}
           </p>
         ) : markdown.html === null ? (
           <p className="viewer__message" role="status">
-            Opening…
+            {t("Opening…")}
           </p>
         ) : (
           <article className="markdown-body viewer__document viewer__zoomed" dangerouslySetInnerHTML={{ __html: markdown.html }} />

@@ -2,7 +2,8 @@ import { memo, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "katex/dist/katex.min.css";
 
-import { isOverCellDropZone } from "../../../services/notebook/cellContext.js";
+import { cellContextLabel, isOverCellDropZone } from "../../../services/notebook/cellContext.js";
+import { useI18n } from "../../../i18n/i18n.js";
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
 import Menu from "../../../components/ui/Menu.jsx";
@@ -10,7 +11,6 @@ import { renderMarkdown } from "../../../services/notebook/markdown.js";
 import CellOutput from "./CellOutput.jsx";
 import CodeEditor from "./CodeEditor.jsx";
 
-const TYPE_LABELS = { code: "Python", markdown: "Markdown", raw: "Raw" };
 
 function promptText(cell, runStatus) {
   if (cell.cell_type !== "code") return "";
@@ -46,14 +46,16 @@ function NotebookCell({ cell, index, cellCount, runStatus, progress, selected, e
   const boxRef = useRef(null);
   const editorRef = useRef(null);
 
+  const { t } = useI18n();
   const { id } = cell;
+  const number = index + 1;
+  const typeLabel = { code: "Python", markdown: "Markdown", raw: t("Raw") }[cell.cell_type];
   const isCode = cell.cell_type === "code";
   const isMarkdown = cell.cell_type === "markdown";
   const showEditor = !isMarkdown || editing;
   const busy = Boolean(runStatus);
   const hasOutputs = isCode && cell.outputs.length > 0;
-  const position = `cell ${index + 1}`;
-  const cellName = `${TYPE_LABELS[cell.cell_type]} ${position}`;
+  const cellName = cellContextLabel({ cellType: cell.cell_type, position: number });
 
   // Focus on the next frame, once a newly shown editor exists (it may be re-created right after mounting).
   useEffect(() => {
@@ -125,21 +127,21 @@ function NotebookCell({ cell, index, cellCount, runStatus, progress, selected, e
 
   const menuItems = [
     isCode
-      ? { label: "Run cell", icon: "play", onSelect: () => actions.run(id), disabled: busy }
+      ? { label: t("Run cell"), icon: "play", onSelect: () => actions.run(id), disabled: busy }
       : isMarkdown
-        ? { label: editing ? "Render Markdown" : "Edit Markdown", icon: "text", onSelect: () => (editing ? actions.run(id) : actions.edit(id)) }
+        ? { label: editing ? t("Render Markdown") : t("Edit Markdown"), icon: "text", onSelect: () => (editing ? actions.run(id) : actions.edit(id)) }
         : null,
-    { label: "Insert code cell above", icon: "plus", onSelect: () => actions.insert(id, "code", 0) },
-    { label: "Insert code cell below", icon: "plus", onSelect: () => actions.insert(id, "code", 1) },
-    { label: "Insert Markdown cell below", icon: "plus", onSelect: () => actions.insert(id, "markdown", 1) },
+    { label: t("Insert code cell above"), icon: "plus", onSelect: () => actions.insert(id, "code", 0) },
+    { label: t("Insert code cell below"), icon: "plus", onSelect: () => actions.insert(id, "code", 1) },
+    { label: t("Insert Markdown cell below"), icon: "plus", onSelect: () => actions.insert(id, "markdown", 1) },
     "separator",
-    { label: "Duplicate cell", icon: "copy", onSelect: () => actions.duplicate(id) },
+    { label: t("Duplicate cell"), icon: "copy", onSelect: () => actions.duplicate(id) },
     isCode
-      ? { label: "Convert to Markdown", icon: "text", onSelect: () => actions.convert(id, "markdown"), disabled: busy }
-      : { label: "Convert to code", icon: "code", onSelect: () => actions.convert(id, "code") },
-    isCode ? { label: "Clear output", icon: "eraser", onSelect: () => actions.clearOutput(id), disabled: !hasOutputs || busy } : null,
+      ? { label: t("Convert to Markdown"), icon: "text", onSelect: () => actions.convert(id, "markdown"), disabled: busy }
+      : { label: t("Convert to code"), icon: "code", onSelect: () => actions.convert(id, "code") },
+    isCode ? { label: t("Clear output"), icon: "eraser", onSelect: () => actions.clearOutput(id), disabled: !hasOutputs || busy } : null,
     "separator",
-    { label: "Delete cell", icon: "trash", onSelect: () => actions.requestDelete(id), danger: true },
+    { label: t("Delete cell"), icon: "trash", onSelect: () => actions.requestDelete(id), danger: true },
   ].filter(Boolean);
 
   return (
@@ -154,7 +156,7 @@ function NotebookCell({ cell, index, cellCount, runStatus, progress, selected, e
           className={`nb-cell nb-cell--${cell.cell_type} ${selected ? "nb-cell--selected" : ""} ${runStatus === "running" ? "nb-cell--running" : ""}`}
           tabIndex={0}
           role="group"
-          aria-label={`${TYPE_LABELS[cell.cell_type]} ${position}`}
+          aria-label={cellName}
           onFocus={() => actions.select(id)}
           onKeyDown={handleCommandKeys}
         >
@@ -163,9 +165,9 @@ function NotebookCell({ cell, index, cellCount, runStatus, progress, selected, e
               type="button"
               className="nb-cell__drag"
               draggable="true"
-              aria-label={`Drag ${cellName} to the Study Assistant`}
+              aria-label={t("Drag {cell} to the Study Assistant", { cell: cellName })}
               aria-describedby={`${id}-drag-hint`}
-              title="Drag into the Study Assistant to ask about this cell"
+              title={t("Drag into the Study Assistant to ask about this cell")}
               onDragStart={(event) => {
                 if (boxRef.current) event.dataTransfer.setDragImage(boxRef.current, 16, 16);
                 actions.startDrag(id, event.dataTransfer);
@@ -184,7 +186,7 @@ function NotebookCell({ cell, index, cellCount, runStatus, progress, selected, e
               <Icon name="grip" size={14} />
             </button>
             <span id={`${id}-drag-hint`} hidden>
-              Press Enter to add this cell to your Study Assistant message.
+              {t("Press Enter to add this cell to your Study Assistant message.")}
             </span>
             {touchGhost &&
               createPortal(
@@ -194,29 +196,29 @@ function NotebookCell({ cell, index, cellCount, runStatus, progress, selected, e
                 </div>,
                 document.body
               )}
-            <span className="nb-cell__type">{TYPE_LABELS[cell.cell_type]}</span>
+            <span className="nb-cell__type">{typeLabel}</span>
             {runStatus && (
               <span className="nb-cell__status" role="status">
                 {runStatus === "running" ? <span className="spinner" aria-hidden="true" /> : null}
-                {runStatus === "running" ? progress || "Running…" : "Queued"}
+                {runStatus === "running" ? progress || t("Running…") : t("Queued")}
               </span>
             )}
             <div className="nb-cell__actions">
               {isCode && (
-                <IconButton icon="play" label={`Run ${position}`} disabled={busy} onClick={() => actions.run(id)} />
+                <IconButton icon="play" label={t("Run cell {number}", { number })} disabled={busy} onClick={() => actions.run(id)} />
               )}
               {isMarkdown && editing && (
-                <IconButton icon="check" label={`Render ${position}`} onClick={() => actions.run(id)} />
+                <IconButton icon="check" label={t("Render cell {number}", { number })} onClick={() => actions.run(id)} />
               )}
-              <IconButton icon="arrowUp" label={`Move ${position} up`} disabled={index === 0} onClick={() => actions.move(id, -1)} />
+              <IconButton icon="arrowUp" label={t("Move cell {number} up", { number })} disabled={index === 0} onClick={() => actions.move(id, -1)} />
               <IconButton
                 icon="arrowDown"
-                label={`Move ${position} down`}
+                label={t("Move cell {number} down", { number })}
                 disabled={index === cellCount - 1}
                 onClick={() => actions.move(id, 1)}
               />
-              <IconButton icon="trash" label={`Delete ${position}`} onClick={() => actions.requestDelete(id)} />
-              <Menu label={`More actions for ${position}`} items={menuItems} />
+              <IconButton icon="trash" label={t("Delete cell {number}", { number })} onClick={() => actions.requestDelete(id)} />
+              <Menu label={t("More actions for cell {number}", { number })} items={menuItems} />
             </div>
           </div>
 
@@ -224,8 +226,8 @@ function NotebookCell({ cell, index, cellCount, runStatus, progress, selected, e
             <CodeEditor
               value={cell.source}
               language={isCode ? "python" : isMarkdown ? "markdown" : "text"}
-              ariaLabel={`${TYPE_LABELS[cell.cell_type]} editor, ${position}`}
-              placeholderText={isCode ? "Write Python code…" : isMarkdown ? "Write notes in Markdown…" : "Raw text…"}
+              ariaLabel={t("{type} editor, cell {number}", { type: typeLabel, number })}
+              placeholderText={isCode ? t("Write Python code…") : isMarkdown ? t("Write notes in Markdown…") : t("Raw text…")}
               viewRef={editorRef}
               onChange={(source) => actions.change(id, source)}
               onFocus={() => actions.select(id)}
@@ -237,12 +239,12 @@ function NotebookCell({ cell, index, cellCount, runStatus, progress, selected, e
             <div
               className="markdown-body nb-cell__rendered"
               onDoubleClick={() => actions.edit(id)}
-              title="Double-click to edit"
+              title={t("Double-click to edit")}
             >
               {cell.source.trim() ? (
                 <div dangerouslySetInnerHTML={{ __html: renderMarkdown(cell.source) }} />
               ) : (
-                <p className="nb-cell__empty-markdown">Empty Markdown cell — double-click or press Enter to write notes.</p>
+                <p className="nb-cell__empty-markdown">{t("Empty Markdown cell — double-click or press Enter to write notes.")}</p>
               )}
             </div>
           )}

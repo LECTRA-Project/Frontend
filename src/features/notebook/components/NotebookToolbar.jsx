@@ -3,27 +3,28 @@ import { useState } from "react";
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import Menu from "../../../components/ui/Menu.jsx";
+import { dateLocale, useI18n } from "../../../i18n/i18n.js";
 import KernelStatus from "./KernelStatus.jsx";
 
-const STORAGE_NOTE =
-  "Saved automatically in this browser only (local storage), not on the LECTRA server. Use Download .ipynb to keep a copy.";
-
 function SaveState({ saveInfo }) {
+  const { t } = useI18n();
   if (saveInfo.error) {
     return (
       <span className="notebook-toolbar__save notebook-toolbar__save--error" title={saveInfo.error} role="alert">
-        Not saved: {saveInfo.error}
+        {t("Not saved: {error}", { error: saveInfo.error })}
       </span>
     );
   }
-  let text = "Not saved yet";
-  if (saveInfo.isDirty) text = "Unsaved changes";
+  let text = t("Not saved yet");
+  if (saveInfo.isDirty) text = t("Unsaved changes");
   else if (saveInfo.savedAt) {
-    const time = new Date(saveInfo.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    text = `Saved in this browser · ${time}`;
+    const time = new Date(saveInfo.savedAt).toLocaleTimeString(dateLocale([]), { hour: "2-digit", minute: "2-digit" });
+    text = t("Saved in this browser · {time}", { time });
   }
   return (
-    <span className="notebook-toolbar__save" title={STORAGE_NOTE}>
+    <span className="notebook-toolbar__save" title={t(
+        "Saved automatically in this browser only (local storage), not on the LECTRA server. Use Download .ipynb to keep a copy."
+      )}>
       {text}
     </span>
   );
@@ -55,12 +56,13 @@ export default function NotebookToolbar({
   actions = null,
 }) {
   // The title is edited locally and committed on every change; an empty title is replaced on blur.
+  const { t } = useI18n();
   const [draftTitle, setDraftTitle] = useState(null);
   const shownTitle = draftTitle ?? title;
   const busy = kernelState.status === "busy";
   const stopLabel = kernelState.canSoftInterrupt
-    ? "Stop the running cell"
-    : "Stop the running cell (Python restarts, so variables are cleared)";
+    ? t("Stop the running cell")
+    : t("Stop the running cell (Python restarts, so variables are cleared)");
 
   return (
     <div className="notebook-toolbar">
@@ -69,7 +71,7 @@ export default function NotebookToolbar({
           <Icon name="notebook" />
           <input
             className="notebook-toolbar__title"
-            aria-label="Notebook title"
+            aria-label={t("Notebook title")}
             value={shownTitle}
             onChange={(event) => {
               setDraftTitle(event.target.value);
@@ -86,21 +88,21 @@ export default function NotebookToolbar({
         {actions && <div className="notebook-toolbar__panel-actions">{actions}</div>}
       </div>
 
-      <div className="notebook-toolbar__row notebook-toolbar__actions" role="toolbar" aria-label="Notebook actions">
+      <div className="notebook-toolbar__row notebook-toolbar__actions" role="toolbar" aria-label={t("Notebook actions")}>
         <div className="notebook-toolbar__group">
-          <Button variant="ghost" size="sm" icon="plus" onClick={onAddCode} title="Add a code cell">
-            <span className="notebook-toolbar__label">Code</span>
+          <Button variant="ghost" size="sm" icon="plus" onClick={onAddCode} title={t("Add a code cell")}>
+            <span className="notebook-toolbar__label">{t("Code")}</span>
           </Button>
-          <Button variant="ghost" size="sm" icon="text" onClick={onAddMarkdown} title="Add a Markdown cell">
+          <Button variant="ghost" size="sm" icon="text" onClick={onAddMarkdown} title={t("Add a Markdown cell")}>
             <span className="notebook-toolbar__label">Markdown</span>
           </Button>
         </div>
         <div className="notebook-toolbar__group">
-          <Button variant="ghost" size="sm" icon="play" onClick={onRunAll} disabled={!hasCodeCells} title="Run all cells in order">
-            <span className="notebook-toolbar__label">Run all</span>
+          <Button variant="ghost" size="sm" icon="play" onClick={onRunAll} disabled={!hasCodeCells} title={t("Run all cells in order")}>
+            <span className="notebook-toolbar__label">{t("Run all")}</span>
           </Button>
           <Button variant="ghost" size="sm" icon="stop" onClick={onInterrupt} disabled={!busy} title={stopLabel}>
-            <span className="notebook-toolbar__label">Stop</span>
+            <span className="notebook-toolbar__label">{t("Stop")}</span>
           </Button>
           <Button
             variant="ghost"
@@ -108,12 +110,12 @@ export default function NotebookToolbar({
             icon="restart"
             onClick={onRestart}
             disabled={kernelState.status === "starting"}
-            title="Restart the Python kernel (clears all variables)"
+            title={t("Restart the Python kernel (clears all variables)")}
           >
-            <span className="notebook-toolbar__label">Restart</span>
+            <span className="notebook-toolbar__label">{t("Restart")}</span>
           </Button>
-          <Button variant="ghost" size="sm" icon="eraser" onClick={onClearOutputs} disabled={!hasOutputs} title="Clear all outputs">
-            <span className="notebook-toolbar__label">Clear outputs</span>
+          <Button variant="ghost" size="sm" icon="eraser" onClick={onClearOutputs} disabled={!hasOutputs} title={t("Clear all outputs")}>
+            <span className="notebook-toolbar__label">{t("Clear outputs")}</span>
           </Button>
         </div>
         <div className="notebook-toolbar__group notebook-toolbar__group--end">
@@ -123,17 +125,17 @@ export default function NotebookToolbar({
             icon="download"
             onClick={onDownload}
             disabled={!hasCells}
-            title={hasCells ? "Download this notebook as a Jupyter .ipynb file" : "The notebook is empty — add a cell to download it"}
+            title={hasCells ? t("Download this notebook as a Jupyter .ipynb file") : t("The notebook is empty — add a cell to download it")}
           >
-            <span className="notebook-toolbar__label">Download .ipynb</span>
+            <span className="notebook-toolbar__label">{t("Download .ipynb")}</span>
           </Button>
           <Menu
-            label="File"
+            label={t("File")}
             icon="folder"
-            text="File"
+            text={t("File")}
             items={[
-              { label: "New notebook", icon: "plus", onSelect: onNew },
-              { label: "Import .ipynb…", icon: "upload", onSelect: onImport },
+              { label: t("New notebook"), icon: "plus", onSelect: onNew },
+              { label: t("Import .ipynb…"), icon: "upload", onSelect: onImport },
             ]}
           />
         </div>

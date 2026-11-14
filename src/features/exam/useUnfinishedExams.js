@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { deleteExam, isUnfinished, listAllExams } from "../../api/services/exams.js";
+import { t } from "../../i18n/i18n.js";
 
 /*
   The student's unfinished exams (being generated or ready to answer), newest first, for
@@ -29,7 +30,7 @@ export function useUnfinishedExams() {
       (err) => {
         if (controller.signal.aborted || err?.name === "CanceledError") return;
         if (err?.status === 404 || err?.status === 405) setAvailable(false);
-        else setError(err.message || "Your exams could not be loaded.");
+        else setError(err.message || t("Your exams could not be loaded."));
         setLoading(false);
       }
     );

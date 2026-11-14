@@ -9,6 +9,7 @@ import { groupOf } from "../../../services/materials/materialTypes.js";
 import { STATUS_LABEL } from "../../lectures/materialTypes.js";
 import { groupChats } from "../chatLayout.js";
 import { displayChatTitle } from "../../../services/notebook/cellContext.js";
+import { useI18n } from "../../../i18n/i18n.js";
 
 /*
   The collapsible left menu of the chat-first workspace (272 px; a 64 px icon rail when
@@ -77,6 +78,7 @@ export default function ChatSidebar({
   onRemoveChat,
   available = true,
 }) {
+  const { t } = useI18n();
   const [removing, setRemoving] = useState(null); // the chat whose Remove is being confirmed
   const newChatRef = useRef(null);
   const scrollRef = useRef(null);
@@ -97,9 +99,9 @@ export default function ChatSidebar({
   if (!open) {
     if (mode === "phone") return null;
     return (
-      <nav className="cf-rail" aria-label="Menu">
-        <IconButton icon="sidebar" label="Open menu" onClick={onToggle} />
-        <IconButton icon="plus" label="New chat" onClick={onNewChat} />
+      <nav className="cf-rail" aria-label={t("Menu")}>
+        <IconButton icon="sidebar" label={t("Open menu")} onClick={onToggle} />
+        <IconButton icon="plus" label={t("New chat")} onClick={onNewChat} />
       </nav>
     );
   }
@@ -117,25 +119,25 @@ export default function ChatSidebar({
   return (
     <>
       {overlay && <div className="cf-scrim" aria-hidden="true" onClick={onToggle} />}
-      <nav className={`cf-side ${overlay ? "cf-side--overlay" : ""}`} id="chat-menu" aria-label="Chats and this chat's materials">
+      <nav className={`cf-side ${overlay ? "cf-side--overlay" : ""}`} id="chat-menu" aria-label={t("Chats and this chat's materials")}>
         <div className="cf-side__new">
           <button ref={newChatRef} type="button" className="cf-new-chat" onClick={onNewChat}>
             <Icon name="plus" />
-            New chat
+            {t("New chat")}
           </button>
-          <IconButton icon="sidebar" label={overlay ? "Close menu" : "Collapse menu"} onClick={onToggle} />
+          <IconButton icon="sidebar" label={overlay ? t("Close menu") : t("Collapse menu")} onClick={onToggle} />
         </div>
 
         <div className="cf-side__scroll" ref={scrollRef}>
           <section className="cf-materials" id="cf-materials" tabIndex={-1} aria-labelledby="cf-materials-title">
             <div className="cf-materials__head">
               <h2 id="cf-materials-title" className="cf-section-title">
-                Materials in this chat
+                {t("Materials in this chat")}
               </h2>
               <div className="cf-materials__actions">
                 {addable.length > 0 && (
                   <Menu
-                    label="Add one of your materials to this chat"
+                    label={t("Add one of your materials to this chat")}
                     icon="plus"
                     className="cf-materials__add"
                     items={addable.map((material) => ({
@@ -148,7 +150,7 @@ export default function ChatSidebar({
                 )}
                 <IconButton
                   icon="upload"
-                  label="Upload a material to this chat"
+                  label={t("Upload a material to this chat")}
                   className="cf-materials__upload"
                   onClick={onUploadClick}
                   disabled={!available}
@@ -161,11 +163,11 @@ export default function ChatSidebar({
 
             {materials.length === 0 && uploads.length === 0 && (
               <button type="button" className="cf-materials__empty" onClick={onUploadClick} disabled={!available}>
-                {available ? "Upload a PDF, slides or a notebook for this chat" : "Chats are not available on this server"}
+                {available ? t("Upload a PDF, slides or a notebook for this chat") : t("Chats are not available on this server")}
               </button>
             )}
 
-            <ul className="cf-materials__list" aria-label="Materials in this chat">
+            <ul className="cf-materials__list" aria-label={t("Materials in this chat")}>
               {materials.map((material) => {
                 const opened = viewerLectureId === material.id;
                 const status = material.status && material.status !== "completed" ? STATUS_LABEL[material.status] : null;
@@ -174,9 +176,9 @@ export default function ChatSidebar({
                     <button
                       type="button"
                       className="cf-material__open"
-                      aria-label={`Open ${material.name} beside the chat`}
+                      aria-label={t("Open {name} beside the chat", { name: material.name })}
                       aria-pressed={opened}
-                      title="Open beside the chat"
+                      title={t("Open beside the chat")}
                       onClick={() => onOpenMaterial(material)}
                     >
                       <span className="cf-material__icon">
@@ -193,7 +195,7 @@ export default function ChatSidebar({
                     {material.status === "failed" && (
                       <IconButton
                         icon="refresh"
-                        label={`Retry processing ${material.name}`}
+                        label={t("Retry processing {name}", { name: material.name })}
                         className="cf-material__remove"
                         onClick={() => onRetryMaterial(material)}
                       />
@@ -201,17 +203,17 @@ export default function ChatSidebar({
                     {/* With a mouse these show on hover or focus, so the name gets the row's width. */}
                     <span className="cf-material__actions">
                       <Menu
-                        label={`More actions for ${material.name}`}
+                        label={t("More actions for {name}", { name: material.name })}
                         className="cf-material__more"
                         items={[
-                          { label: "Rename", icon: "edit", onSelect: () => onRenameMaterial(material) },
+                          { label: t("Rename"), icon: "edit", onSelect: () => onRenameMaterial(material) },
                           "separator",
-                          { label: "Delete from library", icon: "trash", danger: true, onSelect: () => onDeleteMaterial(material) },
+                          { label: t("Delete from library"), icon: "trash", danger: true, onSelect: () => onDeleteMaterial(material) },
                         ]}
                       />
                       <IconButton
                         icon="close"
-                        label={`Remove ${material.name} from this chat`}
+                        label={t("Remove {name} from this chat", { name: material.name })}
                         className="cf-material__remove"
                         onClick={() => onRemoveMaterial(material)}
                       />
@@ -221,7 +223,7 @@ export default function ChatSidebar({
               })}
               {uploads.map((upload) => (
                 <li key={upload.id} className="cf-material cf-material--upload">
-                  <span className="cf-material__open" aria-label={`Uploading ${upload.name}`}>
+                  <span className="cf-material__open" aria-label={t("Uploading {name}", { name: upload.name })}>
                     <span className="cf-material__icon">
                       <Icon name="upload" size={16} />
                     </span>
@@ -232,14 +234,14 @@ export default function ChatSidebar({
                           {upload.error}
                         </span>
                       ) : (
-                        <span className="cf-progress" role="progressbar" aria-label={`Uploading ${upload.name}`} aria-valuenow={upload.progress} aria-valuemin={0} aria-valuemax={100}>
+                        <span className="cf-progress" role="progressbar" aria-label={t("Uploading {name}", { name: upload.name })} aria-valuenow={upload.progress} aria-valuemin={0} aria-valuemax={100}>
                           <span style={{ width: `${upload.progress}%` }} />
                         </span>
                       )}
                     </span>
                   </span>
                   {upload.error && (
-                    <IconButton icon="close" label={`Dismiss ${upload.name}`} className="cf-material__remove" onClick={() => onDismissUpload(upload.id)} />
+                    <IconButton icon="close" label={t("Dismiss {name}", { name: upload.name })} className="cf-material__remove" onClick={() => onDismissUpload(upload.id)} />
                   )}
                 </li>
               ))}
@@ -248,21 +250,21 @@ export default function ChatSidebar({
 
           <section className="cf-chats" aria-labelledby="cf-chats-title">
             <h2 id="cf-chats-title" className="cf-section-title cf-chats__title">
-              Chats
+              {t("Chats")}
             </h2>
             {sessionsLoading && sessions.length === 0 ? (
               <p className="cf-chats__note" role="status">
-                Loading your chats…
+                {t("Loading your chats…")}
               </p>
             ) : sessionsError && sessions.length === 0 ? (
               <div className="cf-chats__note" role="alert">
                 <p>{sessionsError}</p>
                 <button type="button" className="cf-link-button" onClick={onReloadChats}>
-                  Try again
+                  {t("Try again")}
                 </button>
               </div>
             ) : groups.length === 0 ? (
-              <p className="cf-chats__note">{available ? "Your chats will be listed here." : "Chats are not available on this server."}</p>
+              <p className="cf-chats__note">{available ? t("Your chats will be listed here.") : t("Chats are not available on this server.")}</p>
             ) : (
               groups.map((group) => (
                 <div key={group.label} className="cf-chats__group">
@@ -284,9 +286,9 @@ export default function ChatSidebar({
                           {/* Like the material rows: with a mouse, ⋯ shows on hover or focus. It never opens the chat. */}
                           <span className="cf-chat__actions" onClick={(event) => event.stopPropagation()}>
                             <Menu
-                              label={`Actions for ${displayChatTitle(session.title)}`}
+                              label={t("Actions for {title}", { title: displayChatTitle(session.title) })}
                               className="cf-chat__more"
-                              items={[{ label: "Remove", icon: "trash", danger: true, onSelect: () => setRemoving(session) }]}
+                              items={[{ label: t("Remove"), icon: "trash", danger: true, onSelect: () => setRemoving(session) }]}
                             />
                           </span>
                         </li>
@@ -298,15 +300,15 @@ export default function ChatSidebar({
             )}
             {moreChats && sessions.length > 0 && (
               <button ref={moreRef} type="button" className="cf-chats__more" onClick={onLoadMoreChats} disabled={loadingMoreChats}>
-                {loadingMoreChats ? "Loading more chats…" : "Show more chats"}
+                {loadingMoreChats ? t("Loading more chats…") : t("Show more chats")}
               </button>
             )}
           </section>
         </div>
 
         {removing && (
-          <ConfirmDialog title="Remove chat?" confirmLabel="Remove" danger onConfirm={confirmRemove} onCancel={() => setRemoving(null)}>
-            “{displayChatTitle(removing.title)}” and all its messages will be deleted. Its materials are kept.
+          <ConfirmDialog title={t("Remove chat?")} confirmLabel={t("Remove")} danger onConfirm={confirmRemove} onCancel={() => setRemoving(null)}>
+            {t("“{title}” and all its messages will be deleted. Its materials are kept.", { title: displayChatTitle(removing.title) })}
           </ConfirmDialog>
         )}
       </nav>
