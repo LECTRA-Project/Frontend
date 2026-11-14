@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { login, logout, register, requestPasswordReset, resetPassword } from "./auth.js";
 import { getCurrentUser } from "./users.js";
-import { ApiError, getAuthToken } from "../client.js";
+import { ApiError, getAuthToken, getRefreshToken } from "../client.js";
 import { mockApi, ok, TEST_USER } from "../../test/helpers.jsx";
 
 describe("auth service", () => {
@@ -26,13 +26,14 @@ describe("auth service", () => {
     expect(getAuthToken()).toBeNull(); // register doesn't sign in on its own
   });
 
-  it("login saves the token", async () => {
-    api.onPost("/auth/login").reply(200, ok({ token: "jwt-123" }, "Login successful"));
+  it("login saves the access and refresh tokens", async () => {
+    api.onPost("/auth/login").reply(200, ok({ token: "jwt-123", refresh_token: "refresh-123" }, "Login successful"));
 
     const data = await login({ email: TEST_USER.email, password: "secret123" });
 
     expect(data.token).toBe("jwt-123");
     expect(getAuthToken()).toBe("jwt-123");
+    expect(getRefreshToken()).toBe("refresh-123");
   });
 
   it("failed login saves nothing", async () => {

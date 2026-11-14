@@ -539,6 +539,53 @@ describe("session", () => {
     expect(screen.getByText("Your session has expired. Please sign in again.")).toBeInTheDocument();
   });
 
+  it("resumes a session whose access token expired, using the refresh token", async () => {
+    backendWithUser();
+    api.onPost("/auth/refresh").reply((config) =>
+      JSON.parse(config.data).refresh_token === "refresh-1"
+        ? [200, ok({ token, refresh_token: "refresh-2" })]
+        : [401, { detail: "Your session has expired" }]
+    );
+    saveToken(makeToken(-60));
+    localStorage.setItem("lectra.refreshToken", "refresh-1");
+    const { router } = renderApp("/workspace");
+
+    expect(await screen.findByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/workspace");
+    expect(savedToken()).toBe(token);
+    expect(localStorage.getItem("lectra.refreshToken")).toBe("refresh-2");
+  });
+
+  it("stays signed in when a request 401s and the refresh succeeds", async () => {
+    backendWithUser();
+    const renewed = makeToken(1800);
+    api.onPost("/auth/refresh").reply(200, ok({ token: renewed, refresh_token: "refresh-2" }));
+    api.onGet("/materials").reply((config) =>
+      config.headers.Authorization === `Bearer ${renewed}` ? [200, ok([])] : [401, { detail: "expired" }]
+    );
+    saveToken(token);
+    localStorage.setItem("lectra.refreshToken", "refresh-1");
+    const { router } = renderApp("/workspace");
+    await screen.findByRole("button", { name: "Open profile menu" });
+
+    const response = await act(() => apiClient.get("/materials"));
+
+    expect(response.status).toBe(200);
+    expect(router.state.location.pathname).toBe("/workspace");
+    expect(screen.queryByText(/session has expired/)).not.toBeInTheDocument();
+  });
+
+  it("signs out when the refresh token has expired too", async () => {
+    api.onPost("/auth/refresh").reply(401, { detail: "Your session has expired" });
+    saveToken(makeToken(-60));
+    localStorage.setItem("lectra.refreshToken", "old-refresh");
+    renderApp("/workspace");
+
+    expect(await screen.findByText("Your session has expired. Please sign in again.")).toBeInTheDocument();
+    expect(savedToken()).toBeNull();
+    expect(localStorage.getItem("lectra.refreshToken")).toBeNull();
+  });
+
   it("signs out when another tab signs out", async () => {
     backendWithUser();
     saveToken(token);
