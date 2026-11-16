@@ -454,8 +454,8 @@
   margin: 2px 0;
   padding: 4px var(--space-2);
   border-radius: var(--radius-sm);
-  background: #fdf6e9;
-  color: #7a5414;
+  background: var(--warning-soft);
+  color: var(--warning-strong);
 }
 .nb-output__image {
   display: block;

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 
 import Icon from "../../../components/ui/Icon.jsx";
@@ -21,6 +21,7 @@ import {
 import { sourceChips } from "../chatLayout.js";
 import { copyText } from "../../../services/clipboard.js";
 import { t, useI18n } from "../../../i18n/i18n.js";
+import useTypewriter from "../useTypewriter.js";
 
 // The backend's fixed answer when a chat's lectures have no extracted text saved.
 export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
@@ -38,6 +39,8 @@ export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
   - A question asked from the exam results ("Ask about this") shows as its heading line with
     the question, choices, answer and feedback quoted under it; while the chat is opened
     from there (?exam= in the URL) the bar has "Back to exam results".
+  - While the assistant answers, a bubble with animated dots shows where the answer will
+    appear; a new answer is then typed out word by word (useTypewriter.js).
   - Every code block in an answer has a Copy button (just that code), and every answer has a
     Copy button under it (the whole answer as Markdown, with its sources). When the
     clipboard can't be used, a dialog shows the text selected for copying by hand.
@@ -108,6 +111,13 @@ export function ChatView({
     }
     shown.current = { first, last, height: body.scrollHeight };
   }, [messages, busy]);
+
+  // While an answer is typed out: follow it, unless the student scrolled up to read.
+  const followAnswer = useCallback(() => {
+    const body = scrollRef.current;
+    if (!body) return;
+    if (body.scrollHeight - body.scrollTop - body.clientHeight < FOLLOW_PX) body.scrollTop = body.scrollHeight;
+  }, []);
 
   // Near the top: load the messages before those shown.
   function handleScroll(event) {
@@ -271,11 +281,20 @@ export function ChatView({
                 onOpenSource={onOpenSource}
                 onUploadAgain={onUploadClick}
                 onCopy={copy}
+                onGrow={followAnswer}
               />
             ))}
             {busy && (
-              <li className="chat-msg chat-msg--system" role="status">
-                {slow ? t("Still working — the AI can take a minute or two when it’s busy…") : t("Reading your materials…")}
+              // Waiting for the answer: a bubble where it will appear, with animated dots.
+              <li className="chat-msg chat-msg--assistant chat-msg--thinking" role="status">
+                <span className="chat-thinking__dots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span className="chat-thinking__label">
+                  {slow ? t("Still working — the AI can take a minute or two when it’s busy…") : t("Reading your materials…")}
+                </span>
               </li>
             )}
           </ol>
@@ -317,7 +336,7 @@ export function ChatView({
   );
 }
 
-function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy }) {
+function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow }) {
   const { t } = useI18n();
   if (message.role === "system") {
     return (
@@ -367,7 +386,24 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
       </li>
     );
   }
+  return (
+    <AssistantAnswer message={message} materialType={materialType} lectureTitle={lectureTitle} onOpenSource={onOpenSource} onCopy={onCopy} onGrow={onGrow} />
+  );
+}
+
+/*
+  An answer. One that just arrived (message.fresh) is typed out word by word
+  (useTypewriter); its sources and Copy button fade in once it is complete.
+*/
+function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, onCopy, onGrow }) {
+  const { t } = useI18n();
+  const { text, typing } = useTypewriter(message.id, message.content, message.fresh);
   const chips = sourceChips(message.sources, materialType, lectureTitle);
+
+  // Keep the growing answer in view while it is typed.
+  useLayoutEffect(() => {
+    if (typing) onGrow?.();
+  }, [text, typing, onGrow]);
 
   // A code block's Copy button (in the answer's HTML): copies only that block's code.
   async function handleAnswerClick(event) {
@@ -387,7 +423,8 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
   }
 
   return (
-    <li className="chat-msg chat-msg--assistant">
+    // aria-busy: screen readers read the answer once, when it is complete.
+    <li className={`chat-msg chat-msg--assistant ${message.fresh ? "chat-msg--fresh" : ""}`} aria-busy={typing || undefined}>
       <article className="chat-answer">
         {chips.length === 0 && (
           <span className="chat-answer__general">
@@ -395,29 +432,45 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
             {t("Not from your materials")}
           </span>
         )}
-        <AnswerBody html={withCodeCopyButtons(renderAnswerMarkdown(message.content))} onClick={handleAnswerClick} />
-        {chips.length > 0 && (
-          <ul className="chat-sources" aria-label={t("Sources")}>
-            {chips.map((chip) => (
-              <li key={chip.key}>
-                <button
-                  type="button"
-                  className="chat-source"
-                  title={t("Open this page beside the chat")}
-                  onClick={() => onOpenSource(chip)}
-                >
-                  <span className="chat-source__loc">{chip.loc}</span>
-                  <span className="chat-source__doc">{chip.doc}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        <AnswerBody
+          html={withCodeCopyButtons(renderAnswerMarkdown(text))}
+          typing={typing}
+          onClick={handleAnswerClick}
+        />
+        {!typing && (
+          <AnswerFooter chips={chips} content={message.content} onOpenSource={onOpenSource} onCopy={onCopy} />
         )}
-        <div className="chat-answer__actions">
-          <CopyAnswerButton text={answerText(message.content, chips)} onCopy={onCopy} />
-        </div>
       </article>
     </li>
+  );
+}
+
+/* The answer's sources and Copy button (shown once the answer is complete). */
+function AnswerFooter({ chips, content, onOpenSource, onCopy }) {
+  const { t } = useI18n();
+  return (
+    <>
+      {chips.length > 0 && (
+        <ul className="chat-sources" aria-label={t("Sources")}>
+          {chips.map((chip) => (
+            <li key={chip.key}>
+              <button
+                type="button"
+                className="chat-source"
+                title={t("Open this page beside the chat")}
+                onClick={() => onOpenSource(chip)}
+              >
+                <span className="chat-source__loc">{chip.loc}</span>
+                <span className="chat-source__doc">{chip.doc}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="chat-answer__actions">
+        <CopyAnswerButton text={answerText(content, chips)} onCopy={onCopy} />
+      </div>
+    </>
   );
 }
 
@@ -477,16 +530,26 @@ function choiceItems(quote) {
 }
 
 const COPIED_MS = 2000;
+// How close to the bottom (px) the chat must be to follow an answer being typed.
+const FOLLOW_PX = 160;
 
-/* The answer's HTML; ```mermaid blocks in it are turned into diagrams after it is shown. */
-function AnswerBody({ html, onClick }) {
+/*
+  The answer's HTML; ```mermaid blocks in it are turned into diagrams once it is shown in
+  full (not while it is being typed, when a diagram is still incomplete).
+*/
+function AnswerBody({ html, typing = false, onClick }) {
   const ref = useRef(null);
   useEffect(() => {
-    if (hasDiagrams(ref.current)) renderDiagrams(ref.current);
-  }, [html]);
+    if (!typing && hasDiagrams(ref.current)) renderDiagrams(ref.current);
+  }, [html, typing]);
   return (
     // The click handler only serves the code blocks' Copy buttons (native buttons, so keyboard works).
-    <div ref={ref} className="chat-msg__md markdown-body" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
+    <div
+      ref={ref}
+      className={`chat-msg__md markdown-body ${typing ? "chat-msg__md--typing" : ""}`}
+      onClick={onClick}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }
 

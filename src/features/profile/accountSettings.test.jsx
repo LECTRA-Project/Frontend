@@ -1,13 +1,13 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
 
 /*
   Account settings: the student's own AI provider API keys (saved on the server, never
-  shown again in full), the interface language (English / Deutsch, kept per user), and
-  the demo notification / privacy toggles, which keep their behaviour.
+  shown again in full), the interface language (English / Deutsch, kept per user) and the
+  theme (System / Light / Dark).
 */
 const GEMINI_KEY = "AIzaSyTESTKEY-1234567890abcd";
 
@@ -55,7 +55,35 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => api.restore());
+afterEach(() => {
+  api.restore();
+  vi.unstubAllGlobals();
+  delete document.documentElement.dataset.theme;
+});
+
+describe("theme", () => {
+  it("defaults to System (following the device), switches to Dark and Light at once and remembers the choice", async () => {
+    vi.stubGlobal("matchMedia", (query) => ({ matches: query.includes("dark"), addEventListener() {}, removeEventListener() {} }));
+    const user = userEvent.setup();
+    const { unmount } = renderApp("/settings");
+
+    const select = await screen.findByLabelText("Theme");
+    expect(select).toHaveValue("system");
+    expect(document.documentElement.dataset.theme).toBe("dark"); // the device is dark
+
+    await user.selectOptions(select, "light");
+    expect(document.documentElement.dataset.theme).toBe("light");
+    await user.selectOptions(select, "dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(localStorage.getItem("lectra:theme:v1")).toBe("dark");
+
+    unmount();
+    delete document.documentElement.dataset.theme;
+    renderApp("/settings");
+    expect(await screen.findByLabelText("Theme")).toHaveValue("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+});
 
 const CHAT_KEY = `lectra:chat-model:v1:${TEST_USER.id}`;
 const dropdown = () => screen.getByRole("combobox", { name: "Add model" });
@@ -69,7 +97,7 @@ describe("AI provider API keys (one Add model dropdown)", () => {
     renderApp("/settings");
     await screen.findByRole("combobox", { name: "Add model" });
     await ready();
-    expect(screen.getAllByRole("combobox").map((select) => select.labels[0]?.textContent)).toEqual(["Interface language", "Add model"]);
+    expect(screen.getAllByRole("combobox").map((select) => select.labels[0]?.textContent)).toEqual(["Theme", "Interface language", "Add model"]);
     expect(screen.queryByRole("button", { name: /Add key|Replace|Remove|Test key/ })).not.toBeInTheDocument();
     expect(screen.queryByText("No key saved")).not.toBeInTheDocument();
     expect(groupsOf(dropdown())).toEqual([
@@ -81,7 +109,8 @@ describe("AI provider API keys (one Add model dropdown)", () => {
     expect(dropdown()).toHaveValue("lectra");
     expect(screen.getByText("Chat model: Lectra · LECTRA's own models")).toBeInTheDocument();
     // The other settings stay.
-    expect(screen.getByRole("button", { name: "Save settings" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Theme")).toBeInTheDocument();
+    expect(screen.getByLabelText("Interface language")).toBeInTheDocument();
   });
 
   it("adds a key from the dropdown: masked, checked by the server, never shown again, then its models", async () => {
@@ -214,7 +243,7 @@ describe("interface language", () => {
     await user.selectOptions(await screen.findByLabelText("Interface language"), "de");
 
     expect(await screen.findByRole("heading", { level: 1, name: "Kontoeinstellungen" })).toBeInTheDocument();
-    expect(screen.getByText("Lernerinnerungen")).toBeInTheDocument();
+    expect(screen.getByText("Darstellung")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Zurück zum Arbeitsbereich/ })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("de");
     // Provider names are not translated.
@@ -232,19 +261,15 @@ describe("interface language", () => {
   });
 });
 
-describe("notifications", () => {
-  it("keeps study reminders with their demo behaviour; product updates and the privacy setting are gone", async () => {
-    const user = userEvent.setup();
+describe("removed demo settings", () => {
+  it("has no notification or privacy switches and no Save button", async () => {
     renderApp("/settings");
-    expect(await screen.findByRole("switch", { name: "Study reminders" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getAllByRole("switch")).toHaveLength(1);
+    await screen.findByLabelText("Theme");
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.queryByText("Study reminders")).not.toBeInTheDocument();
     expect(screen.queryByText("Product updates")).not.toBeInTheDocument();
     expect(screen.queryByText("Show statistics on my profile")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Privacy" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("switch", { name: "Study reminders" }));
-    expect(screen.getByRole("switch", { name: "Study reminders" })).toHaveAttribute("aria-checked", "false");
-    await user.click(screen.getByRole("button", { name: "Save settings" }));
-    expect(screen.getByText("Demo mode — settings are not saved yet.")).toBeInTheDocument();
   });
 });

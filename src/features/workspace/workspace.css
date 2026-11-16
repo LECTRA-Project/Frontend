@@ -88,14 +88,6 @@
 .profile-menu__row--muted {
   color: var(--text-secondary);
 }
-.profile-menu__row[aria-disabled] {
-  cursor: default;
-}
-.profile-menu__hint {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-}
 
 /* ---------- Panels ---------- */
 .panel {
@@ -721,6 +713,83 @@ button.cf-material__open:hover {
 }
 .chat-msg--pending {
   opacity: 0.75;
+}
+/* A new answer slides in (and is then typed out word by word, with no cursor). */
+.chat-msg--fresh {
+  animation: chat-msg-in 220ms ease-out;
+}
+.chat-msg--fresh .chat-sources,
+.chat-msg--fresh .chat-answer__actions {
+  animation: chat-fade-in 300ms ease-out;
+}
+/* Waiting for the answer: a compact bubble with three bouncing dots. */
+.chat-msg--thinking {
+  align-self: flex-start;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  animation: chat-msg-in 220ms ease-out;
+}
+.chat-thinking__dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.chat-thinking__dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  animation: chat-dot 1.2s ease-in-out infinite;
+}
+.chat-thinking__dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.chat-thinking__dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.chat-thinking__label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+@keyframes chat-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes chat-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes chat-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-msg--fresh,
+  .chat-msg--thinking,
+  .chat-msg--fresh .chat-sources,
+  .chat-msg--fresh .chat-answer__actions,
+  .chat-thinking__dots span {
+    animation: none;
+  }
 }
 .chat-msg__text {
   white-space: pre-wrap;

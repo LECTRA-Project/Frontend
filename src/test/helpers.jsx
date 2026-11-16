@@ -6,6 +6,7 @@ import { apiClient, AUTH_TOKEN_KEY } from "../api/client.js";
 import { routes } from "../app/router.jsx";
 import AuthProvider from "../features/auth/AuthProvider.jsx";
 import I18nProvider from "../i18n/I18nProvider.jsx";
+import ThemeProvider from "../theme/ThemeProvider.jsx";
 
 /* Intercepts every request made through apiClient. Call .restore() after each test. */
 export function mockApi() {
@@ -40,15 +41,17 @@ export function ok(data, message = "OK") {
   return { status: true, message, data };
 }
 
-/* Renders the real app routes at `path`, inside the real AuthProvider and I18nProvider (as App does). */
+/* Renders the real app routes at `path`, inside the real providers (as App does). */
 export function renderApp(path = "/") {
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const utils = render(
-    <AuthProvider>
-      <I18nProvider>
-        <RouterProvider router={router} />
-      </I18nProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <I18nProvider>
+          <RouterProvider router={router} />
+        </I18nProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
   return { router, ...utils };
 }
