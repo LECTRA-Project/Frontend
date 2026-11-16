@@ -6,6 +6,7 @@
   then the points are joined into a line, and the area under the line gets a soft fill.
 */
 import { t, useI18n } from "../../i18n/i18n.js";
+import "./statistics.css";
 
 const WIDTH = 560;
 const HEIGHT = 260;

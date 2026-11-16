@@ -39,8 +39,10 @@ export function daysAgo(days, hour = 10) {
   return date.toISOString();
 }
 
-export function installChatBackend(api, { lectures = [], sessions = [], messages = {}, chat = true, models } = {}) {
+export function installChatBackend(api, { lectures = [], sessions = [], messages = {}, chat = true, models, progressCompletion = true } = {}) {
   const state = {
+    // The progress answers carry the lecture's completion_percent (false: an older backend).
+    progressCompletion,
     models: models ?? { default: "lectra", models: [{ id: "lectra", provider: "lectra", model: null, name: "Lectra" }], unavailable: [] },
     lectures: [...lectures],
     // { id, title, lectureIds, created_at, updated_at }
@@ -95,9 +97,15 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     const viewed = [...(state.viewed[found.id] ?? [])].filter((page) => page <= total).sort((a, b) => a - b);
     return { viewed_pages: viewed, viewed: viewed.length, total, percent: total ? Math.round((100 * viewed.length) / total) : 0 };
   };
+  // The answer of GET / POST …/progress: the progress, with the lecture's completion.
+  const progressAnswer = (found) => {
+    const current = lecture(found.id) ?? found;
+    const withCompletion = state.progressCompletion && typeof current.completion_percent === "number";
+    return withCompletion ? { ...progress(current), completion_percent: current.completion_percent } : progress(current);
+  };
   api.onGet(/\/student_profile\/lectures\/[^/]+\/progress$/).reply((config) => {
     const found = lecture(config.url.split("/")[3]);
-    return found ? [200, ok(progress(found))] : [404, { detail: "Lecture not found" }];
+    return found ? [200, ok(progressAnswer(found))] : [404, { detail: "Lecture not found" }];
   });
   api.onPost(/\/student_profile\/lectures\/[^/]+\/progress$/).reply((config) => {
     const found = lecture(config.url.split("/")[3]);
@@ -111,7 +119,7 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
       const updated = { ...found, completion_percent: Math.round((70 * read.viewed) / read.total) };
       state.lectures = state.lectures.map((item) => (item.id === found.id ? updated : item));
     }
-    return [200, ok(progress(found), "Reading progress saved")];
+    return [200, ok(progressAnswer(found), "Reading progress saved")];
   });
   api.onGet(/\/student_profile\/lectures\/[^/]+$/).reply((config) => {
     const found = lecture(config.url.split("/").at(-1));
