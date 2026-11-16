@@ -18,5 +18,4 @@ export default {
   "{provider} is unavailable: {message}. Check its API key in Account settings":
     "{provider} ist nicht verfügbar: {message}. Prüfe den API-Schlüssel in den Kontoeinstellungen",
   "Done": "Fertig",
-  "Your preferred {provider} model": "Dein bevorzugtes {provider}-Modell",
 };

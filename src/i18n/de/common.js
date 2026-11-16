@@ -21,7 +21,6 @@ export default {
   "Profile menu": "Profilmenü",
   "My profile": "Mein Profil",
   "Account settings": "Kontoeinstellungen",
-  "Help & Support": "Hilfe & Support",
   Later: "Später",
   "Sign out": "Abmelden",
   "{feature} will be added in a later phase": "{feature} kommt in einer späteren Phase",

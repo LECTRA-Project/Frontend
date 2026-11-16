@@ -5,50 +5,61 @@ import Button from "../../components/ui/Button.jsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import IconButton from "../../components/ui/IconButton.jsx";
-import { deleteApiKey, listApiKeys, listModels, saveApiKey } from "../../api/services/apiKeys.js";
-import { dateLocale, useI18n } from "../../i18n/i18n.js";
+import { DEFAULT_MODEL_ID, deleteApiKey, listApiKeys, listModels, saveApiKey } from "../../api/services/apiKeys.js";
+import { useI18n } from "../../i18n/i18n.js";
 import { useAuth } from "../auth/authContext.js";
 import { readChoice as readChatModel, writeChoice as writeChatModel } from "../workspace/useChatModel.js";
-import { preferenceUserKey, readPreferredModels, writePreferredModel } from "./preferredModels.js";
 import { PROVIDERS } from "./providers.js";
 
 /*
-  "AI provider API keys" in Account settings: the student's own Claude, Gemini and GPT keys.
+  "AI provider API keys" in Account settings: the student's own Claude, Gemini and GPT keys,
+  all handled from one "Add model" dropdown.
 
+  - The dropdown lists Lectra and the three providers. A provider without a key offers
+    "Add API key for …"; a provider with a key lists its models and offers replacing or
+    removing the key (which ends in …). Adding or replacing opens one key form below the
+    dropdown, named for its provider. Removing asks first.
   - The key is typed into a password field (it can be shown while typing), sent once to
     PUT /users/me/api-keys/{provider} and then dropped from the page. The backend checks it
     with the provider before saving it encrypted, so "saved" means the provider accepted it.
-  - A saved key is never shown again: only its last 4 characters (key_last4).
-  - "Test key" asks GET /users/me/models whether the provider lists models with the saved
-    key (the backend keeps a provider's list for a few minutes).
-  - Each row has a model dropdown. Its options are the models GET /users/me/models lists
-    for that provider: the backend asks the provider with the saved key and keeps only the
-    chat models LECTRA can call, so nothing here is invented. Without a key the dropdown is
-    disabled; while loading, on failure, with a rejected key or with no models it says so
-    and offers "Try again". The choice is the provider's preferred model (preferredModels.js,
-    per user in this browser); the chat lists it first and, when the chat is set to that
-    provider, uses it. A preferred model the key can't use (any more) is shown as not
-    available, never as usable. Removing a key clears its preferred model.
-  - Nothing here stores the key in the browser, logs it or puts it in a URL or a message.
-  - Opened from the chat's model dialog (/settings#api-key-<provider>): that provider's row
-    is scrolled into view with its Add / Replace button focused, and "Back to the chat"
-    returns to the chat with the model dialog open again.
+    A saved key is never shown again: only its last 4 characters (key_last4). Nothing here
+    stores the key in the browser, logs it or puts it in a URL or a message.
+  - The models are the ones GET /users/me/models lists: the backend asks each provider with
+    the saved key and keeps only the chat models LECTRA can call, so nothing is invented.
+    The list is reloaded when a key is saved, replaced or removed; loading, failures and
+    rejected keys are shown, with "Try again". After a key is saved its models are loaded
+    and the dropdown gets the focus to choose one.
+  - The choice is the chat's model (useChatModel: per user in this browser), so Account
+    settings and the model button in the chat always show the same model, and the chat
+    sends it with the next question. A chosen model whose key was removed or stopped
+    working is shown as not available and the student is asked to choose another one: it
+    is never switched behind their back.
+  - Opened from the chat's model dialog (/settings#api-key-<provider>): that provider's key
+    form opens, and "Back to the chat" returns to the chat with the model dialog open again.
 */
+const ACTION = /^(add|replace|remove):(\w+)$/;
+
 export default function ApiKeysSection() {
   const { t } = useI18n();
   const { user } = useAuth();
-  const userKey = preferenceUserKey(user);
+  const userKey = user?.id ?? user?.email ?? "signed-in-user"; // as in the workspace
   const location = useLocation();
   const returnTo = typeof location.state?.returnTo === "string" ? location.state.returnTo : null;
-  const target = location.hash.startsWith("#api-key-") ? location.hash.slice("#api-key-".length) : null;
+  // The provider the chat linked to, read once when the page opens.
+  const [linkedProvider] = useState(() => {
+    const id = location.hash.startsWith("#api-key-") ? location.hash.slice("#api-key-".length) : null;
+    return PROVIDERS.some((item) => item.id === id) ? id : null;
+  });
   const [keys, setKeys] = useState(null); // [{ provider, key_last4, updated_at }] once loaded
   const [loadError, setLoadError] = useState(null);
+  const [form, setForm] = useState(null); // provider id whose key form is open
   const [removing, setRemoving] = useState(null); // provider asked about
-  const [status, setStatus] = useState({}); // provider → { kind: "success" | "error" | "info", text }
+  const [notice, setNotice] = useState(null); // { kind: "success" | "error" | "info", text }
   // The models the saved keys unlock: { state: "idle" | "loading" | "ready" | "error", models, unavailable, error }
   const [catalog, setCatalog] = useState({ state: "idle", models: [], unavailable: [], error: null });
-  const [preferred, setPreferred] = useState(() => readPreferredModels(userKey));
+  const [chatChoice, setChatChoice] = useState(() => readChatModel(userKey)); // { id, name, provider }
   const modelsRequest = useRef(null);
+  const selectRef = useRef(null);
 
   // Asks the server (which asks each provider with the saved key). Resolves with the
   // result, or null when it failed or was replaced by a newer request.
@@ -70,7 +81,7 @@ export default function ApiKeysSection() {
     );
   }, []);
 
-  // From an event (save, Test key, Try again): show the loading state, then ask.
+  // From an event (save, remove, Try again): show the loading state, then ask.
   const loadModels = useCallback(() => {
     setCatalog((current) => ({ ...current, state: "loading", error: null }));
     return fetchModels();
@@ -78,19 +89,12 @@ export default function ApiKeysSection() {
 
   useEffect(() => () => modelsRequest.current?.abort(), []);
 
-  // Another user signed in on this device: their own preferences.
-  const [preferredFor, setPreferredFor] = useState(userKey);
-  if (preferredFor !== userKey) {
-    setPreferredFor(userKey);
-    setPreferred(readPreferredModels(userKey));
+  // Another user signed in on this device: their own choice.
+  const [choiceFor, setChoiceFor] = useState(userKey);
+  if (choiceFor !== userKey) {
+    setChoiceFor(userKey);
+    setChatChoice(readChatModel(userKey));
   }
-
-  // Load the models once the saved keys are known (only when there is a key to ask with).
-  const hasKeys = Boolean(keys?.length);
-  // (The catalog starts "idle", which already reads as loading.)
-  useEffect(() => {
-    if (hasKeys) fetchModels();
-  }, [hasKeys, fetchModels]);
 
   // State is only set once the server answers.
   const load = useCallback(
@@ -99,13 +103,17 @@ export default function ApiKeysSection() {
         (list) => {
           setKeys(list);
           setLoadError(null);
+          // The models of the saved keys (later changes reload from their own events).
+          // The catalog starts "idle", which already reads as loading.
+          if (list.length > 0) fetchModels();
+          if (linkedProvider) setForm(linkedProvider);
         },
         (err) => {
           if (signal?.aborted || err?.name === "CanceledError") return;
           setLoadError(err.message);
         }
       ),
-    []
+    [fetchModels, linkedProvider]
   );
 
   useEffect(() => {
@@ -114,38 +122,65 @@ export default function ApiKeysSection() {
     return () => controller.abort();
   }, [load]);
 
-  const report = (provider, kind, text) => setStatus((current) => ({ ...current, [provider]: kind ? { kind, text } : null }));
+  // Back to the dropdown once the key form or the dialog is gone (after that render).
+  const refocus = useRef(false);
+  function focusDropdown() {
+    refocus.current = true;
+  }
+  useEffect(() => {
+    if (!refocus.current || removing) return;
+    refocus.current = false;
+    selectRef.current?.focus();
+  });
 
   function saved(provider, data) {
-    setKeys((list) => [...(list ?? []).filter((item) => item.provider !== provider), data]);
+    setKeys((list) => [...(list ?? []).filter((item) => item.provider !== provider.id), data]);
+    setForm(null);
+    setNotice({ kind: "success", text: t("Key saved. {provider} accepted it.", { provider: provider.name }) });
+    focusDropdown();
     // A new or replaced key may unlock other models: ask again.
     loadModels();
   }
 
-  function choosePreferred(provider, model) {
-    setPreferred(writePreferredModel(userKey, provider.id, model.id));
-    // The chat is set to this provider: it now asks with the chosen model.
-    const chat = readChatModel(userKey);
-    if (chat.provider === provider.id && chat.id !== model.id) {
-      writeChatModel(userKey, { id: model.id, name: model.name || model.id, provider: provider.id });
-    }
-    report(provider.id, "success", t("{model} is your preferred {provider} model in the chat.", { model: model.name, provider: provider.name }));
+  function cancelForm() {
+    setForm(null);
+    focusDropdown();
+  }
+
+  function chooseChatModel(model) {
+    const choice = { id: model.id, name: model.name || model.id, provider: model.provider || "" };
+    writeChatModel(userKey, choice);
+    setChatChoice(choice);
+  }
+
+  function act(action, providerId) {
+    setNotice(null);
+    if (action === "remove") setRemoving(providerId);
+    else setForm(providerId);
   }
 
   async function confirmRemove() {
-    const provider = removing;
+    const provider = PROVIDERS.find((item) => item.id === removing);
     setRemoving(null);
-    report(provider, "info", t("Removing the key…"));
+    setForm(null);
+    setNotice({ kind: "info", text: t("Removing the key…") });
     try {
-      await deleteApiKey(provider);
-      setKeys((list) => (list ?? []).filter((item) => item.provider !== provider));
-      setPreferred(writePreferredModel(userKey, provider, null));
-      setCatalog((current) => ({ ...current, models: current.models.filter((item) => item.provider !== provider) }));
-      report(provider, "success", t("The key was removed. Its models are no longer offered in the chat."));
+      await deleteApiKey(provider.id);
+      setKeys((list) => (list ?? []).filter((item) => item.provider !== provider.id));
+      setCatalog((current) => ({
+        ...current,
+        models: current.models.filter((item) => item.provider !== provider.id),
+        unavailable: current.unavailable.filter((item) => item.provider !== provider.id),
+      }));
+      setNotice({ kind: "success", text: t("The {provider} key was removed. Its models are no longer offered in the chat.", { provider: provider.name }) });
     } catch (err) {
-      report(provider, "error", err.message);
+      setNotice({ kind: "error", text: err.message });
     }
+    focusDropdown();
   }
+
+  const formProvider = PROVIDERS.find((item) => item.id === form) ?? null;
+  const removingProvider = PROVIDERS.find((item) => item.id === removing) ?? null;
 
   return (
     <>
@@ -184,31 +219,39 @@ export default function ApiKeysSection() {
         </p>
       )}
 
-      {keys &&
-        PROVIDERS.map((provider) => (
-          <ProviderKeyRow
-            key={provider.id}
-            provider={provider}
-            saved={keys.find((item) => item.provider === provider.id) ?? null}
-            status={status[provider.id] ?? null}
-            onStatus={(kind, text) => report(provider.id, kind, text)}
-            onSaved={(data) => saved(provider.id, data)}
-            onRemove={() => setRemoving(provider.id)}
-            catalog={catalog}
-            preferredId={preferred[provider.id] ?? null}
-            onChooseModel={(model) => choosePreferred(provider, model)}
-            onLoadModels={loadModels}
-            focusOnOpen={target === provider.id}
-          />
-        ))}
+      {keys && (
+        <ModelDropdown
+          keys={keys}
+          catalog={catalog}
+          selected={chatChoice}
+          notice={notice}
+          onChoose={chooseChatModel}
+          onAction={act}
+          onRetry={loadModels}
+          selectRef={selectRef}
+        >
+          {formProvider && (
+            <KeyForm
+              key={formProvider.id}
+              provider={formProvider}
+              saved={keys.find((item) => item.provider === formProvider.id) ?? null}
+              onSaved={(data) => saved(formProvider, data)}
+              onCancel={cancelForm}
+            />
+          )}
+        </ModelDropdown>
+      )}
 
-      {removing && (
+      {removingProvider && (
         <ConfirmDialog
-          title={t("Remove the {provider} API key?", { provider: PROVIDERS.find((item) => item.id === removing)?.name })}
+          title={t("Remove the {provider} API key?", { provider: removingProvider.name })}
           confirmLabel={t("Remove key")}
           danger
           onConfirm={confirmRemove}
-          onCancel={() => setRemoving(null)}
+          onCancel={() => {
+            setRemoving(null);
+            focusDropdown();
+          }}
         >
           <p>{t("Its models are no longer offered in the chat. You can add a key again at any time.")}</p>
         </ConfirmDialog>
@@ -217,347 +260,251 @@ export default function ApiKeysSection() {
   );
 }
 
-function ProviderKeyRow({
-  provider,
-  saved,
-  status,
-  onStatus,
-  onSaved,
-  onRemove,
-  catalog,
-  preferredId,
-  onChooseModel,
-  onLoadModels,
-  focusOnOpen = false,
-}) {
+/*
+  "Add model": Lectra, then each provider. With a usable key a provider lists its models,
+  then "Replace key…" and "Remove key…"; without a key it offers adding one. Server messages
+  never contain a key.
+*/
+function ModelDropdown({ keys, catalog, selected, notice, onChoose, onAction, onRetry, selectRef, children }) {
+  const { t } = useI18n();
+  const selectId = useId();
+  const noteId = useId();
+  const own = catalog.models.filter((item) => item.provider !== DEFAULT_MODEL_ID);
+  const lectra = catalog.models.find((item) => item.id === DEFAULT_MODEL_ID) ?? { id: DEFAULT_MODEL_ID, provider: DEFAULT_MODEL_ID, name: "Lectra" };
+  const hasKeys = keys.length > 0;
+  const loading = hasKeys && (catalog.state === "idle" || catalog.state === "loading");
+
+  const groups = PROVIDERS.map((provider) => {
+    const key = keys.find((item) => item.provider === provider.id) ?? null;
+    const models = own.filter((item) => item.provider === provider.id);
+    const problem = catalog.unavailable.find((item) => item.provider === provider.id) ?? null;
+    let state = "models";
+    if (!key) state = "add";
+    else if (models.length > 0) state = "models";
+    else if (loading) state = "loading";
+    else if (problem) state = "broken";
+    else if (catalog.state === "error") state = "error";
+    else state = "empty";
+    return { ...provider, key, models, problem, state };
+  });
+
+  const isOwn = selected.id !== DEFAULT_MODEL_ID;
+  const listed = !isOwn || own.some((item) => item.id === selected.id);
+  // A chosen model the keys can't use (any more): shown, but not as usable.
+  const selectedMissing = isOwn && !listed && !loading;
+  const selectedProvider = PROVIDERS.find((item) => item.id === selected.provider)?.name ?? selected.provider;
+  const problems = groups.filter((group) => group.state === "broken");
+  const canRetry = hasKeys && !loading && (catalog.state === "error" || problems.length > 0 || groups.some((group) => group.state === "empty"));
+
+  function change(event) {
+    const action = ACTION.exec(event.target.value);
+    if (action) {
+      onAction(action[1], action[2]);
+      return;
+    }
+    const model = [lectra, ...own].find((item) => item.id === event.target.value);
+    if (model) onChoose(model);
+  }
+
+  return (
+    <div className="settings__row settings__row--model">
+      <div className="settings__model-head">
+        <div>
+          <label className="settings__label" htmlFor={selectId}>
+            {t("Add model")}
+          </label>
+          <p className="settings__help">{t("Choose the model that answers in the chat, or add a provider's API key.")}</p>
+        </div>
+        <select
+          ref={selectRef}
+          id={selectId}
+          className="settings__select settings__model-select"
+          value={selected.id}
+          aria-describedby={noteId}
+          onChange={change}
+        >
+          {selectedMissing && (
+            <option value={selected.id} disabled>
+              {t("{model} (not available)", { model: selected.name })}
+            </option>
+          )}
+          <optgroup label="LECTRA">
+            <option value={lectra.id}>{t("Lectra (default)")}</option>
+          </optgroup>
+          {groups.map((group) => (
+            <optgroup key={group.id} label={group.name}>
+              {group.state === "models" &&
+                group.models.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              {group.state === "add" && <option value={`add:${group.id}`}>{t("Add API key for {provider}…", { provider: group.name })}</option>}
+              {group.state === "broken" && <option disabled>{t("Key not working")}</option>}
+              {group.state === "loading" && <option disabled>{t("Loading models…")}</option>}
+              {group.state === "error" && <option disabled>{t("Models not loaded")}</option>}
+              {group.state === "empty" && <option disabled>{t("No models available")}</option>}
+              {group.key && (
+                <>
+                  <option value={`replace:${group.id}`}>
+                    {t("Replace {provider} key (ends in {last4})…", { provider: group.name, last4: group.key.key_last4 })}
+                  </option>
+                  <option value={`remove:${group.id}`}>{t("Remove {provider} key…", { provider: group.name })}</option>
+                </>
+              )}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      <div id={noteId} className="settings__model-notes">
+        {selectedMissing ? (
+          <p className="settings__key-status settings__key-status--error" role="alert">
+            {t("{model} can't be used any more. Choose another model.", { model: selected.name })}
+          </p>
+        ) : (
+          <p className="settings__help">
+            {isOwn
+              ? t("Chat model: {model} · {provider}", { model: selected.name, provider: selectedProvider })
+              : t("Chat model: Lectra · LECTRA's own models")}
+          </p>
+        )}
+        {loading && <p className="settings__help">{t("Loading the models available with your keys…")}</p>}
+        {problems.map((group) => (
+          <p key={group.id} className="settings__key-status settings__key-status--error">
+            {`${group.name}: ${group.problem.message}`}
+          </p>
+        ))}
+        {hasKeys && catalog.state === "error" && <p className="settings__key-status settings__key-status--error">{catalog.error}</p>}
+        {groups
+          .filter((group) => group.state === "empty")
+          .map((group) => (
+            <p key={group.id} className="settings__key-status settings__key-status--error">
+              {t("{provider} offers no chat models LECTRA can use with this key.", { provider: group.name })}
+            </p>
+          ))}
+        {canRetry && (
+          <p>
+            <button type="button" className="settings__key-retry" onClick={onRetry}>
+              {t("Try again")}
+            </button>
+          </p>
+        )}
+        {notice && (
+          <p
+            className={`settings__key-status settings__key-status--${notice.kind}`}
+            role={notice.kind === "error" ? "alert" : "status"}
+          >
+            {notice.text}
+          </p>
+        )}
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
+/* The key form for one provider (add, or replace the saved key). */
+function KeyForm({ provider, saved, onSaved, onCancel }) {
   const { t } = useI18n();
   const inputId = useId();
   const helpId = useId();
-  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [visible, setVisible] = useState(false);
-  const [busy, setBusy] = useState(null); // "saving" | "testing"
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState(null); // { kind, text }
   const inputRef = useRef(null);
-  const editButtonRef = useRef(null);
 
   useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
-
-  // Linked to this provider (from the chat): show the row and focus Add key / Replace.
-  const rowRef = useRef(null);
-  useEffect(() => {
-    if (!focusOnOpen) return;
-    rowRef.current?.scrollIntoView?.({ block: "center" });
-    editButtonRef.current?.focus({ preventScroll: true });
-  }, [focusOnOpen]);
-
-  function stopEditing() {
-    setEditing(false);
-    setValue("");
-    setVisible(false);
-    requestAnimationFrame(() => editButtonRef.current?.focus());
-  }
+    inputRef.current?.scrollIntoView?.({ block: "center" });
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
 
   async function save(event) {
     event.preventDefault();
     const key = value.trim();
     if (!key) {
-      onStatus("error", t("Enter your API key first."));
+      setStatus({ kind: "error", text: t("Enter your API key first.") });
       return;
     }
     if (/\s/.test(key)) {
-      onStatus("error", t("An API key has no spaces. Check that you copied the whole key and nothing else."));
+      setStatus({ kind: "error", text: t("An API key has no spaces. Check that you copied the whole key and nothing else.") });
       return;
     }
-    setBusy("saving");
-    onStatus("info", t("Checking the key with {provider}…", { provider: provider.name }));
+    setBusy(true);
+    setStatus({ kind: "info", text: t("Checking the key with {provider}…", { provider: provider.name }) });
     try {
       const data = await saveApiKey(provider.id, key);
+      setValue("");
       onSaved(data);
-      stopEditing();
-      onStatus("success", t("Key saved. {provider} accepted it.", { provider: provider.name }));
     } catch (err) {
       // The server's message never contains the key.
-      onStatus("error", err.message);
-    } finally {
-      setBusy(null);
+      setStatus({ kind: "error", text: err.message });
+      setBusy(false);
     }
   }
-
-  async function test() {
-    setBusy("testing");
-    onStatus("info", t("Testing the key with {provider}…", { provider: provider.name }));
-    try {
-      const result = await onLoadModels();
-      if (!result) {
-        onStatus(null);
-        return;
-      }
-      const problem = result.unavailable.find((item) => item.provider === provider.id);
-      const count = result.models.filter((item) => item.provider === provider.id).length;
-      if (problem) onStatus("error", problem.message);
-      else if (count === 0) onStatus("error", t("{provider} accepted the key but offers no chat models for it.", { provider: provider.name }));
-      else
-        onStatus(
-          "success",
-          count === 1
-            ? t("The key works: {provider} offers 1 chat model with it.", { provider: provider.name })
-            : t("The key works: {provider} offers {count} chat models with it.", { provider: provider.name, count })
-        );
-    } catch (err) {
-      onStatus("error", err.message);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  const updated = saved?.updated_at ? new Date(saved.updated_at) : null;
-  const updatedText =
-    updated && !Number.isNaN(updated.getTime())
-      ? updated.toLocaleDateString(dateLocale(undefined), { year: "numeric", month: "short", day: "numeric" })
-      : null;
 
   return (
-    <div className="settings__row settings__row--key" id={`api-key-${provider.id}`} ref={rowRef}>
-      <div className="settings__key-head">
-        <div>
-          <p className="settings__label">{provider.name}</p>
-          <p className="settings__help" id={helpId}>
-            {saved ? (
-              <>
-                <span className="settings__key-badge">
-                  <Icon name="check" size={13} />
-                  {t("Key saved")}
-                </span>{" "}
-                {updatedText
-                  ? t("Ends in {last4} · updated {date}", { last4: saved.key_last4, date: updatedText })
-                  : t("Ends in {last4}", { last4: saved.key_last4 })}
-              </>
-            ) : (
-              t("No key saved")
-            )}
-          </p>
-        </div>
-        {!editing && (
-          <div className="settings__key-actions">
-            {saved ? (
-              <>
-                <Button size="sm" onClick={test} disabled={Boolean(busy)}>
-                  {busy === "testing" ? t("Testing…") : t("Test key")}
-                </Button>
-                <Button
-                  size="sm"
-                  ref={editButtonRef}
-                  onClick={() => setEditing(true)}
-                  disabled={Boolean(busy)}
-                  aria-label={t("Replace the {provider} API key", { provider: provider.name })}
-                >
-                  {t("Replace")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={onRemove}
-                  disabled={Boolean(busy)}
-                  aria-label={t("Remove the {provider} API key", { provider: provider.name })}
-                >
-                  {t("Remove")}
-                </Button>
-              </>
-            ) : (
-              <Button
-                size="sm"
-                ref={editButtonRef}
-                onClick={() => setEditing(true)}
-                aria-label={t("Add a {provider} API key", { provider: provider.name })}
-              >
-                {t("Add key")}
-              </Button>
-            )}
-          </div>
+    <form className="settings__key-form" onSubmit={save} autoComplete="off">
+      <label className="settings__label" htmlFor={inputId}>
+        {t("{provider} API key", { provider: provider.name })}
+      </label>
+      <p className="settings__help" id={helpId}>
+        {saved
+          ? t("Replaces the saved key ending in {last4}.", { last4: saved.key_last4 })
+          : t("Create a key in your {provider} account:", { provider: provider.name })}{" "}
+        {!saved && (
+          <a href={provider.consoleUrl} target="_blank" rel="noreferrer noopener">
+            {provider.consoleUrl.replace(/^https:\/\//, "")}
+          </a>
         )}
+      </p>
+      <div className="settings__key-field">
+        <input
+          ref={inputRef}
+          id={inputId}
+          className="settings__key-input"
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder={provider.placeholder}
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          data-1p-ignore=""
+          data-lpignore="true"
+          maxLength={512}
+          disabled={busy}
+          aria-describedby={helpId}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && !busy) {
+              event.stopPropagation();
+              onCancel();
+            }
+          }}
+        />
+        <IconButton
+          icon={visible ? "eyeOff" : "eye"}
+          label={visible ? t("Hide the key") : t("Show the key")}
+          onClick={() => setVisible((shown) => !shown)}
+          aria-pressed={visible}
+        />
       </div>
-
-      <ModelSelect
-        provider={provider}
-        hasKey={Boolean(saved)}
-        catalog={catalog}
-        preferredId={preferredId}
-        onChoose={onChooseModel}
-        onRetry={onLoadModels}
-      />
-
-      {editing && (
-        <form className="settings__key-form" onSubmit={save} autoComplete="off">
-          <label className="visually-hidden" htmlFor={inputId}>
-            {t("{provider} API key", { provider: provider.name })}
-          </label>
-          <div className="settings__key-field">
-            <input
-              ref={inputRef}
-              id={inputId}
-              className="settings__key-input"
-              type={visible ? "text" : "password"}
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              placeholder={provider.placeholder}
-              autoComplete="off"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              data-1p-ignore=""
-              data-lpignore="true"
-              maxLength={512}
-              disabled={busy === "saving"}
-              aria-describedby={helpId}
-              onKeyDown={(event) => {
-                if (event.key === "Escape" && busy !== "saving") {
-                  event.stopPropagation();
-                  stopEditing();
-                }
-              }}
-            />
-            <IconButton
-              icon={visible ? "eyeOff" : "eye"}
-              label={visible ? t("Hide the key") : t("Show the key")}
-              onClick={() => setVisible((shown) => !shown)}
-              aria-pressed={visible}
-            />
-          </div>
-          <div className="settings__key-actions">
-            <Button type="submit" variant="primary" size="sm" disabled={busy === "saving"}>
-              {busy === "saving" ? t("Checking…") : t("Save key")}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={stopEditing} disabled={busy === "saving"}>
-              {t("Cancel")}
-            </Button>
-          </div>
-          <p className="settings__help">
-            {t("Create a key in your {provider} account:", { provider: provider.name })}{" "}
-            <a href={provider.consoleUrl} target="_blank" rel="noreferrer noopener">
-              {provider.consoleUrl.replace(/^https:\/\//, "")}
-            </a>
-          </p>
-        </form>
-      )}
-
+      <div className="settings__key-actions">
+        <Button type="submit" variant="primary" size="sm" disabled={busy}>
+          {busy ? t("Checking…") : t("Save key")}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>
+          {t("Cancel")}
+        </Button>
+      </div>
       {status && (
-        <p
-          className={`settings__key-status settings__key-status--${status.kind}`}
-          role={status.kind === "error" ? "alert" : "status"}
-        >
+        <p className={`settings__key-status settings__key-status--${status.kind}`} role={status.kind === "error" ? "alert" : "status"}>
           {status.text}
         </p>
       )}
-    </div>
-  );
-}
-
-/*
-  The provider's model dropdown. Only lists what GET /users/me/models returned for the
-  provider; every other state (no key, loading, failed, key rejected, no models) keeps the
-  dropdown disabled and says why. The messages come from the server and never contain a key.
-*/
-function ModelSelect({ provider, hasKey, catalog, preferredId, onChoose, onRetry }) {
-  const { t } = useI18n();
-  const selectId = useId();
-  const noteId = useId();
-  const options = catalog.models.filter((item) => item.provider === provider.id);
-  const problem = catalog.unavailable.find((item) => item.provider === provider.id) ?? null;
-
-  let placeholder = null; // the only (disabled) option when nothing can be chosen
-  let note = null; // { kind, text, retry }
-  if (!hasKey) {
-    placeholder = t("Add a key first");
-    note = { kind: "info", text: t("Add your {provider} API key to see the models it offers.", { provider: provider.name }) };
-  } else if (catalog.state === "loading" || catalog.state === "idle") {
-    placeholder = t("Loading models…");
-    note = { kind: "info", text: t("Loading the models available with your key…") };
-  } else if (problem) {
-    placeholder = t("Not available");
-    note = { kind: "error", text: problem.message, retry: true };
-  } else if (catalog.state === "error" && options.length === 0) {
-    placeholder = t("Models not loaded");
-    note = { kind: "error", text: catalog.error, retry: true };
-  } else if (options.length === 0) {
-    placeholder = t("No chat models available");
-    note = { kind: "error", text: t("{provider} offers no chat models LECTRA can use with this key.", { provider: provider.name }), retry: true };
-  }
-
-  const usable = !placeholder;
-  const preferredListed = usable && options.some((item) => item.id === preferredId);
-  // A preferred model the key can't use: shown as not available, never as usable.
-  const preferredMissing = usable && preferredId && !preferredListed;
-  if (preferredMissing) {
-    note = {
-      kind: "error",
-      text: t("Your preferred model {model} isn't available with this key. Choose another model.", {
-        model: preferredId.slice(provider.id.length + 1),
-      }),
-      retry: true,
-    };
-  } else if (usable && catalog.state === "error") {
-    // A refresh failed: the last list is still shown, with the error.
-    note = { kind: "error", text: catalog.error, retry: true };
-  }
-
-  return (
-    <div className="settings__key-model">
-      <label className="settings__key-model-label" htmlFor={selectId}>
-        {t("Model")}
-      </label>
-      <select
-        id={selectId}
-        className="settings__select settings__key-model-select"
-        value={usable ? preferredId ?? "" : ""}
-        disabled={!usable}
-        aria-describedby={note ? noteId : undefined}
-        aria-label={t("{provider} model", { provider: provider.name })}
-        onChange={(event) => {
-          const model = options.find((item) => item.id === event.target.value);
-          if (model) onChoose(model);
-        }}
-      >
-        {placeholder ? (
-          <option value="">{placeholder}</option>
-        ) : (
-          <>
-            {!preferredId && (
-              <option value="" disabled>
-                {t("Choose a model")}
-              </option>
-            )}
-            {preferredMissing && (
-              <option value={preferredId} disabled>
-                {t("{model} (not available)", { model: preferredId.slice(provider.id.length + 1) })}
-              </option>
-            )}
-            {options.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </>
-        )}
-      </select>
-      {note && (
-        <p
-          id={noteId}
-          className={`settings__key-model-note settings__key-status--${note.kind}`}
-          // Read with the dropdown (aria-describedby); the row's status line does the announcing.
-        >
-          {note.text}
-          {note.retry && (
-            <>
-              {" "}
-              <button type="button" className="settings__key-retry" onClick={onRetry} disabled={catalog.state === "loading"}>
-                {t("Try again")}
-              </button>
-            </>
-          )}
-        </p>
-      )}
-    </div>
+    </form>
   );
 }

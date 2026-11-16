@@ -10,13 +10,13 @@ import ApiKeysSection from "./ApiKeysSection.jsx";
 import "./profile.css";
 
 /*
-  Account settings — interface language, notifications, privacy and the student's own AI
-  provider API keys.
+  Account settings — interface language, notifications and the student's own AI provider
+  API keys.
 
   - Interface language: applies at once and is saved for this user in this browser
     (see I18nProvider), so it is restored on the next visit.
   - API keys: saved on the server (see ApiKeysSection).
-  - DEMO MODE: notifications and privacy only change local state; "Save settings" saves
+  - DEMO MODE: notifications only change local state; "Save settings" saves
     nothing for them.
 */
 export default function AccountSettingsPage() {
@@ -24,8 +24,6 @@ export default function AccountSettingsPage() {
   const location = useLocation();
   const [settings, setSettings] = useState({
     studyReminders: true,
-    productUpdates: false,
-    showStatistics: false,
   });
   const [saved, setSaved] = useState(false);
 
@@ -73,20 +71,6 @@ export default function AccountSettingsPage() {
           help={t("Email reminders for planned study sessions.")}
           checked={settings.studyReminders}
           onChange={(value) => update("studyReminders", value)}
-        />
-        <SettingRow
-          label={t("Product updates")}
-          help={t("Occasional news about new LECTRA features.")}
-          checked={settings.productUpdates}
-          onChange={(value) => update("productUpdates", value)}
-        />
-
-        <h2 className="settings__group">{t("Privacy")}</h2>
-        <SettingRow
-          label={t("Show statistics on my profile")}
-          help={t("Only you can see your statistics by default.")}
-          checked={settings.showStatistics}
-          onChange={(value) => update("showStatistics", value)}
         />
 
         <ApiKeysSection />

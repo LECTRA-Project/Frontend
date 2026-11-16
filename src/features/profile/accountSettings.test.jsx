@@ -57,40 +57,60 @@ beforeEach(() => {
 
 afterEach(() => api.restore());
 
-const row = (name) => screen.getByText(name, { selector: ".settings__label" }).closest(".settings__row");
+const CHAT_KEY = `lectra:chat-model:v1:${TEST_USER.id}`;
+const dropdown = () => screen.getByRole("combobox", { name: "Add model" });
+const groupsOf = (select) =>
+  [...select.querySelectorAll("optgroup")].map((group) => [group.label, [...group.querySelectorAll("option")].map((option) => option.textContent)]);
+const groupOf = (name) => groupsOf(dropdown()).find(([label]) => label === name)?.[1];
+const ready = () => waitFor(() => expect(groupOf("Anthropic Claude")).toContain("Claude Opus 5.5"));
 
-describe("AI provider API keys", () => {
-  it("shows which providers have a key, masked to its last 4 characters", async () => {
+describe("AI provider API keys (one Add model dropdown)", () => {
+  it("is the only model and key control: no separate provider rows or buttons", async () => {
     renderApp("/settings");
-    expect(await screen.findByRole("heading", { name: "AI provider API keys" })).toBeInTheDocument();
-    await waitFor(() => expect(within(row("Anthropic Claude")).getByText("Key saved")).toBeInTheDocument());
-    expect(within(row("Anthropic Claude")).getByText(/Ends in x9Qa/)).toBeInTheDocument();
-    expect(within(row("Google Gemini")).getByText("No key saved")).toBeInTheDocument();
-    expect(within(row("OpenAI GPT")).getByText("No key saved")).toBeInTheDocument();
-    expect(within(row("Google Gemini")).getByRole("button", { name: "Add a Google Gemini API key" })).toBeInTheDocument();
+    await screen.findByRole("combobox", { name: "Add model" });
+    await ready();
+    expect(screen.getAllByRole("combobox").map((select) => select.labels[0]?.textContent)).toEqual(["Interface language", "Add model"]);
+    expect(screen.queryByRole("button", { name: /Add key|Replace|Remove|Test key/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("No key saved")).not.toBeInTheDocument();
+    expect(groupsOf(dropdown())).toEqual([
+      ["LECTRA", ["Lectra (default)"]],
+      ["Anthropic Claude", ["Claude Opus 5.5", "Claude Haiku 5.5", "Replace Anthropic Claude key (ends in x9Qa)…", "Remove Anthropic Claude key…"]],
+      ["Google Gemini", ["Add API key for Google Gemini…"]],
+      ["OpenAI GPT", ["Add API key for OpenAI GPT…"]],
+    ]);
+    expect(dropdown()).toHaveValue("lectra");
+    expect(screen.getByText("Chat model: Lectra · LECTRA's own models")).toBeInTheDocument();
+    // The other settings stay.
+    expect(screen.getByRole("button", { name: "Save settings" })).toBeInTheDocument();
   });
 
-  it("adds a key: hidden by default, can be shown, checked by the server and then never shown again", async () => {
+  it("adds a key from the dropdown: masked, checked by the server, never shown again, then its models", async () => {
     const user = userEvent.setup();
     renderApp("/settings");
-    await user.click(await screen.findByRole("button", { name: "Add a Google Gemini API key" }));
+    await screen.findByRole("combobox", { name: "Add model" });
+    await ready();
+    await user.selectOptions(dropdown(), "add:gemini");
+
     const input = screen.getByLabelText("Google Gemini API key");
     expect(input).toHaveAttribute("type", "password");
     expect(input).toHaveFocus();
+    expect(dropdown()).toHaveValue("lectra");
     await user.type(input, GEMINI_KEY);
-
     await user.click(screen.getByRole("button", { name: "Show the key" }));
     expect(input).toHaveAttribute("type", "text");
     await user.click(screen.getByRole("button", { name: "Hide the key" }));
-    expect(input).toHaveAttribute("type", "password");
 
+    models = { ...models, models: [...models.models, { id: "gemini:gemini-2.5-pro", provider: "gemini", model: "gemini-2.5-pro", name: "Gemini 2.5 Pro" }] };
     await user.click(screen.getByRole("button", { name: "Save key" }));
     expect(await screen.findByText("Key saved. Google Gemini accepted it.")).toBeInTheDocument();
     expect(requests).toEqual([{ method: "put", provider: "gemini", key: GEMINI_KEY }]);
-
-    // The form is gone and the key is nowhere on the page or in the browser's storage.
     expect(screen.queryByLabelText("Google Gemini API key")).not.toBeInTheDocument();
-    expect(within(row("Google Gemini")).getByText(/Ends in abcd/)).toBeInTheDocument();
+
+    await waitFor(() => expect(groupOf("Google Gemini")).toEqual(["Gemini 2.5 Pro", "Replace Google Gemini key (ends in abcd)…", "Remove Google Gemini key…"]));
+    expect(dropdown()).toHaveFocus();
+    await user.selectOptions(dropdown(), "gemini:gemini-2.5-pro");
+    expect(screen.getByText("Chat model: Gemini 2.5 Pro · Google Gemini")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(CHAT_KEY))).toEqual({ id: "gemini:gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "gemini" });
     expect(document.body.innerHTML).not.toContain(GEMINI_KEY);
     expect(JSON.stringify({ ...localStorage })).not.toContain(GEMINI_KEY);
   });
@@ -98,58 +118,92 @@ describe("AI provider API keys", () => {
   it("shows the provider's rejection without the key, and keeps nothing", async () => {
     const user = userEvent.setup();
     renderApp("/settings");
-    await user.click(await screen.findByRole("button", { name: "Add a Google Gemini API key" }));
+    await screen.findByRole("combobox", { name: "Add model" });
+    await user.selectOptions(dropdown(), "add:gemini");
     await user.type(screen.getByLabelText("Google Gemini API key"), "bad-key-0000");
     await user.click(screen.getByRole("button", { name: "Save key" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("The Gemini API key was rejected. Check that it is correct and active");
     expect(alert).not.toHaveTextContent("bad-key-0000");
-    expect(within(row("Google Gemini")).getByText("No key saved")).toBeInTheDocument();
+    expect(groupOf("Google Gemini")).toEqual(["Add API key for Google Gemini…"]);
   });
 
-  it("checks the input before sending it", async () => {
+  it("checks the input before sending it, and Cancel closes the form", async () => {
     const user = userEvent.setup();
     renderApp("/settings");
-    await user.click(await screen.findByRole("button", { name: "Add a Google Gemini API key" }));
+    await screen.findByRole("combobox", { name: "Add model" });
+    await user.selectOptions(dropdown(), "add:openai");
     await user.click(screen.getByRole("button", { name: "Save key" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Enter your API key first.");
-    await user.type(screen.getByLabelText("Google Gemini API key"), "AIza with spaces");
+    await user.type(screen.getByLabelText("OpenAI GPT API key"), "sk with spaces");
     await user.click(screen.getByRole("button", { name: "Save key" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("An API key has no spaces.");
     expect(requests).toEqual([]);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByLabelText("OpenAI GPT API key")).not.toBeInTheDocument();
   });
 
-  it("tests a saved key with the provider's real model list", async () => {
+  it("replaces and removes a saved key from the dropdown (after asking)", async () => {
     const user = userEvent.setup();
     renderApp("/settings");
-    await user.click(await screen.findByRole("button", { name: "Test key" }));
-    expect(await screen.findByText("The key works: Anthropic Claude offers 2 chat models with it.")).toBeInTheDocument();
+    await screen.findByRole("combobox", { name: "Add model" });
+    await ready();
+    await user.selectOptions(dropdown(), "replace:anthropic");
+    expect(screen.getByText("Replaces the saved key ending in x9Qa.")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Anthropic Claude API key"), "sk-ant-NEWKEY-wxyz");
+    await user.click(screen.getByRole("button", { name: "Save key" }));
+    expect(await screen.findByText("Key saved. Anthropic Claude accepted it.")).toBeInTheDocument();
+    await waitFor(() => expect(groupOf("Anthropic Claude")).toContain("Replace Anthropic Claude key (ends in wxyz)…"));
 
+    await user.selectOptions(dropdown(), "remove:anthropic");
+    const dialog = screen.getByRole("dialog", { name: "Remove the Anthropic Claude API key?" });
+    await user.click(within(dialog).getByRole("button", { name: "Remove key" }));
+    expect(await screen.findByText("The Anthropic Claude key was removed. Its models are no longer offered in the chat.")).toBeInTheDocument();
+    expect(groupOf("Anthropic Claude")).toEqual(["Add API key for Anthropic Claude…"]);
+    expect(requests.at(-1)).toEqual({ method: "delete", provider: "anthropic" });
+  });
+
+  it("does not offer models for a rejected key, and lets it be replaced", async () => {
+    const user = userEvent.setup();
     models = {
       ...models,
       models: [models.models[0]],
       unavailable: [{ provider: "anthropic", name: "Claude", message: "Your Claude API key was rejected. Check or replace it in your settings" }],
     };
-    await user.click(screen.getByRole("button", { name: "Test key" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Your Claude API key was rejected");
+    renderApp("/settings");
+    expect(await screen.findByText(/Anthropic Claude: Your Claude API key was rejected/)).toBeInTheDocument();
+    expect(groupOf("Anthropic Claude")).toEqual(["Key not working", "Replace Anthropic Claude key (ends in x9Qa)…", "Remove Anthropic Claude key…"]);
+    await user.selectOptions(dropdown(), "replace:anthropic");
+    expect(screen.getByLabelText("Anthropic Claude API key")).toHaveFocus();
   });
 
-  it("replaces and removes a saved key (after asking)", async () => {
+  it("shows loading, then a failure that can be retried without entering the key again", async () => {
     const user = userEvent.setup();
+    let fail = true;
+    api.onGet("/users/me/models").reply(() => (fail ? [503, { detail: "The models could not be loaded right now" }] : [200, ok(models)]));
     renderApp("/settings");
-    await user.click(await screen.findByRole("button", { name: "Replace the Anthropic Claude API key" }));
-    await user.type(screen.getByLabelText("Anthropic Claude API key"), "sk-ant-NEWKEY-wxyz");
-    await user.click(screen.getByRole("button", { name: "Save key" }));
-    expect(await screen.findByText("Key saved. Anthropic Claude accepted it.")).toBeInTheDocument();
-    expect(within(row("Anthropic Claude")).getByText(/Ends in wxyz/)).toBeInTheDocument();
+    expect(await screen.findByText("The models could not be loaded right now")).toBeInTheDocument();
+    expect(groupOf("Anthropic Claude")[0]).toBe("Models not loaded");
 
-    await user.click(screen.getByRole("button", { name: "Remove the Anthropic Claude API key" }));
-    const dialog = screen.getByRole("dialog", { name: "Remove the Anthropic Claude API key?" });
-    await user.click(within(dialog).getByRole("button", { name: "Remove key" }));
-    expect(await screen.findByText("The key was removed. Its models are no longer offered in the chat.")).toBeInTheDocument();
-    expect(within(row("Anthropic Claude")).getByText("No key saved")).toBeInTheDocument();
-    expect(requests.at(-1)).toEqual({ method: "delete", provider: "anthropic" });
+    fail = false;
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    await ready();
+    expect(requests).toEqual([]);
+  });
+
+  it("asks for another model when the chosen model's key is removed, and does not switch by itself", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(CHAT_KEY, JSON.stringify({ id: "anthropic:claude-opus-5-5", name: "Claude Opus 5.5", provider: "anthropic" }));
+    renderApp("/settings");
+    await waitFor(() => expect(dropdown()).toHaveValue("anthropic:claude-opus-5-5"));
+    expect(screen.getByText("Chat model: Claude Opus 5.5 · Anthropic Claude")).toBeInTheDocument();
+    await user.selectOptions(dropdown(), "remove:anthropic");
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove key" }));
+
+    expect(await screen.findByText("Claude Opus 5.5 can't be used any more. Choose another model.")).toBeInTheDocument();
+    expect(within(dropdown()).getByRole("option", { name: "Claude Opus 5.5 (not available)" })).toBeDisabled();
+    expect(JSON.parse(localStorage.getItem(CHAT_KEY)).id).toBe("anthropic:claude-opus-5-5");
   });
 });
 
@@ -164,7 +218,7 @@ describe("interface language", () => {
     expect(screen.getByRole("link", { name: /Zurück zum Arbeitsbereich/ })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("de");
     // Provider names are not translated.
-    expect(screen.getByText("Anthropic Claude")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector('optgroup[label="Anthropic Claude"]')).not.toBeNull());
     expect(localStorage.getItem(`lectra:language:v1:${TEST_USER.id}`)).toBe("de");
 
     // The next visit starts in German.
@@ -178,113 +232,19 @@ describe("interface language", () => {
   });
 });
 
-describe("notifications and privacy", () => {
-  it("keep their defaults and demo behaviour", async () => {
+describe("notifications", () => {
+  it("keeps study reminders with their demo behaviour; product updates and the privacy setting are gone", async () => {
     const user = userEvent.setup();
     renderApp("/settings");
     expect(await screen.findByRole("switch", { name: "Study reminders" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("switch", { name: "Product updates" })).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByRole("switch", { name: "Show statistics on my profile" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
+    expect(screen.queryByText("Product updates")).not.toBeInTheDocument();
+    expect(screen.queryByText("Show statistics on my profile")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Privacy" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("switch", { name: "Product updates" }));
-    expect(screen.getByRole("switch", { name: "Product updates" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("switch", { name: "Study reminders" }));
+    expect(screen.getByRole("switch", { name: "Study reminders" })).toHaveAttribute("aria-checked", "false");
     await user.click(screen.getByRole("button", { name: "Save settings" }));
     expect(screen.getByText("Demo mode — settings are not saved yet.")).toBeInTheDocument();
-  });
-});
-
-describe("model dropdown per provider", () => {
-  const PREFS_KEY = `lectra:preferred-models:v1:${TEST_USER.id}`;
-  const CHAT_KEY = `lectra:chat-model:v1:${TEST_USER.id}`;
-  const select = (name) => screen.getByRole("combobox", { name: `${name} model` });
-
-  it("is disabled without a key and lists the key's live models once one is saved", async () => {
-    renderApp("/settings");
-    await waitFor(() => expect(select("Anthropic Claude")).toBeEnabled());
-    const options = within(select("Anthropic Claude")).getAllByRole("option").map((option) => option.textContent);
-    expect(options).toEqual(["Choose a model", "Claude Opus 5.5", "Claude Haiku 5.5"]);
-
-    expect(select("Google Gemini")).toBeDisabled();
-    expect(within(select("Google Gemini")).getByRole("option")).toHaveTextContent("Add a key first");
-    expect(within(row("Google Gemini")).getByText("Add your Google Gemini API key to see the models it offers.")).toBeInTheDocument();
-    expect(select("OpenAI GPT")).toBeDisabled();
-  });
-
-  it("saves the preferred model per user (never the key) and uses it in the chat for that provider", async () => {
-    const user = userEvent.setup();
-    localStorage.setItem(CHAT_KEY, JSON.stringify({ id: "anthropic:claude-haiku-5-5", name: "Claude Haiku 5.5", provider: "anthropic" }));
-    renderApp("/settings");
-    await waitFor(() => expect(select("Anthropic Claude")).toBeEnabled());
-    await user.selectOptions(select("Anthropic Claude"), "anthropic:claude-opus-5-5");
-
-    expect(await screen.findByText("Claude Opus 5.5 is your preferred Anthropic Claude model in the chat.")).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem(PREFS_KEY))).toEqual({ anthropic: "anthropic:claude-opus-5-5" });
-    expect(JSON.parse(localStorage.getItem(CHAT_KEY)).id).toBe("anthropic:claude-opus-5-5");
-    expect(select("Anthropic Claude")).toHaveValue("anthropic:claude-opus-5-5");
-  });
-
-  it("leaves a Lectra chat choice alone", async () => {
-    const user = userEvent.setup();
-    renderApp("/settings");
-    await waitFor(() => expect(select("Anthropic Claude")).toBeEnabled());
-    await user.selectOptions(select("Anthropic Claude"), "anthropic:claude-haiku-5-5");
-    expect(localStorage.getItem(CHAT_KEY)).toBeNull();
-  });
-
-  it("shows loading, then a failure that can be retried without entering the key again", async () => {
-    const user = userEvent.setup();
-    let fail = true;
-    api.onGet("/users/me/models").reply(() => (fail ? [503, { detail: "The models could not be loaded right now" }] : [200, ok(models)]));
-    renderApp("/settings");
-    await waitFor(() => expect(within(row("Anthropic Claude")).getByText("Key saved")).toBeInTheDocument());
-    expect(await within(row("Anthropic Claude")).findByText(/The models could not be loaded right now/)).toBeInTheDocument();
-    expect(select("Anthropic Claude")).toBeDisabled();
-
-    fail = false;
-    await user.click(within(row("Anthropic Claude")).getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(select("Anthropic Claude")).toBeEnabled());
-    expect(requests).toEqual([]);
-  });
-
-  it("reports a rejected key and a key without chat models instead of offering models", async () => {
-    models = {
-      ...models,
-      models: [models.models[0]],
-      unavailable: [{ provider: "anthropic", name: "Claude", message: "Your Claude API key was rejected. Check or replace it in your settings" }],
-    };
-    const first = renderApp("/settings");
-    await screen.findByText("Anthropic Claude", { selector: ".settings__label" });
-    expect(await within(row("Anthropic Claude")).findByText(/Your Claude API key was rejected/)).toBeInTheDocument();
-    expect(select("Anthropic Claude")).toBeDisabled();
-    expect(within(select("Anthropic Claude")).getByRole("option")).toHaveTextContent("Not available");
-    first.unmount();
-
-    models = { ...models, unavailable: [] };
-    renderApp("/settings");
-    await screen.findByText("Anthropic Claude", { selector: ".settings__label" });
-    expect(await within(row("Anthropic Claude")).findByText("Anthropic Claude offers no chat models LECTRA can use with this key.")).toBeInTheDocument();
-    expect(select("Anthropic Claude")).toBeDisabled();
-  });
-
-  it("marks a preferred model the key can no longer use as not available", async () => {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ anthropic: "anthropic:claude-retired-1" }));
-    renderApp("/settings");
-    await screen.findByText("Anthropic Claude", { selector: ".settings__label" });
-    expect(
-      await within(row("Anthropic Claude")).findByText(/Your preferred model claude-retired-1 isn't available with this key/)
-    ).toBeInTheDocument();
-    const missing = within(select("Anthropic Claude")).getByRole("option", { name: "claude-retired-1 (not available)" });
-    expect(missing).toBeDisabled();
-  });
-
-  it("clears the preferred model when the key is removed", async () => {
-    const user = userEvent.setup();
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ anthropic: "anthropic:claude-opus-5-5" }));
-    renderApp("/settings");
-    await waitFor(() => expect(select("Anthropic Claude")).toHaveValue("anthropic:claude-opus-5-5"));
-    await user.click(screen.getByRole("button", { name: "Remove the Anthropic Claude API key" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove key" }));
-    await waitFor(() => expect(select("Anthropic Claude")).toBeDisabled());
-    expect(localStorage.getItem(PREFS_KEY)).toBeNull();
   });
 });
