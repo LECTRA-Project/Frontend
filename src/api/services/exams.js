@@ -5,7 +5,8 @@ import { del, get, post } from "../http.js";
 /*
   EXAMS SERVICE — exams generated from the student's own materials.
 
-    POST   /exams          startExam     202, the exam with status "generating"
+    POST   /exams          startExam     202, the exam with status "generating"; with
+                                         fromExamId, from that submitted exam's mistakes
     GET    /exams/{id}     getExam       the exam and its questions (poll while generating)
     GET    /exams          listExams / listAllExams   the history, newest first
     DELETE /exams/{id}     deleteExam    discards an exam that wasn't submitted
@@ -32,6 +33,7 @@ import { del, get, post } from "../http.js";
 
   Errors when starting: 404 a lecture isn't the student's, 409 another exam is still being
   generated, 422 an invalid body or a lecture without readable text (the message names it).
+  From mistakes: 404 the exam isn't the student's, 422 it isn't submitted or has no mistakes.
   Errors when submitting: 409 the exam isn't ready or was already submitted, 422 an answer
   that doesn't fit its question. Regrading: 409 when nothing is left to grade.
 */
@@ -75,8 +77,13 @@ function unwrap(response, fallback) {
 }
 
 /* Starts generating an exam; the questions are written afterwards (poll getExam). */
-export async function startExam({ lectureIds, questionCount, types }, { signal } = {}) {
-  const body = { lecture_ids: lectureIds, question_count: questionCount, types };
+/* An exam on materials ({ lectureIds, questionCount, types }), or on the mistakes of a
+   submitted exam ({ fromExamId, questionCount }): every new question is written from the
+   pages of a wrong, partly correct or unanswered question, of the same type. */
+export async function startExam({ lectureIds, questionCount, types, fromExamId }, { signal } = {}) {
+  const body = fromExamId
+    ? { from_exam_id: fromExamId, only: "mistakes", question_count: questionCount }
+    : { lecture_ids: lectureIds, question_count: questionCount, types };
   return unwrap(await post(BASE, body, { timeout: START_TIMEOUT_MS, signal }), t("Unable to start the exam."));
 }
 

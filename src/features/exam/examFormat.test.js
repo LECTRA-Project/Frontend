@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { choiceLetter, formatExamDate, formatPoints, pagesLabel, plainText, pointsLabel, pointsOutOf, questionNumbers, verdictOf } from "./examFormat.js";
+import { choiceLetter, formatExamDate, formatPoints, mistakesOf, mistakesQuestionCount, pagesLabel, plainText, pointsLabel, pointsOutOf, questionNumbers, verdictOf } from "./examFormat.js";
 
 describe("exam text helpers", () => {
   it("names the pages a question comes from", () => {
@@ -37,5 +37,13 @@ describe("exam text helpers", () => {
       { answered: true, graded: false, verdict: null },
     ].map((result) => verdictOf(result).label);
     expect(labels).toEqual(["Correct", "Partly correct", "Wrong", "Not answered", "Waiting to be graded"]);
+  });
+
+  it("counts the mistakes like the backend: graded answers without full points", () => {
+    const result = (points, max, graded = true) => ({ result: { graded, points, max_points: max } });
+    const exam = { questions: [result(1, 1), result(2.5, 3), result(0, 2), result(null, 2, false), result(0, 1)] };
+    expect(mistakesOf(exam)).toHaveLength(3);
+    expect(mistakesOf({})).toEqual([]);
+    expect([1, 3, 7, 12].map(mistakesQuestionCount)).toEqual([3, 3, 7, 10]);
   });
 });
