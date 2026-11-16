@@ -290,11 +290,12 @@ export function useLectureChat({ enabled }) {
   /*
     Asks `content` in the open chat (a new chat is created first). `question` is what the
     student typed (shown in the list); `content` is what is sent (it may carry notebook
-    context). `model` is the chosen model's id (none: Lectra). Resolves true once answered,
-    false on failure (the error is shown in the chat).
+    context). `model` is the chosen model's id (none: Lectra). `exam` ({ examId, taskId }) marks
+    a question about an exam answer. Resolves true once answered, false on failure (the error
+    is shown in the chat).
   */
   const send = useCallback(
-    async ({ question, content, extras = [], model }) => {
+    async ({ question, content, extras = [], model, exam }) => {
       const pendingId = crypto.randomUUID();
       let sessionId = activeRef.current;
       let key = sessionId ?? NEW;
@@ -316,7 +317,7 @@ export function useLectureChat({ enabled }) {
           key = sessionId;
           if (activeRef.current === null) select(created.id);
         }
-        const result = await sendChatMessage(sessionId, content, { model });
+        const result = await sendChatMessage(sessionId, content, { model, ...exam });
         putSession(result.session, { toTop: true });
         if (activeRef.current === sessionId) {
           setMessages((list) => [

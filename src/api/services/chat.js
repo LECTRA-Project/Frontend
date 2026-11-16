@@ -106,9 +106,15 @@ export async function deleteChatSession(id) {
   `model` is an id from GET /users/me/models; without it (or "lectra") Lectra answers.
   A student's own model has no fallback: when it fails, the error says why.
 */
-export async function sendChatMessage(id, content, { signal, model } = {}) {
+export async function sendChatMessage(id, content, { signal, model, examId, taskId } = {}) {
   const body = { content };
   if (model && model !== "lectra") body.model = model;
+  // A question about an answer of a submitted exam: the backend then knows the question,
+  // the student's answer and the grading. Both or neither.
+  if (examId && taskId) {
+    body.exam_id = examId;
+    body.task_id = taskId;
+  }
   const response = await post(`${BASE}/${id}/messages`, body, { timeout: ANSWER_TIMEOUT_MS, signal });
   return unwrap(response, t("Unable to get an answer."));
 }

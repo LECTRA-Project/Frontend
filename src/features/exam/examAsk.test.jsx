@@ -79,6 +79,8 @@ describe("Ask about this", () => {
     expect(created()).toEqual([]);
     expect(chats.sent).toHaveLength(1);
     expect(chats.sent[0].id).toBe("s-hunt");
+    // The exam and the question go with the message, so the answer knows the grading (#124).
+    expect(chats.sent[0]).toMatchObject({ exam_id: "e-done", task_id: QUESTIONS[2].id });
     expect(chats.sent[0].content).toBe(
       [
         "I got this exam question wrong. Can you explain it using my lecture materials?",
@@ -128,7 +130,14 @@ describe("Ask about this", () => {
     expect(session.lectureIds).toEqual([KI03.id]);
     expect(session.title).toBe(`Exam question: ${QUESTIONS[1].question}`);
     expect(search(router)).toEqual({ chat: session.id, exam: "e-done" });
-    expect(chats.sent).toEqual([{ id: session.id, content: expect.stringMatching(/^I got this exam question partly right\./) }]);
+    expect(chats.sent).toEqual([
+      {
+        id: session.id,
+        content: expect.stringMatching(/^I got this exam question partly right\./),
+        exam_id: "e-done",
+        task_id: QUESTIONS[1].id,
+      },
+    ]);
     expect(chats.sent[0].content).toContain("My answer:\n> When all records have one class");
     // The new chat is open, with its material, and listed first.
     expect(screen.getByRole("heading", { level: 1, name: `Exam question: ${QUESTIONS[1].question}` })).toBeInTheDocument();
