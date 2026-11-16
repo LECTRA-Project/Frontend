@@ -37,6 +37,14 @@ describe("users service", () => {
     );
   });
 
+  it("sends the current password with an email change", async () => {
+    api.onPatch("/users/me").reply((config) => {
+      expect(JSON.parse(config.data)).toEqual({ email: "grace@example.com", current_password: " pw " });
+      return [200, ok({ ...TEST_USER, email: "grace@example.com" }, "Profile updated")];
+    });
+    await updateCurrentUser({ email: "grace@example.com", currentPassword: " pw " });
+  });
+
   it("changes the password with the backend field names", async () => {
     api.onPut("/users/me/password").reply((config) => {
       expect(JSON.parse(config.data)).toEqual({

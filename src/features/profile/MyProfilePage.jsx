@@ -17,7 +17,7 @@ export default function MyProfilePage() {
   const { user, updateUser, logout } = useAuth();
   const [saved, setSaved] = useState("");
 
-  async function saveProfile(values, { resetForm, setStatus }) {
+  async function saveProfile(values, { resetForm, setStatus, setFieldError }) {
     setSaved("");
     setStatus(null);
 
@@ -25,7 +25,15 @@ export default function MyProfilePage() {
     const email = values.email.trim();
     const profileChanges = {};
     if (fullName !== user.full_name) profileChanges.fullName = fullName;
-    if (email !== user.email) profileChanges.email = email;
+    if (email !== user.email) {
+      // The email is where reset links go, so the backend asks for the password to change it.
+      if (!values.emailPassword) {
+        setFieldError("emailPassword", "Enter your current password to change your email.");
+        return;
+      }
+      profileChanges.email = email;
+      profileChanges.currentPassword = values.emailPassword;
+    }
     const changingPassword = Boolean(values.currentPassword || values.newPassword || values.confirmPassword);
 
     if (Object.keys(profileChanges).length === 0 && !changingPassword) {
@@ -56,6 +64,7 @@ export default function MyProfilePage() {
         values: {
           fullName: updatedUser.full_name,
           email: updatedUser.email,
+          emailPassword: "",
           currentPassword: "",
           newPassword: "",
           confirmPassword: "",
@@ -70,6 +79,7 @@ export default function MyProfilePage() {
           values: {
             fullName: updatedUser.full_name,
             email: updatedUser.email,
+            emailPassword: "",
             currentPassword: "",
             newPassword: "",
             confirmPassword: "",
@@ -88,6 +98,7 @@ export default function MyProfilePage() {
         initialValues={{
           fullName: user?.full_name ?? "",
           email: user?.email ?? "",
+          emailPassword: "",
           currentPassword: "",
           newPassword: "",
           confirmPassword: "",
@@ -95,7 +106,7 @@ export default function MyProfilePage() {
         validationSchema={profileSchema}
         onSubmit={saveProfile}
       >
-        {({ dirty, isSubmitting, status }) => (
+        {({ dirty, isSubmitting, status, values }) => (
           <Form noValidate>
             <div className="profile-grid">
               <section className="card" aria-labelledby="details-title">
@@ -124,6 +135,16 @@ export default function MyProfilePage() {
                     type="email"
                     onChange={() => setSaved("")}
                   />
+                  {values.email.trim() !== (user?.email ?? "") && (
+                    <FormikTextField
+                      label="Password to confirm the new email"
+                      name="emailPassword"
+                      type="password"
+                      placeholder="Enter your current password"
+                      autoComplete="current-password"
+                      onChange={() => setSaved("")}
+                    />
+                  )}
                 </div>
               </section>
 
