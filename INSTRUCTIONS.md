@@ -124,7 +124,6 @@ Vite only exposes variables prefixed with `VITE_` to browser code. Do not put se
 | `/workspace/exam` | Exam view in place of the chat: the setup step (see *The exam* below) | Signed in |
 | `/workspace/exam?exam=<id>` | That exam: its progress while generating, its questions, or its results once submitted (with `chat` / `lecture` kept as above). An exam the student doesn't have shows a notice and the setup. | Signed in |
 | `/workspace?chat=<id>&exam=<id>` | A chat opened from the exam results (*Ask about this*): the chat has *Back to exam results*. `exam` stays while that chat is open (also with a material in the viewer) and is dropped when another chat or a new chat is opened. | Signed in |
-| `/workspace/home` | Home screen (where signing in and sign-up land) | Signed in |
 | `/profile` | Profile and password fields | Signed in |
 | `/settings` | Account preferences | Signed in |
 | `/statistics` | Sample performance statistics | Signed in |
@@ -153,7 +152,7 @@ On load the app checks which backend it talks to (`GET /api/student_profile/lect
 
 ### The exam
 
-The header's *Exam* (not on Home) replaces the chat with the Exam view. Its code is in `src/features/exam/` (`ExamSetup`, `ExamGenerating`, `ExamQuestions`, `ExamReview`, `ExamSubmitDialog`, `ExamGrading`, `ExamResults`, the `useExam` and `useUnfinishedExams` hooks, and `askAboutAnswer.js` for *Ask about this*), `src/features/workspace/pages/ExamPage.jsx` (the steps and the URL), `src/api/services/exams.js` and `src/services/exam/examStorage.js`.
+The header's *Exam* replaces the chat with the Exam view. Its code is in `src/features/exam/` (`ExamSetup`, `ExamGenerating`, `ExamQuestions`, `ExamReview`, `ExamSubmitDialog`, `ExamGrading`, `ExamResults`, the `useExam` and `useUnfinishedExams` hooks, and `askAboutAnswer.js` for *Ask about this*), `src/features/workspace/pages/ExamPage.jsx` (the steps and the URL), `src/api/services/exams.js` and `src/services/exam/examStorage.js`.
 
 - **Setup.** The open chat's materials are listed as checkboxes, all preselected; a chat without materials offers the student's library with nothing preselected. Materials still processing, failed or without readable text (images) can't be picked. The student chooses 3, 5, 7 or 10 questions and the types (multiple choice, short answer; at least one), then *Generate exam* (`POST /api/exams`). A `409` (another exam is still being generated) offers *Open that exam*; a `422` shows the backend's message, which names the material without text.
 - **Continue an exam.** Above the setup, the exams being generated or ready to answer (`GET /api/exams`) can be continued or discarded (`DELETE /api/exams/{id}`, after a confirmation; the answers saved on the device are removed too).
@@ -166,7 +165,7 @@ The header's *Exam* (not on Home) replaces the chat with the Exam view. Its code
 - **Saved on the device.** The answers and the question on screen are kept in local storage per signed-in user and exam (`lectra:exam:v1:<user id>:<exam id>`), with the settings the exam was started with (for *Retry* and *New exam on the same materials*), so a reload or leaving the page doesn't lose them. They are not on the server until the exam is submitted, and are not available on another device. If storage is unavailable or full, the page says so and works on without it.
 - **URL.** `?exam=<id>` sits next to `?chat=` / `?lecture=`; *Back to chat* returns to the same chat, and opening a material beside the exam keeps the exam. A chat opened with *Ask about this* keeps `?exam=` for *Back to exam results* until another chat is opened.
 
-After signing in or creating an account, the student lands on the Home screen (`/workspace/home`), unless they were sent to sign-in from another page. With no uploads, Home shows the greeting (Good morning / afternoon / evening and the first name), a short introduction and *Upload materials*, centred, and no recent-uploads card. Once there are uploads, it shows the greeting and *Recent uploads* (with *Upload materials* on the right of its title): the student's real lectures, newest first, under *Today*, *Yesterday* or the date. A file uploaded from Home shows under *Today* with its progress and then *Processing…* until the server answers; a failed upload shows its error and can be dismissed. Materials still processing or failed say so. Home has no chat and no Exam button; opening a material goes to the open chat (`/workspace?chat=…&lecture=…`) with the material in the viewer. The logo goes back to Home.
+After signing in or creating an account, the student lands on a new chat in the workspace (`/workspace`, no `?chat=`), unless they were sent to sign-in from another page (a link opened while signed out, or an expired session). After signing out or changing the password, signing in again always opens a new chat. The logo also opens a new chat.
 
 ## 6. Password and form behavior
 

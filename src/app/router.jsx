@@ -8,7 +8,6 @@ import { GuestOnly, RequireAuth } from "../features/auth/RouteGuards.jsx";
 import WorkspaceLayout from "../features/workspace/WorkspaceLayout.jsx";
 import ChatPage from "../features/workspace/pages/ChatPage.jsx";
 import ExamPage from "../features/workspace/pages/ExamPage.jsx";
-import HomePage from "../features/workspace/pages/HomePage.jsx";
 import MyProfilePage from "../features/profile/MyProfilePage.jsx";
 import AccountSettingsPage from "../features/profile/AccountSettingsPage.jsx";
 import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
@@ -16,16 +15,16 @@ import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
 /*
   All screens of the app and their URLs.
 
-  Guests only (signed-in users are sent on to Home):
+  Guests only (signed-in users are sent on to a new chat in the workspace):
   /                    Sign in
   /create-account      Create account
   /forget-password     Request a password reset link
   /reset-password      Choose a new password
 
   Signed-in users only (guests are sent to sign-in):
-  /workspace           Study workspace with the chat in the centre (notebook and viewer beside it)
+  /workspace           Study workspace with the chat in the centre (notebook and viewer beside it);
+                       without ?chat= it is a new chat, where sign-in lands
   /workspace/exam      Study workspace with the Exam view in place of the chat
-  /workspace/home      Home: greeting, upload and recent materials (no Study assistant); where sign-in lands
   /profile             My profile
   /settings            Account settings
   /statistics          Statistics
@@ -51,7 +50,6 @@ export const routes = [
         children: [
           { index: true, element: <ChatPage /> },
           { path: "exam", element: <ExamPage /> },
-          { path: "home", element: <HomePage /> },
         ],
       },
       { path: "/profile", element: <MyProfilePage /> },

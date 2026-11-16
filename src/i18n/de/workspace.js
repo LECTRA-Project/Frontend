@@ -100,21 +100,6 @@ export default {
   "“{title}” and all its messages will be deleted. Its materials are kept.":
     "„{title}“ und alle Nachrichten werden gelöscht. Die Materialien bleiben erhalten.",
 
-  // Home
-  "Good morning": "Guten Morgen",
-  "Good afternoon": "Guten Tag",
-  "Good evening": "Guten Abend",
-  "Good morning, {name}": "Guten Morgen, {name}",
-  "Good afternoon, {name}": "Guten Tag, {name}",
-  "Good evening, {name}": "Guten Abend, {name}",
-  Earlier: "Früher",
+  // Upload
   "Upload materials": "Materialien hochladen",
-  "Loading your materials…": "Deine Materialien werden geladen …",
-  "Your study space for lectures: read your PDFs and slides, run Python notebooks, and ask the study assistant questions answered from your own materials.":
-    "Dein Lernraum für Vorlesungen: Lies deine PDFs und Folien, führe Python-Notebooks aus und stell dem Lernassistenten Fragen, die er aus deinen eigenen Materialien beantwortet.",
-  "Recent uploads": "Zuletzt hochgeladen",
-  "Processing…": "Wird verarbeitet …",
-  "Processing failed — open it to retry": "Verarbeitung fehlgeschlagen – öffne es, um es erneut zu versuchen",
-  "Upload failed: {error}": "Hochladen fehlgeschlagen: {error}",
-  "Uploading… {progress}%": "Wird hochgeladen … {progress} %",
 };

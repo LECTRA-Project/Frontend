@@ -5,7 +5,8 @@ import { createContext, useContext } from "react";
 
   status          "loading" (checking a saved token) | "authenticated" | "guest"
   user            { id, email, full_name, … } from GET /api/users/me, or null
-  signOutReason   "expired" when the session ended because the token ran out, else null
+  signOutReason   why the session ended: "expired" (the token ran out), "password-changed",
+                  "signed-out" (the Sign out button), else null
   login, register, logout, updateUser
 */
 export const AuthContext = createContext(null);

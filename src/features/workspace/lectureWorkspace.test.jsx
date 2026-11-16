@@ -190,17 +190,13 @@ describe("lecture materials on a backend without AI processing (e.g. today's Ren
     vi.unstubAllGlobals();
   });
 
-  async function openHome() {
-    const user = userEvent.setup();
-    renderApp("/workspace/home");
-    const recent = await screen.findByRole("region", { name: "Recent uploads" });
-    await within(recent).findByText("Intro slides");
-    return { user, recent };
+  // Without the chat assistant the materials are opened by their link (?lecture=<id>).
+  function openLecture(id) {
+    renderApp(`/workspace?lecture=${id}`);
   }
 
   it("opens a PDF straight from its S3 URL beside the chat, which says it can't answer here", async () => {
-    const { user, recent } = await openHome();
-    await user.click(within(recent).getByRole("button", { name: /^Reading/ }));
+    openLecture(legacyPdf.id);
     const frame = await waitFor(() => {
       const element = document.querySelector('iframe[title="Reading"]');
       expect(element).not.toBeNull();
@@ -213,8 +209,7 @@ describe("lecture materials on a backend without AI processing (e.g. today's Ren
   });
 
   it("shows PowerPoint slides in the Office Online viewer beside the chat, with a download", async () => {
-    const { user, recent } = await openHome();
-    await user.click(within(recent).getByRole("button", { name: /^Intro slides/ }));
+    openLecture(legacy.id);
     const viewer = await screen.findByRole("region", { name: "Lecture: Intro slides" });
     expect(within(viewer).getByRole("link", { name: "Download" })).toHaveAttribute("href", legacy.s3_url);
     const frame = within(viewer).getByTitle("Slides: Intro slides");
@@ -224,13 +219,4 @@ describe("lecture materials on a backend without AI processing (e.g. today's Ren
     expect(api.history.get.some((r) => r.url.endsWith("/content"))).toBe(false);
   });
 
-  it("offers the same file types as the AI backend, without a course field", async () => {
-    const { user, recent } = await openHome();
-    await user.click(within(recent).getByRole("button", { name: "Upload materials" }));
-    const dialog = screen.getByRole("dialog", { name: "Upload lecture materials" });
-    expect(within(dialog).queryByLabelText(/Course/)).not.toBeInTheDocument();
-    expect(within(dialog).getByTestId("upload-input")).toHaveAttribute("accept", ".pdf,.pptx,.ipynb,.png,.jpg,.jpeg,.gif,.webp");
-    await userEvent.setup({ applyAccept: false }).upload(within(dialog).getByTestId("upload-input"), new File(["# x"], "notes.md"));
-    expect(within(dialog).getByRole("alert")).toHaveTextContent("notes.md");
-  });
 });

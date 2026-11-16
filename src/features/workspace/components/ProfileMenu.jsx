@@ -40,10 +40,11 @@ export default function ProfileMenu({ onClose }) {
     navigate(path);
   }
 
-  // Clearing the session makes RequireAuth send the user to the sign-in screen.
+  // Clearing the session makes RequireAuth send the user to the sign-in screen
+  // (without remembering this page: signing in again opens a new chat).
   function signOut() {
     onClose();
-    logout();
+    logout("signed-out");
   }
 
   return (
