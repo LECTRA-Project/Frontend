@@ -91,6 +91,8 @@ export function toMaterial(lecture) {
     error: lecture.processing_error,
     pages: lecture.source_type === "page" ? lecture.source_count : undefined,
     size: lecture.file_size,
+    // 0–100, or null when the backend doesn't send it (older backend, basic mode).
+    completion: typeof lecture.completion_percent === "number" ? lecture.completion_percent : null,
     lecture,
   };
 }

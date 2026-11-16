@@ -1,5 +1,6 @@
 import chat from "./chat.js";
 import common from "./common.js";
+import completion from "./completion.js";
 import exam from "./exam.js";
 import files from "./files.js";
 import models from "./models.js";
@@ -21,4 +22,5 @@ export default {
   ...exam,
   ...files,
   ...statistics,
+  ...completion,
 };

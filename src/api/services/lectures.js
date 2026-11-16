@@ -9,7 +9,7 @@ import { del, get, patch, post } from "../http.js";
     POST   /student_profile/upload-lecture               uploadLecture
     PATCH  /student_profile/lectures/{id}                renameLecture  (JSON { title })
     DELETE /student_profile/lectures/{id}                deleteLecture
-    GET    /student_profile/lectures/{id}                detectServerFeatures (probe only)
+    GET    /student_profile/lectures/{id}                getLecture / detectServerFeatures (probe)
     POST   /student_profile/lectures/{id}/reprocess      reprocessLecture
     GET    /student_profile/lectures/{id}/content        getLectureContent
     GET    /student_profile/lectures/{id}/file           fetchLectureFile (Blob)
@@ -72,6 +72,11 @@ export async function renameLecture(id, title) {
 
 export async function deleteLecture(id) {
   return unwrap(await del(`${BASE}/lectures/${id}`), t("Unable to delete the lecture."));
+}
+
+/* One lecture (the same object as in the list, e.g. with its current completion_percent). */
+export async function getLecture(id, { signal } = {}) {
+  return unwrap(await get(`${BASE}/lectures/${id}`, { signal }), t("Unable to load the lecture."));
 }
 
 /*

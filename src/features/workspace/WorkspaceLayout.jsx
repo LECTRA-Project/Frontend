@@ -17,6 +17,7 @@ import DeleteLectureDialog from "../lectures/DeleteLectureDialog.jsx";
 import { toMaterial } from "../lectures/materialTypes.js";
 import { useLectureLibrary } from "../lectures/useLectureLibrary.js";
 import { useReadingProgress } from "../lectures/useReadingProgress.js";
+import { useCompletionRefresh } from "../lectures/useCompletionRefresh.js";
 import { useAuth } from "../auth/authContext.js";
 import { useNotebook } from "../notebook/useNotebook.js";
 import { usePythonKernel } from "../notebook/usePythonKernel.js";
@@ -117,7 +118,9 @@ function useElementWidth(ref) {
 
   Reading progress: the viewers report the pages on screen to the reading tracker
   (useReadingProgress / readingTracker.js), which sends the pages read to the backend for
-  the course completion; the viewer header shows "Read 12 of 65".
+  the course completion; the viewer header shows "Read 12 of 65". When a save counts new
+  pages, that lecture is read again for its completion_percent, so its ring in the menu
+  follows (useCompletionRefresh); a graded exam reloads the library for the same reason.
 
   Basic mode: a backend without AI processing (detected by useLectureLibrary) has no
   file/content endpoints. Files are then opened from the lecture's public S3 URL, and no
@@ -135,11 +138,20 @@ export default function WorkspaceLayout() {
   const userKey = user?.id ?? user?.email ?? "signed-in-user";
   const library = useLectureLibrary();
   const basic = library.features?.ai === false;
-  // Pages read, for the course completion: only once the backend is known to have the AI routes.
-  const reading = useReadingProgress({ enabled: library.features?.ai === true });
   // null while unknown; the chat-first workspace needs the chat API.
   const chatAvailable = library.features ? library.features.chat === true : null;
   const chat = useLectureChat({ enabled: chatAvailable === true });
+  // The completion ring of a material follows the pages read (see useCompletionRefresh.js).
+  const { patchLecture } = library;
+  const { updateLecture } = chat;
+  const refreshCompletion = useCompletionRefresh({
+    onUpdate: (id, percent) => {
+      patchLecture(id, { completion_percent: percent });
+      updateLecture({ id, completion_percent: percent });
+    },
+  });
+  // Pages read, for the course completion: only once the backend is known to have the AI routes.
+  const reading = useReadingProgress({ enabled: library.features?.ai === true, onRead: refreshCompletion });
   // The model the chat asks with (Lectra, or one unlocked by the student's own API key).
   const chatModel = useChatModel(userKey, { enabled: chatAvailable === true });
   const { kernel, kernelState } = usePythonKernel();
@@ -672,6 +684,8 @@ export default function WorkspaceLayout() {
       openSource({ lectureId: source.lecture_id, sourceType: source.source_type ?? "page", number: source.page_number }, "the exam results"),
     // "Ask about this" on a checked answer (only with the chat assistant).
     onAskAbout: chatAvailable === true ? askAboutExamAnswer : null,
+    // A submitted or regraded exam: the lectures' completion (best exam score) may have changed.
+    onGraded: () => library.refresh(),
   };
 
   const home = {

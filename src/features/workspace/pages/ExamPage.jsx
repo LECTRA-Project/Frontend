@@ -33,7 +33,8 @@ import "../../exam/exam.css";
   The data it needs from WorkspaceLayout comes through the Outlet context (`examView`):
   userKey, the open chat's lectures, the library and whether they are still loading,
   onOpenSource to open a question's page in the viewer beside the exam, and onAskAbout for
-  "Ask about this" on a checked answer (it opens a chat, see WorkspaceLayout).
+  "Ask about this" on a checked answer (it opens a chat, see WorkspaceLayout), and onGraded
+  after an exam is submitted or graded again (the lectures' completion may have changed).
 
   "New exam on the same materials" opens the setup with that exam's lectures, number and
   types chosen (kept in the history entry's state, so a reload keeps them too).
@@ -68,7 +69,7 @@ function toExamMaterial(lecture) {
 export default function ExamPage() {
   const { t } = useI18n();
   const { examView } = useOutletContext();
-  const { userKey, chatLectures, library, loading: materialsLoading, sourceType, onOpenSource, onAskAbout } = examView;
+  const { userKey, chatLectures, library, loading: materialsLoading, sourceType, onOpenSource, onAskAbout, onGraded } = examView;
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
@@ -187,6 +188,7 @@ export default function ExamPage() {
     setNotice(null);
     try {
       const submitted = await submitExam(target.id, target.questions, answers);
+      onGraded?.(); // a new best score changes the lectures' completion
       // Shown until the read with the results lands.
       examState.seed({ ...target, ...submitted });
       await showResults(target.id);
@@ -196,6 +198,7 @@ export default function ExamPage() {
       if (err?.status === 409 || err?.status === null || err?.status === undefined) {
         const current = await getExam(target.id).catch(() => null);
         if (current?.status === "submitted") {
+          onGraded?.();
           forgetAnswers(target.id);
           examState.seed(current);
           setNotice(err.status === 409 ? t("This exam was already submitted. These are its results.") : t("Your exam was submitted. These are its results."));
@@ -215,6 +218,7 @@ export default function ExamPage() {
       // 409: nothing is left to grade (it was graded meanwhile), so just show it.
       if (err?.status !== 409) throw err;
     }
+    onGraded?.();
     examState.seed(await getExam(exam.id));
   }
 

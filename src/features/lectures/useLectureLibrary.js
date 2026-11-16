@@ -87,6 +87,11 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
     setLectures((list) => list.map((item) => (item.id === updated.id ? updated : item)));
   }, []);
 
+  /* Changes some fields of one lecture in place, e.g. { completion_percent } after reading. */
+  const patchLecture = useCallback((id, fields) => {
+    setLectures((list) => list.map((item) => (item.id === id ? { ...item, ...fields } : item)));
+  }, []);
+
   /*
     Upload files one after another; returns the created lectures. `chatId` tags the
     uploads with the chat they are for (null: a new chat; undefined: the library only).
@@ -138,5 +143,5 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
     [replaceLecture]
   );
 
-  return { lectures, uploads, loading, error, features, refresh, upload, dismissUpload, rename, remove, retry };
+  return { lectures, uploads, loading, error, features, refresh, upload, dismissUpload, rename, remove, retry, patchLecture };
 }
