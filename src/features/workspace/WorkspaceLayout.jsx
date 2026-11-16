@@ -23,6 +23,9 @@ import { useNotebook } from "../notebook/useNotebook.js";
 import { usePythonKernel } from "../notebook/usePythonKernel.js";
 import { fetchLectureFile } from "../../api/services/lectures.js";
 import { getChatSession, MAX_MESSAGE_LENGTH } from "../../api/services/chat.js";
+import { addProjectLecture, deleteProject, getProject, renameProject } from "../../api/services/projects.js";
+import { MoveToProjectDialog, ProjectNameDialog } from "./components/ProjectDialogs.jsx";
+import { useProjects } from "./useProjects.js";
 import { cellContextLabel, displayChatTitle, isSameCellContext, withNotebookContext } from "../../services/notebook/cellContext.js";
 import { useLectureChat } from "./useLectureChat.js";
 import { useChatModel } from "./useChatModel.js";
@@ -123,6 +126,15 @@ function useElementWidth(ref) {
   menu (useCompletionRefresh; an older backend without it: the lecture is read again); a
   graded exam reloads the library for the same reason.
 
+  Projects (a course's materials and chats together, like projects in ChatGPT): the menu
+  lists the 3 most recently active, + creates one and "View all projects" opens
+  /workspace/projects. A project's page (/workspace/projects/<id>, ProjectPage) shows its
+  materials and chats; its input box starts a chat in the project and opens it with the
+  answer. A chat in a project answers from the project's materials (adding or removing one
+  in the chat changes the project) and shows the project's name as a tag. A chat moves in
+  with ⋯ → "Move to project…" and out with "Remove from project" (it keeps a copy of the
+  materials). The Exam view opened from a project preselects the project's materials.
+
   Basic mode: a backend without AI processing (detected by useLectureLibrary) has no
   file/content endpoints. Files are then opened from the lecture's public S3 URL, and no
   reading progress is sent or shown.
@@ -142,6 +154,8 @@ export default function WorkspaceLayout() {
   // null while unknown; the chat-first workspace needs the chat API.
   const chatAvailable = library.features ? library.features.chat === true : null;
   const chat = useLectureChat({ enabled: chatAvailable === true });
+  // The most recently active projects, for the menu.
+  const projects = useProjects({ enabled: chatAvailable === true });
   // The completion ring of a material follows the pages read (see useCompletionRefresh.js).
   const { patchLecture } = library;
   const { updateLecture } = chat;
@@ -185,8 +199,16 @@ export default function WorkspaceLayout() {
   const [cellDragOver, setCellDragOver] = useState(false); // a touch/pen drag is over the chat
   const [draftAnnouncement, setDraftAnnouncement] = useState({ text: "", seq: 0 });
   const [tooLong, setTooLong] = useState(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [moving, setMoving] = useState(null); // a chat, in the "Move to project" dialog
+  // Bumped when a project's materials or name changed here, so the project pages read it again.
+  const [projectsVersion, setProjectsVersion] = useState(0);
+  const [examProject, setExamProject] = useState(null); // the project of /workspace/exam?project=
 
   const isChatRoute = location.pathname === "/workspace";
+  // /workspace/projects (all projects) and /workspace/projects/<id> (a project).
+  const projectPageId = location.pathname.match(/^\/workspace\/projects\/([^/]+)$/)?.[1] ?? null;
+  const isProjectsArea = location.pathname.startsWith("/workspace/projects");
 
   /* ---------- URL: ?chat=<session id>&lecture=<lecture id> ---------- */
   const [searchParams] = useSearchParams();
@@ -195,9 +217,12 @@ export default function WorkspaceLayout() {
   const pagePath = location.pathname;
   const currentChatId = urlChatId;
   const urlExamId = searchParams.get("exam");
+  // The Exam view opened from a project page: the project's materials are preselected.
+  const urlProjectId = searchParams.get("project");
   const hrefFor = (path, { chatId = currentChatId, lectureId = null } = {}) => {
     const params = new URLSearchParams();
     if (chatId) params.set("chat", chatId);
+    else if (path === "/workspace/exam" && urlProjectId) params.set("project", urlProjectId);
     if (lectureId) params.set("lecture", lectureId);
     // The exam view keeps its exam (?exam=) while chats and materials change around it. A
     // chat opened from the exam results keeps it while that chat stays open, for "Back to
@@ -411,6 +436,10 @@ export default function WorkspaceLayout() {
       appliedChat.current = null;
       navigate(hrefFor(pagePath, { chatId: null }), { replace: true });
     }
+    if (session.project) {
+      projects.reload();
+      setProjectsVersion((value) => value + 1); // the project page lists its chats
+    }
     setNotice(t("Chat removed."));
     return true;
   }
@@ -431,8 +460,27 @@ export default function WorkspaceLayout() {
     // The chat the files were uploaded for, even if the student switches chats meanwhile.
     const sessionId = session?.id ?? null;
     setUploadTarget(null);
-    const created = await library.upload(files, target === "chat" ? { chatId: sessionId } : {});
+    const created = await library.upload(
+      files,
+      target === "chat" ? { chatId: sessionId } : target?.project ? { projectId: target.project.id } : {}
+    );
     if (created.length === 0) return;
+    if (target?.project) {
+      // Uploaded on a project page: the files become the project's materials.
+      try {
+        let updated = null;
+        for (const item of created) updated = await addProjectLecture(target.project.id, item.id);
+        projectChanged(updated);
+        setNotice(
+          created.length === 1
+            ? t("1 material added to {name}.", { name: target.project.name })
+            : t("{count} materials added to {name}.", { count: created.length, name: target.project.name })
+        );
+      } catch (err) {
+        setNotice(err.message || t("The upload could not be added to this project."));
+      }
+      return;
+    }
     if (target !== "chat") {
       setNotice(created.length === 1 ? t("1 file uploaded.") : t("{count} files uploaded.", { count: created.length }));
       return;
@@ -575,12 +623,100 @@ export default function WorkspaceLayout() {
     setTooLong(null);
     // The question shown is the full message: the chat shows the added cells as code cards
     // (parseNotebookContext), the same way it shows them when the chat is opened again.
+    const inProject = Boolean(session?.project);
     chat.send({ question: content, content, model: chatModel.selected.id }).then((ok) => {
       // Clear the sent cells only once answered; on failure they stay in the draft.
       if (ok) setCellContext((list) => list.filter((item) => !cells.some((cell) => cell.id === item.id)));
+      // A question is activity in the project: it moves up in the menu.
+      if (ok && inProject) projects.reload();
     });
     return true;
   }
+
+  /* ---------- Projects ---------- */
+  function openProject(id) {
+    setTooLong(null);
+    closeOverlayMenu();
+    navigate(`/workspace/projects/${id}`);
+  }
+
+  // A project's name or materials changed: its chats, the menu and the project pages follow.
+  function projectChanged(project) {
+    if (!project) return;
+    chat.updateProject(project);
+    projects.reload();
+    setProjectsVersion((value) => value + 1);
+  }
+
+  async function createProjectAndOpen(name) {
+    const project = await projects.create(name);
+    setNewProjectOpen(false);
+    openProject(project.id);
+  }
+
+  /*
+    The project page's input box: a new chat in the project, opened at once and asked there
+    (the answer arrives in the chat). Rejects with the error to show on the project page.
+  */
+  async function startProjectChat(project, text) {
+    if (text.length > MAX_MESSAGE_LENGTH) throw new Error(t("This question is too long to send to the chat."));
+    const created = await chat.createInProject(project.id);
+    setTooLong(null);
+    // The URL is set here, so the "?chat= changed" effect doesn't open the chat a second time.
+    appliedChat.current = created.id;
+    navigate(`/workspace?chat=${encodeURIComponent(created.id)}`);
+    chat.askIn(created.id, { question: text, content: text, model: chatModel.selected.id }).then((ok) => ok && projects.reload());
+  }
+
+  async function renameProjectTo(project, name) {
+    const updated = await renameProject(project.id, name);
+    projectChanged(updated);
+    return updated;
+  }
+
+  // Deletes the project with its chats; the materials stay in the library.
+  async function removeProject(project) {
+    const result = await deleteProject(project.id);
+    chat.forgetProject(project.id);
+    projects.reload();
+    setViewer(null);
+    navigate("/workspace", { replace: true });
+    setNotice(
+      result.deleted_chats === 1
+        ? t("Project “{name}” and its chat were deleted.", { name: project.name })
+        : t("Project “{name}” and its {count} chats were deleted.", { name: project.name, count: result.deleted_chats })
+    );
+  }
+
+  async function moveChat(target, projectId, options) {
+    const moved = await chat.moveToProject(target.id, projectId, options);
+    setMoving(null);
+    projects.reload();
+    setProjectsVersion((value) => value + 1);
+    setNotice(t("Chat moved to {name}.", { name: moved.project?.name ?? "" }));
+  }
+
+  async function takeOutOfProject(target) {
+    const name = target.project?.name ?? "";
+    await chat.removeFromProject(target.id);
+    projects.reload();
+    setProjectsVersion((value) => value + 1);
+    setNotice(t("Chat removed from {name}. It keeps a copy of the materials.", { name }));
+  }
+
+  // The Exam view opened from a project page preselects the project's materials.
+  const examProjectId = location.pathname === "/workspace/exam" && !urlChatId ? urlProjectId : null;
+  useEffect(() => {
+    if (!examProjectId) return undefined;
+    const controller = new AbortController();
+    getProject(examProjectId, { signal: controller.signal }).then(
+      (found) => setExamProject(found),
+      () => !controller.signal.aborted && setExamProject({ id: examProjectId, lectures: [] })
+    );
+    return () => controller.abort();
+  }, [examProjectId]);
+  const examProjectLectures =
+    examProjectId && examProject?.id === examProjectId ? (examProject.lectures ?? []).map((item) => libraryById.get(item.id) ?? item) : [];
 
   /* ---------- Asking about an exam answer ---------- */
   /*
@@ -647,6 +783,10 @@ export default function WorkspaceLayout() {
       navigate("/workspace", { replace: true });
     },
     onSend: handleSend,
+    // Projects: the tag in the bar opens the project; ⋯ moves the chat in or out.
+    onOpenProject: openProject,
+    onMoveToProject: chatAvailable === true && session ? () => setMoving(session) : null,
+    onRemoveFromProject: () => takeOutOfProject(session),
     model: chatModel,
     olderMessages: chat.olderMessages,
     loadingOlder: chat.loadingOlderMessages,
@@ -674,9 +814,14 @@ export default function WorkspaceLayout() {
   // answers on this device to use. The open chat is still loading while ?chat= has no session.
   const examView = {
     userKey,
-    chatLectures: urlChatId ? chatLectures : [],
+    chatLectures: urlChatId ? chatLectures : examProjectLectures,
+    // Opened from a project page: { id, name } (its wording and "Back to project").
+    project: examProjectId ? { id: examProjectId, name: examProject?.id === examProjectId ? examProject.name : "" } : null,
     library: library.lectures,
-    loading: library.loading || (Boolean(urlChatId) && !session && chatAvailable !== false && !chat.sessionsError),
+    loading:
+      library.loading ||
+      (Boolean(urlChatId) && !session && chatAvailable !== false && !chat.sessionsError) ||
+      (Boolean(examProjectId) && examProject?.id !== examProjectId),
     sourceType: (id) => findLecture(id)?.source_type ?? "page",
     // A source of a checked exam question ({ lecture_id, page_number, source_type }).
     onOpenSource: (source) =>
@@ -685,6 +830,39 @@ export default function WorkspaceLayout() {
     onAskAbout: chatAvailable === true ? askAboutExamAnswer : null,
     // A submitted or regraded exam: the lectures' completion (best exam score) may have changed.
     onGraded: () => library.refresh(),
+  };
+
+  // The project pages (all projects, one project).
+  const projectsView = {
+    available: chatAvailable,
+    version: projectsVersion,
+    library: library.lectures,
+    model: chatModel,
+    note:
+      chatAvailable === false
+        ? t("This server has no chat assistant yet.")
+        : chatModel.missing
+          ? t("{name} isn't available right now. Choose another model, or check your API key in Account settings.", {
+              name: chatModel.selected.name,
+            })
+          : null,
+    viewerLectureId: viewerOpen ? urlLectureId : null,
+    // Files being uploaded into a project (shown on its page with their progress).
+    uploads: library.uploads.filter((item) => item.projectId),
+    onDismissUpload: library.dismissUpload,
+    onOpenProject: openProject,
+    onNewProject: () => setNewProjectOpen(true),
+    onOpenChat: openChat,
+    onStartChat: startProjectChat,
+    onRename: renameProjectTo,
+    onDelete: removeProject,
+    onUploadClick: (project) => setUploadTarget({ project }),
+    onOpenMaterial: openMaterial,
+    onProjectChanged: projectChanged,
+    onNotFound: () => {
+      setNotice(t("That project isn’t in your projects."));
+      navigate("/workspace", { replace: true });
+    },
   };
 
   /* ---------- Switching the notebook and the viewer ---------- */
@@ -889,12 +1067,28 @@ export default function WorkspaceLayout() {
           loadingMoreChats={chat.loadingMoreSessions}
           onLoadMoreChats={chat.loadMoreSessions}
           onRemoveChat={removeChat}
+          onMoveChat={chatAvailable === true ? setMoving : null}
           available={chatAvailable !== false}
+          // A server without projects (an older backend) shows no Projects section.
+          projects={chatAvailable === true && !projects.error && !projects.loading ? projects : null}
+          currentProjectId={projectPageId ?? (isChatRoute ? (session?.project?.id ?? null) : null)}
+          onOpenProject={openProject}
+          onNewProject={() => {
+            closeOverlayMenu();
+            setNewProjectOpen(true);
+          }}
+          onViewAllProjects={() => {
+            closeOverlayMenu();
+            navigate("/workspace/projects");
+          }}
+          projectName={session?.project?.name ?? null}
+          // Not on the project pages, nor in the Exam view opened from a project (no chat is open).
+          showMaterials={!isProjectsArea && !examProjectId}
         />
 
         {/* A floating notebook beside the chat: the chat reflows into the room left of it. */}
         <main className="cf__main" style={layout.chatInset && !phone ? { paddingRight: layout.chatInset } : undefined}>
-          <Outlet context={{ chatView, examView }} />
+          <Outlet context={{ chatView, examView, projectsView }} />
         </main>
 
         {notebookOpen && (
@@ -939,13 +1133,31 @@ export default function WorkspaceLayout() {
       {renaming && <EditLectureDialog lecture={renaming} onSave={handleRename} onCancel={() => setRenaming(null)} />}
       {deleting && <DeleteLectureDialog lecture={deleting} onConfirm={handleDeleteLecture} onCancel={() => setDeleting(null)} />}
 
+      {newProjectOpen && <ProjectNameDialog onSave={createProjectAndOpen} onCancel={() => setNewProjectOpen(false)} />}
+      {moving && (
+        <MoveToProjectDialog
+          session={moving}
+          onMove={(projectId, options) => moveChat(moving, projectId, options)}
+          onCreate={(name) => projects.create(name)}
+          onCancel={() => setMoving(null)}
+        />
+      )}
+
       {uploadTarget && (
         <UploadDialog
           basic={basic}
           note={
             uploadTarget === "chat"
-              ? t("Files are saved to your account and added to this chat. The answers in this chat then come from them.")
-              : undefined
+              ? session?.project
+                ? t("Files are saved to your account and added to the project {name}. Its chats then answer from them.", {
+                    name: session.project.name,
+                  })
+                : t("Files are saved to your account and added to this chat. The answers in this chat then come from them.")
+              : uploadTarget?.project
+                ? t("Files are saved to your account and added to the project {name}. Its chats then answer from them.", {
+                    name: uploadTarget.project.name,
+                  })
+                : undefined
           }
           onCancel={() => setUploadTarget(null)}
           onUpload={handleUpload}

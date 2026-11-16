@@ -35,6 +35,23 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
   const closeMenu = useCallback(() => setProfileOpen(false), []);
 
   const isExamOpen = location.pathname === "/workspace/exam";
+  // From a project page the Exam view preselects the project's materials (?project=), and
+  // closing it goes back to that project.
+  const projectId = location.pathname.match(/^\/workspace\/projects\/([^/]+)$/)?.[1] ?? null;
+  function toggleExam() {
+    const params = new URLSearchParams(withoutExam(location.search));
+    if (isExamOpen) {
+      const fromProject = params.get("project");
+      params.delete("project");
+      const search = params.toString() ? `?${params}` : "";
+      if (fromProject && !params.get("chat")) navigate({ pathname: `/workspace/projects/${fromProject}`, search });
+      else navigate({ pathname: "/workspace", search });
+      return;
+    }
+    if (projectId) params.set("project", projectId);
+    const search = params.toString() ? `?${params}` : "";
+    navigate({ pathname: "/workspace/exam", search });
+  }
 
   return (
     <header className="ws-header">
@@ -67,7 +84,7 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
           aria-pressed={isExamOpen}
           // The open chat and material (?chat=…&lecture=…) stay open across the Exam view;
           // the exam (?exam=…) belongs to the Exam view only, which opens on its setup step.
-          onClick={() => navigate({ pathname: isExamOpen ? "/workspace" : "/workspace/exam", search: withoutExam(location.search) })}
+          onClick={toggleExam}
         >
           <span className="ws-header__label">{t("Exam")}</span>
         </Button>

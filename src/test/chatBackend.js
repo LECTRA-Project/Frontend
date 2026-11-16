@@ -6,8 +6,13 @@ import { ok, TEST_USER } from "./helpers.jsx";
   Install it on a MockAdapter; the returned state can be changed and inspected by a test.
 
   Answers: a question containing "1+1" (or asked in a chat without lectures) gets a general
-  answer with no sources; any other question cites page / slide / cell 2 of each lecture.
+  answer with no sources; any other question cites page / slide / cell 2 of each lecture and
+  ends with a suggestion of the next step (as the backend's lecture answers do).
+  Projects: a chat in a project (projectId) answers from the project's lectures, and adding or
+  removing a lecture in such a chat changes the project; a question moves the project's last
+  activity. Deleting a project deletes its chats.
 */
+export const SUGGESTION = "Shall I explain the next section, Pruning (page 3)?";
 const SESSIONS = "/student_profile/chat/sessions";
 const SOURCE_TYPE = { "application/pdf": "page", "application/x-ipynb+json": "cell" };
 const UNIT = { page: "Page", slide: "Slide", cell: "Cell" };
@@ -39,14 +44,18 @@ export function daysAgo(days, hour = 10) {
   return date.toISOString();
 }
 
-export function installChatBackend(api, { lectures = [], sessions = [], messages = {}, chat = true, models, progressCompletion = true } = {}) {
+export function installChatBackend(api, { lectures = [], sessions = [], messages = {}, projects = [], chat = true, models, progressCompletion = true } = {}) {
   const state = {
     // The progress answers carry the lecture's completion_percent (false: an older backend).
     progressCompletion,
     models: models ?? { default: "lectra", models: [{ id: "lectra", provider: "lectra", model: null, name: "Lectra" }], unavailable: [] },
     lectures: [...lectures],
-    // { id, title, lectureIds, created_at, updated_at }
-    sessions: sessions.map((item) => ({ lectureIds: [], created_at: item.updated_at, ...item })),
+    // { id, title, lectureIds, projectId, created_at, updated_at }
+    sessions: sessions.map((item) => ({ lectureIds: [], projectId: null, created_at: item.updated_at, ...item })),
+    // { id, name, lectureIds, created_at, updated_at }
+    projects: projects.map((item) => ({ lectureIds: [], created_at: item.updated_at, ...item })),
+    // Bodies of PUT …/project (moving a chat into a project).
+    moved: [],
     messages: { ...messages },
     sent: [],
     viewed: {}, // lecture id → Set of pages read
@@ -56,17 +65,35 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     nextId: 1,
   };
   const lecture = (id) => state.lectures.find((item) => item.id === id);
+  const projectOf = (session) => (session.projectId ? state.projects.find((item) => item.id === session.projectId) : null);
+  // The lectures a chat answers from: its project's for a chat in a project.
+  const lectureIdsOf = (session) => projectOf(session)?.lectureIds ?? session.lectureIds;
   const payload = (session) => {
-    const owned = session.lectureIds.map(lecture).filter(Boolean);
+    const owned = lectureIdsOf(session).map(lecture).filter(Boolean);
+    const project = projectOf(session);
     return {
       id: session.id,
       title: session.title,
       lecture: owned[0] ?? null,
       lectures: owned,
+      project: project ? { id: project.id, name: project.name } : null,
       created_at: session.created_at,
       updated_at: session.updated_at,
     };
   };
+  const projectPayload = (project, { detail = true } = {}) => {
+    const owned = project.lectureIds.map(lecture).filter(Boolean);
+    return {
+      id: project.id,
+      name: project.name,
+      chat_count: state.sessions.filter((item) => item.projectId === project.id).length,
+      material_count: owned.length,
+      created_at: project.created_at,
+      updated_at: project.updated_at,
+      ...(detail ? { lectures: owned } : {}),
+    };
+  };
+  const byActivity = (a, b) => b.updated_at.localeCompare(a.updated_at);
   const find = (config) => state.sessions.find((item) => item.id === config.url.split("/")[4]);
   const newId = (prefix) => `${prefix}-${state.nextId++}`;
 
@@ -150,6 +177,7 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     if (!lecture(id)) return [404, { detail: "Lecture not found" }];
     state.lectures = state.lectures.filter((item) => item.id !== id);
     for (const session of state.sessions) session.lectureIds = session.lectureIds.filter((item) => item !== id);
+    for (const project of state.projects) project.lectureIds = project.lectureIds.filter((item) => item !== id);
     return [200, ok({ id })];
   });
   api.onPost(/\/student_profile\/lectures\/[^/]+\/reprocess$/).reply((config) => {
@@ -173,7 +201,7 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
   api.onGet(SESSIONS).reply(async (config) => {
     // (Not the one-item check whether the server has chats.)
     if (state.sessionsGate && config.params?.page_size !== 1) await state.sessionsGate;
-    const list = [...state.sessions].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map(payload);
+    const list = [...state.sessions].sort(byActivity).map(payload);
     return [200, ok(pageOf(list, config, "sessions"))];
   });
   api.onPost(SESSIONS).reply((config) => {
@@ -188,13 +216,15 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     const session = find(config);
     const { lecture_id: id } = JSON.parse(config.data);
     if (!session || !lecture(id)) return [404, { detail: "Not found" }];
-    if (!session.lectureIds.includes(id)) session.lectureIds.push(id);
+    const owner = projectOf(session) ?? session; // in a project: the project's lectures
+    if (!owner.lectureIds.includes(id)) owner.lectureIds.push(id);
     return [200, ok(payload(session))];
   });
   api.onDelete(/\/chat\/sessions\/[^/]+\/lectures\/[^/]+$/).reply((config) => {
     const session = find(config);
     const id = config.url.split("/").at(-1);
-    session.lectureIds = session.lectureIds.filter((item) => item !== id);
+    const owner = projectOf(session) ?? session;
+    owner.lectureIds = owner.lectureIds.filter((item) => item !== id);
     return [200, ok(payload(session))];
   });
   api.onGet(/\/chat\/sessions\/[^/]+$/).reply((config) => {
@@ -209,10 +239,10 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     const session = find(config);
     const { content, model } = JSON.parse(config.data);
     state.sent.push(model === undefined ? { id: session.id, content } : { id: session.id, content, model });
-    const general = content.includes("1+1") || session.lectureIds.length === 0;
+    const general = content.includes("1+1") || lectureIdsOf(session).length === 0;
     const sources = general
       ? []
-      : session.lectureIds.map(lecture).map((item) => ({
+      : lectureIdsOf(session).map(lecture).map((item) => ({
           lecture_id: item.id,
           lecture_title: item.title,
           page_number: 2,
@@ -227,10 +257,12 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
       role: "assistant",
       content: general ? "This is not covered in your lecture materials, but in general: 1 + 1 equals 2." : "Hunt's algorithm grows a tree **top-down**.",
       sources,
+      suggestion: general ? null : SUGGESTION,
       created_at: now,
     };
     if (session.title === "New chat") session.title = content.slice(0, 60);
     session.updated_at = now;
+    if (projectOf(session)) projectOf(session).updated_at = now;
     state.messages[session.id] = [...(state.messages[session.id] ?? []), question, answer];
     return [201, ok({ question, answer, session: payload(session) })];
   });
@@ -243,6 +275,105 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     const session = find(config);
     state.sessions = state.sessions.filter((item) => item !== session);
     return [200, ok({ id: session.id })];
+  });
+
+  // ── Chats moving in and out of projects ──
+  api.onPut(/\/chat\/sessions\/[^/]+\/project$/).reply((config) => {
+    const session = find(config);
+    const body = JSON.parse(config.data);
+    const project = state.projects.find((item) => item.id === body.project_id);
+    if (!session) return [404, { status: false, message: "Chat session not found", data: null }];
+    if (!project) return [404, { status: false, message: "Project not found", data: null }];
+    state.moved.push({ id: session.id, body });
+    if (session.projectId !== project.id) {
+      if (body.add_materials !== false) {
+        for (const id of lectureIdsOf(session)) if (!project.lectureIds.includes(id)) project.lectureIds.push(id);
+      }
+      session.lectureIds = [];
+      session.projectId = project.id;
+      if (session.updated_at > project.updated_at) project.updated_at = session.updated_at;
+    }
+    return [200, ok(payload(session))];
+  });
+  api.onDelete(/\/chat\/sessions\/[^/]+\/project$/).reply((config) => {
+    const session = find(config);
+    if (session.projectId) {
+      session.lectureIds = [...lectureIdsOf(session)];
+      session.projectId = null;
+    }
+    return [200, ok(payload(session))];
+  });
+
+  // ── Projects ──
+  const PROJECTS = "/student_profile/projects";
+  const findProject = (config) => state.projects.find((item) => item.id === config.url.split("/")[3]);
+  const noProject = [404, { status: false, message: "Project not found", data: null }];
+  const validName = (config) => {
+    const { name } = JSON.parse(config.data);
+    const trimmed = typeof name === "string" ? name.trim() : "";
+    return trimmed && trimmed.length <= 255 ? trimmed : null;
+  };
+  const invalidName = [422, { status: false, message: "Name is required", data: { errors: { name: "Name is required" } } }];
+  api.onGet(PROJECTS).reply((config) => {
+    const list = [...state.projects].sort(byActivity).map((item) => projectPayload(item, { detail: false }));
+    return [200, ok(pageOf(list, { params: { page_size: 30, ...config.params } }, "projects"))];
+  });
+  api.onPost(PROJECTS).reply((config) => {
+    const name = validName(config);
+    if (!name) return invalidName;
+    const now = new Date().toISOString();
+    const project = { id: newId("p-new"), name, lectureIds: [], created_at: now, updated_at: now };
+    state.projects.push(project);
+    return [201, ok(projectPayload(project))];
+  });
+  api.onGet(/\/student_profile\/projects\/[^/]+$/).reply((config) => {
+    const project = findProject(config);
+    return project ? [200, ok(projectPayload(project))] : noProject;
+  });
+  api.onPatch(/\/student_profile\/projects\/[^/]+$/).reply((config) => {
+    const project = findProject(config);
+    if (!project) return noProject;
+    const name = validName(config);
+    if (!name) return invalidName;
+    project.name = name;
+    return [200, ok(projectPayload(project))];
+  });
+  api.onDelete(/\/student_profile\/projects\/[^/]+$/).reply((config) => {
+    const project = findProject(config);
+    if (!project) return noProject;
+    const chats = state.sessions.filter((item) => item.projectId === project.id);
+    state.sessions = state.sessions.filter((item) => item.projectId !== project.id);
+    state.projects = state.projects.filter((item) => item !== project);
+    return [200, ok({ id: project.id, deleted_chats: chats.length })];
+  });
+  api.onPost(/\/student_profile\/projects\/[^/]+\/lectures$/).reply((config) => {
+    const project = findProject(config);
+    const { lecture_id: id } = JSON.parse(config.data);
+    if (!project || !lecture(id)) return [404, { detail: "Not found" }];
+    if (!project.lectureIds.includes(id)) project.lectureIds.push(id);
+    return [200, ok(projectPayload(project))];
+  });
+  api.onDelete(/\/student_profile\/projects\/[^/]+\/lectures\/[^/]+$/).reply((config) => {
+    const project = findProject(config);
+    const id = config.url.split("/").at(-1);
+    project.lectureIds = project.lectureIds.filter((item) => item !== id);
+    return [200, ok(projectPayload(project))];
+  });
+  api.onGet(/\/student_profile\/projects\/[^/]+\/sessions$/).reply((config) => {
+    const project = findProject(config);
+    if (!project) return noProject;
+    const list = state.sessions.filter((item) => item.projectId === project.id).sort(byActivity).map(payload);
+    return [200, ok(pageOf(list, config, "sessions"))];
+  });
+  api.onPost(/\/student_profile\/projects\/[^/]+\/sessions$/).reply((config) => {
+    const project = findProject(config);
+    if (!project) return noProject;
+    const body = JSON.parse(config.data ?? "{}");
+    const now = new Date().toISOString();
+    const session = { id: newId("s-proj"), title: body.title ?? "New chat", lectureIds: [], projectId: project.id, created_at: now, updated_at: now };
+    state.sessions.push(session);
+    state.messages[session.id] = [];
+    return [201, ok(payload(session))];
   });
   return state;
 }

@@ -69,7 +69,8 @@ function toExamMaterial(lecture) {
 export default function ExamPage() {
   const { t } = useI18n();
   const { examView } = useOutletContext();
-  const { userKey, chatLectures, library, loading: materialsLoading, sourceType, onOpenSource, onAskAbout, onGraded } = examView;
+  const { userKey, chatLectures, library, loading: materialsLoading, sourceType, onOpenSource, onAskAbout, onGraded, project = null } =
+    examView;
   const location = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
@@ -94,7 +95,10 @@ export default function ExamPage() {
     const search = next.toString();
     return search ? `?${search}` : "";
   };
-  const backToChat = { pathname: "/workspace", search: searchWith(null) };
+  // Opened from a project page (?project=): back to that project.
+  const backToChat = project
+    ? { pathname: `/workspace/projects/${project.id}`, search: "" }
+    : { pathname: "/workspace", search: searchWith(null) };
 
   function openExam(id, { replace = false } = {}) {
     setStartError(null);
@@ -264,6 +268,7 @@ export default function ExamPage() {
         onOpenExam={(id) => openExam(id)}
         onDiscard={discard}
         preset={preset}
+        projectName={project?.name ?? null}
       />
     );
     if (preset && (presetGone > 0 || presetIds.length === 0)) {
@@ -377,7 +382,7 @@ export default function ExamPage() {
         </div>
         <Link to={backToChat} className="btn btn--secondary exam-head__back">
           <Icon name="arrowLeft" />
-          {t("Back to chat")}
+          {project ? t("Back to project") : t("Back to chat")}
         </Link>
       </header>
 

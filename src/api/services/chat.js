@@ -1,6 +1,6 @@
 import { ApiError } from "../client.js";
 import { t } from "../../i18n/i18n.js";
-import { del, get, patch, post } from "../http.js";
+import { del, get, patch, post, put } from "../http.js";
 
 /*
   LECTURE CHAT SERVICE — the Lecture Chat APIs (saved chat sessions).
@@ -10,6 +10,8 @@ import { del, get, patch, post } from "../http.js";
     GET    /student_profile/chat/sessions/{id}                   getChatSession
     PATCH  /student_profile/chat/sessions/{id}                   renameChatSession
     DELETE /student_profile/chat/sessions/{id}                   deleteChatSession
+    PUT    /student_profile/chat/sessions/{id}/project           moveChatToProject
+    DELETE /student_profile/chat/sessions/{id}/project           removeChatFromProject
     POST   /student_profile/chat/sessions/{id}/lectures          attachChatLecture
     DELETE /student_profile/chat/sessions/{id}/lectures/{lid}    detachChatLecture
     POST   /student_profile/chat/sessions/{id}/messages          sendChatMessage
@@ -20,12 +22,18 @@ import { del, get, patch, post } from "../http.js";
   the backend then turns into the title.
 
   Shapes (data of the { status, message, data } envelope):
-    session  { id, title, lectures: [lecture], lecture: lectures[0] | null, created_at, updated_at }
-             each lecture as GET /student_profile/lectures/{id} returns it.
+    session  { id, title, lectures: [lecture], lecture: lectures[0] | null,
+               project: { id, name } | null, created_at, updated_at }
+             each lecture as GET /student_profile/lectures/{id} returns it. A chat in a project
+             (see projects.js) answers from the project's materials: its `lectures` are the
+             project's, and adding or removing one changes the project.
     message  { id, session_id, role: "user" | "assistant", content, created_at,
                sources: [{ lecture_id, lecture_title, page_number,
-                           source_type: "page" | "slide" | "cell", location: "Page 3" }] | null }
+                           source_type: "page" | "slide" | "cell", location: "Page 3" }] | null,
+               suggestion: string | null }
              An answer with no sources is general knowledge, not from the materials.
+             suggestion: on answers from the materials, one short offer of the next step
+             ("Shall I explain the next section, … (page 4)?"); a "yes" answers it.
 */
 const BASE = "/student_profile/chat/sessions";
 
@@ -103,6 +111,21 @@ export async function sendChatMessage(id, content, { signal, model } = {}) {
   if (model && model !== "lectra") body.model = model;
   const response = await post(`${BASE}/${id}/messages`, body, { timeout: ANSWER_TIMEOUT_MS, signal });
   return unwrap(response, t("Unable to get an answer."));
+}
+
+/*
+  Moves a chat into a project: it then answers from the project's materials. With
+  addMaterials (default), the chat's own materials the project doesn't have are added to the
+  project. Returns the updated session.
+*/
+export async function moveChatToProject(id, projectId, { addMaterials = true } = {}) {
+  const response = await put(`${BASE}/${id}/project`, { project_id: projectId, add_materials: addMaterials });
+  return unwrap(response, t("Unable to move the chat to the project."));
+}
+
+/* Takes a chat out of its project; it keeps a copy of the project's materials. Returns the session. */
+export async function removeChatFromProject(id) {
+  return unwrap(await del(`${BASE}/${id}/project`), t("Unable to remove the chat from the project."));
 }
 
 /* One page, oldest first: { messages, page, page_size, total, total_pages }. */
