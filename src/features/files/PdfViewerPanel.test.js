@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import PdfViewerPanel from "./PdfViewerPanel.jsx";
 
@@ -57,5 +57,50 @@ describe("PDF viewer page navigation", () => {
     render(createElement(PdfViewerPanel, { material: { ...material, pages: undefined }, onCollapse: () => {} }));
     expect(screen.queryByRole("button", { name: "Show pages" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Last page" })).not.toBeInTheDocument();
+  });
+});
+
+describe("PDF viewer reading progress (the browser's frame)", () => {
+  const material = { name: "Decision Trees", url: "blob:test/1", meta: "PDF · 5 pages", pages: 5 };
+
+  it("reports the page on screen as the student pages through, and nothing once closed", async () => {
+    const user = userEvent.setup();
+    const onVisiblePages = vi.fn();
+    const { unmount } = render(
+      createElement(PdfViewerPanel, { material, initialPage: 2, onCollapse: () => {}, reading: { progress: null, onVisiblePages } })
+    );
+    expect(onVisiblePages).toHaveBeenLastCalledWith([2]);
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    expect(onVisiblePages).toHaveBeenLastCalledWith([3]);
+    await user.click(screen.getByRole("button", { name: "Last page" }));
+    expect(onVisiblePages).toHaveBeenLastCalledWith([5]);
+    unmount();
+    expect(onVisiblePages).toHaveBeenLastCalledWith([]);
+  });
+
+  it("reports nothing while the file is still loading", () => {
+    const onVisiblePages = vi.fn();
+    render(
+      createElement(PdfViewerPanel, {
+        material: { ...material, url: null, loading: true },
+        onCollapse: () => {},
+        reading: { progress: null, onVisiblePages },
+      })
+    );
+    expect(onVisiblePages).not.toHaveBeenCalledWith([1]);
+  });
+
+  it("shows the pages read in the header, and no label without the reading prop", () => {
+    const { unmount } = render(
+      createElement(PdfViewerPanel, { material, onCollapse: () => {}, reading: { progress: { viewed: 12, total: 65, unit: "page" }, onVisiblePages: vi.fn() } })
+    );
+    const label = screen.getByTestId("reading-progress");
+    expect(label).toHaveTextContent("Read 12 of 65");
+    expect(label.querySelector(".viewer__progress-short")).toHaveTextContent("12/65");
+    expect(label).toHaveAttribute("title", "You have read 12 of 65 pages");
+    unmount();
+
+    render(createElement(PdfViewerPanel, { material, onCollapse: () => {} }));
+    expect(screen.queryByTestId("reading-progress")).not.toBeInTheDocument();
   });
 });

@@ -111,4 +111,13 @@ export default {
     "({file}) wird endgültig gelöscht und aus jedem Chat entfernt, der sie verwendet. Die Chats und ihre Nachrichten bleiben erhalten. Das kann nicht rückgängig gemacht werden.",
   "Deleting…": "Wird gelöscht …",
   "Delete from library": "Aus der Bibliothek löschen",
+
+  // Reading progress in the viewer header (ViewerChrome)
+  "Read {viewed} of {total}": "{viewed} von {total} gelesen",
+  "You have read {viewed} of {total} pages": "Du hast {viewed} von {total} Seiten gelesen",
+  "You have read {viewed} of {total} slides": "Du hast {viewed} von {total} Folien gelesen",
+  "You have read {viewed} of {total} cells": "Du hast {viewed} von {total} Zellen gelesen",
+  "You have read {viewed} of {total} sections": "Du hast {viewed} von {total} Abschnitten gelesen",
+  "Unable to load the reading progress.": "Der Lesefortschritt konnte nicht geladen werden.",
+  "Unable to save the reading progress.": "Der Lesefortschritt konnte nicht gespeichert werden.",
 };
