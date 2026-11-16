@@ -105,6 +105,12 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     const { pages } = JSON.parse(config.data);
     if (!Array.isArray(pages) || pages.length < 1 || pages.length > 200) return [422, { detail: "Invalid pages" }];
     state.viewed[found.id] = new Set([...(state.viewed[found.id] ?? []), ...pages]);
+    // A lecture with a completion keeps it current (reading only, 70% of it, no exam).
+    if (typeof found.completion_percent === "number") {
+      const read = progress(found);
+      const updated = { ...found, completion_percent: Math.round((70 * read.viewed) / read.total) };
+      state.lectures = state.lectures.map((item) => (item.id === found.id ? updated : item));
+    }
     return [200, ok(progress(found), "Reading progress saved")];
   });
   api.onGet(/\/student_profile\/lectures\/[^/]+$/).reply((config) => {

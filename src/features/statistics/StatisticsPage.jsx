@@ -1,5 +1,6 @@
 import PageShell from "../../components/PageShell.jsx";
 import PerformanceChart from "./PerformanceChart.jsx";
+import CourseCompletion from "./CourseCompletion.jsx";
 import { useI18n } from "../../i18n/i18n.js";
 import { SAMPLE_PERFORMANCE } from "../../data/sampleStatistics.js";
 import "./statistics.css";
@@ -27,6 +28,8 @@ export default function StatisticsPage() {
 
         <p className="stats__note">{t("Values are demo placeholders and do not represent real student results.")}</p>
       </section>
+
+      <CourseCompletion />
     </PageShell>
   );
 }
