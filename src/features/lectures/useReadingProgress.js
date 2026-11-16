@@ -10,19 +10,20 @@ import { createReadingTracker } from "./readingTracker.js";
   `enabled` is false in basic mode (a backend without the AI routes) and while the
   backend's features are unknown: then nothing is sent or loaded.
 
-  `onRead(lectureId, { viewed, total })` (optional) is called when a lecture's count of
-  pages read goes up (e.g. to refresh its course completion): after a save that counted
-  new pages. Not for pages the backend already had, and not for the first load when a
-  lecture opens.
+  `onRead(lectureId, { viewed, total, completion_percent })` (optional) is called when a
+  lecture's count of pages read goes up (e.g. to refresh its course completion): after a
+  save that counted new pages. completion_percent is the lecture's course completion after
+  that save, when the backend sends it (older backends don't). Not for pages the backend
+  already had, and not for the first load when a lecture opens.
 
   Returns:
-    progressFor(id)        { viewed, total } once loaded (null before, or when disabled)
+    progressFor(id)        { viewed, total, completion_percent? } once loaded (null before, or when disabled)
     load(id, { signal })   GET the lecture's progress (failures are ignored)
     setVisible(id, pages)  the pages on screen now (from the viewers)
     leave(id)              the viewer closed or switched lecture: send what is left
 */
 export function useReadingProgress({ enabled, onRead }) {
-  const [progress, setProgress] = useState({}); // lectureId → { viewed, total }
+  const [progress, setProgress] = useState({}); // lectureId → { viewed, total, completion_percent? }
 
   const update = useCallback((lectureId, data) => {
     if (!data || typeof data.viewed !== "number" || typeof data.total !== "number") return;
@@ -30,7 +31,9 @@ export function useReadingProgress({ enabled, onRead }) {
       const known = previous[lectureId];
       // An older answer (e.g. a slow GET after a POST) never lowers the count.
       if (known && known.total === data.total && known.viewed > data.viewed) return previous;
-      return { ...previous, [lectureId]: { viewed: data.viewed, total: data.total } };
+      const item = { viewed: data.viewed, total: data.total };
+      if (typeof data.completion_percent === "number") item.completion_percent = data.completion_percent;
+      return { ...previous, [lectureId]: item };
     });
   }, []);
 

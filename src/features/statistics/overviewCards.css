@@ -1,0 +1,157 @@
+/* Statistics → Overall: the cards at the top (OverviewCards.jsx) */
+
+.overview__title {
+  margin: 0 0 var(--space-3);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.overview__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.overview__card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: var(--space-4) 18px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.overview__card dd {
+  margin: 0;
+}
+.overview__label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.overview__value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.overview__note {
+  font-size: 12.5px;
+  color: var(--accent-strong);
+}
+
+/* Loading: the cards keep their place, with soft bars for the numbers. */
+.overview__placeholder {
+  display: block;
+  width: 70%;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+}
+.overview__placeholder--value {
+  width: 45%;
+  height: 26px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .overview__placeholder {
+    animation: overview-pulse 1.4s ease-in-out infinite;
+  }
+}
+@keyframes overview-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Error */
+.overview__error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  font-size: var(--text-sm);
+}
+.overview__error p {
+  margin: 0;
+  color: var(--danger);
+}
+
+/* A new student: how to start */
+.overview__empty {
+  padding: var(--space-5);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.overview__empty-title {
+  margin: 0 0 2px;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.overview__empty-text {
+  margin: 0 0 var(--space-3);
+}
+.overview__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.overview__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.overview__step-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.overview__step-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.overview__step-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.overview__step-link {
+  flex: none;
+  text-decoration: none;
+}
+
+/* Phones: the link goes under its step. */
+@media (max-width: 560px) {
+  .overview__step {
+    flex-wrap: wrap;
+  }
+  .overview__step-body {
+    flex-basis: calc(100% - 36px - var(--space-3));
+  }
+  .overview__step-link {
+    margin-left: calc(36px + var(--space-3));
+  }
+}

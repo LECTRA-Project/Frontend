@@ -47,6 +47,8 @@ describe("course completion on the Statistics page", () => {
   beforeEach(() => {
     api = mockApi();
     api.onGet("/users/me").reply(200, ok(TEST_USER));
+    // The overview cards above it (tested in overviewCards.test.jsx).
+    api.onGet("/stats/overview").reply(200, ok({ lectures: 0, pages_read: 0, pages_total: 0, chats: 0, questions_asked: 0, exams_taken: 0, questions_answered: 0, average_score_percent: null, correct_percent: null, study_days: 0, current_streak: 0, last_activity_at: null }));
     saveToken(token);
   });
 
@@ -157,14 +159,6 @@ describe("course completion on the Statistics page", () => {
     expect(within(section).getByRole("link", { name: "Upload a lecture" })).toHaveAttribute("href", "/workspace");
     expect(within(section).queryByTestId("completion-overall")).not.toBeInTheDocument();
     expect(within(section).queryByRole("list")).not.toBeInTheDocument();
-  });
-
-  it("keeps the sample chart beside it", async () => {
-    api.onGet("/stats/completion").reply(200, ok(COMPLETION));
-    renderApp("/statistics");
-    await screen.findByRole("list", { name: "Lectures, least complete first" });
-    expect(screen.getByRole("region", { name: "Overall performance" })).toBeInTheDocument();
-    expect(screen.getByText("Sample data — illustrative only")).toBeInTheDocument();
   });
 
   it("is in German when the student chose German", async () => {

@@ -119,8 +119,9 @@ function useElementWidth(ref) {
   Reading progress: the viewers report the pages on screen to the reading tracker
   (useReadingProgress / readingTracker.js), which sends the pages read to the backend for
   the course completion; the viewer header shows "Read 12 of 65". When a save counts new
-  pages, that lecture is read again for its completion_percent, so its ring in the menu
-  follows (useCompletionRefresh); a graded exam reloads the library for the same reason.
+  pages, the lecture's completion_percent from the save's answer goes into its ring in the
+  menu (useCompletionRefresh; an older backend without it: the lecture is read again); a
+  graded exam reloads the library for the same reason.
 
   Basic mode: a backend without AI processing (detected by useLectureLibrary) has no
   file/content endpoints. Files are then opened from the lecture's public S3 URL, and no

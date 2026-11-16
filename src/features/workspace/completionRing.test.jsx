@@ -11,7 +11,8 @@ import { useCompletionRefresh } from "../lectures/useCompletionRefresh.js";
 /*
   The completion ring beside each material in the menu: its value and label from the
   lecture's completion_percent, none without the field, and how it follows the reading
-  (a save that counts new pages reads that lecture again).
+  (a save that counts new pages answers with the lecture's completion_percent; an older
+  backend without it: the lecture is read again).
 */
 const token = makeToken();
 const PDF = { ...lectureFixture("l1", "KI 02", { count: 65 }), completion_percent: 58 };
@@ -24,6 +25,7 @@ const DECK = {
 const NOTEBOOK = lectureFixture("l3", "Pandas basics", { fileType: "application/x-ipynb+json", count: 4 });
 
 const lectureReads = (api, id) => api.history.get.filter((request) => request.url === `/student_profile/lectures/${id}`);
+const progressSaves = (api) => api.history.post.filter((request) => request.url.endsWith("/progress"));
 
 async function materialsList() {
   const menu = await screen.findByRole("navigation", { name: "Chats and this chat's materials" });
@@ -70,7 +72,7 @@ describe("completion rings in the menu", () => {
     expect(notebook.querySelector(".completion-ring")).toBeNull();
   });
 
-  it("follows the pages read: a save that counts a new page reads the lecture again", async () => {
+  it("follows the pages read with the completion from the save, without reading the lecture again", async () => {
     renderApp(`/workspace?chat=s-1&lecture=${DECK.id}`);
     const view = await screen.findByRole("region", { name: "Lecture: Game playing" });
     await within(view).findByText("Slide 3 of Game playing");
@@ -81,24 +83,52 @@ describe("completion rings in the menu", () => {
     // Opening the lecture loads its progress, but doesn't read the lecture again.
     expect(lectureReads(api, DECK.id)).toHaveLength(0);
 
-    // Slide 2 read: the next batch saves it, and the ring follows.
+    // Slide 2 read: the next batch saves it, its answer has the new completion, the ring follows.
     io.show({ 2: 1 });
     await vi.advanceTimersByTimeAsync(DWELL_MS);
     io.show({ 2: 0 });
     await vi.advanceTimersByTimeAsync(BATCH_INTERVAL_MS);
     await waitFor(() => expect(deck).toHaveAccessibleDescription("47% complete"));
-    expect(lectureReads(api, DECK.id)).toHaveLength(1);
+    expect(progressSaves(api)).toHaveLength(1);
+    expect(lectureReads(api, DECK.id)).toHaveLength(0);
 
-    // Slide 1 again (read in an earlier session): saved, but the count doesn't change, so
-    // nothing is read again.
+    // Slide 1 again (read in an earlier session): saved, but the count doesn't change.
     io.show({ 1: 1 });
     await vi.advanceTimersByTimeAsync(DWELL_MS);
     io.show({ 1: 0 });
     await vi.advanceTimersByTimeAsync(BATCH_INTERVAL_MS);
-    await waitFor(() => expect(api.history.post.filter((request) => request.url.endsWith("/progress"))).toHaveLength(2));
+    await waitFor(() => expect(progressSaves(api)).toHaveLength(2));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(lectureReads(api, DECK.id)).toHaveLength(0);
+    expect(deck).toHaveAccessibleDescription("47% complete");
+  });
+
+  it("reads the lecture again when an older backend's save has no completion", async () => {
+    backend.progressCompletion = false;
+    renderApp(`/workspace?chat=s-1&lecture=${DECK.id}`);
+    const view = await screen.findByRole("region", { name: "Lecture: Game playing" });
+    await within(view).findByText("Slide 3 of Game playing");
+    expect(await within(view).findByTestId("reading-progress")).toHaveTextContent("Read 1 of 3");
+    const list = await materialsList();
+    const deck = within(list).getByRole("button", { name: "Open Game playing beside the chat" });
+    expect(lectureReads(api, DECK.id)).toHaveLength(0);
+
+    io.show({ 2: 1 });
+    await vi.advanceTimersByTimeAsync(DWELL_MS);
+    io.show({ 2: 0 });
+    await vi.advanceTimersByTimeAsync(BATCH_INTERVAL_MS);
+    await waitFor(() => expect(deck).toHaveAccessibleDescription("47% complete"));
+    expect(progressSaves(api)).toHaveLength(1);
+    expect(lectureReads(api, DECK.id)).toHaveLength(1);
+
+    // Pages the backend already had: no request.
+    io.show({ 1: 1 });
+    await vi.advanceTimersByTimeAsync(DWELL_MS);
+    io.show({ 1: 0 });
+    await vi.advanceTimersByTimeAsync(BATCH_INTERVAL_MS);
+    await waitFor(() => expect(progressSaves(api)).toHaveLength(2));
     await vi.advanceTimersByTimeAsync(100);
     expect(lectureReads(api, DECK.id)).toHaveLength(1);
-    expect(deck).toHaveAccessibleDescription("47% complete");
   });
 
   it("follows when the viewer closes with a page not sent yet", async () => {
@@ -116,7 +146,7 @@ describe("completion rings in the menu", () => {
     await waitFor(() =>
       expect(within(list).getByRole("button", { name: "Open Game playing beside the chat" })).toHaveAccessibleDescription("47% complete")
     );
-    expect(lectureReads(api, DECK.id)).toHaveLength(1);
+    expect(lectureReads(api, DECK.id)).toHaveLength(0);
   });
 });
 
@@ -151,6 +181,38 @@ describe("useCompletionRefresh", () => {
     gates[1]();
     await waitFor(() => expect(onUpdate).toHaveBeenLastCalledWith("a", 45));
     expect(lectureReads(api, "a")).toHaveLength(2);
+  });
+
+  it("uses the completion of the save without a request", async () => {
+    const onUpdate = vi.fn();
+    const { result } = renderHook(() => useCompletionRefresh({ onUpdate }));
+
+    result.current("a", { viewed: 2, total: 3, completion_percent: 47 });
+    expect(onUpdate).toHaveBeenCalledWith("a", 47);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(api.history.get).toHaveLength(0);
+  });
+
+  it("falls back to reading the lecture when the save has no completion, and lets a newer save's completion win", async () => {
+    let release;
+    api.onGet("/student_profile/lectures/a").reply(async () => {
+      await new Promise((resolve) => {
+        release = resolve;
+      });
+      return [200, ok({ id: "a", completion_percent: 30 })];
+    });
+    const onUpdate = vi.fn();
+    const { result } = renderHook(() => useCompletionRefresh({ onUpdate }));
+
+    result.current("a", { viewed: 1, total: 3 });
+    await waitFor(() => expect(release).toBeTypeOf("function"));
+    // A newer save answers with its completion while the request is on its way.
+    result.current("a", { viewed: 2, total: 3, completion_percent: 47 });
+    expect(onUpdate).toHaveBeenLastCalledWith("a", 47);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(lectureReads(api, "a")).toHaveLength(1);
   });
 
   it("ignores failures and a lecture without completion_percent", async () => {
