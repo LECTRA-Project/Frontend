@@ -8,6 +8,7 @@ import { t, useI18n } from "../../i18n/i18n.js";
 import { citedBannerText, sourcePlace } from "../files/citedText.js";
 import { ViewerBanner, ViewerHead, ZoomControls } from "../files/ViewerChrome.jsx";
 import { lectureMeta, materialType, STATUS_LABEL, displayStatus } from "./materialTypes.js";
+import { supportsVisibility, useReadingVisibility } from "./useReadingVisibility.js";
 import "./lectures.css";
 
 // What the toolbar says for each kind of block (functions: read in the current language).
@@ -53,8 +54,25 @@ const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?
     onRetry           retries failed processing
     onClose           closes the viewer
     onOpenInNotebook  optional (notebooks): opens the file in the runnable notebook
+    reading           optional, for the course completion (null in basic mode):
+                      { progress: { viewed, total, unit } | null, onVisiblePages(pages) }.
+                      The header shows "Read 12 of 65"; onVisiblePages gets the slides /
+                      cells at least half on screen (their source_number), or [1] while an
+                      image is shown, and [] when the viewer closes. Slides in the Office
+                      viewer can't be followed (it's another site's frame): no label there.
 */
-export default function LectureContentPanel({ lecture, focus, cited = false, citedIn = "the answer", onRetry, onClose, onOpenInNotebook = null, widen = null, switcher = null }) {
+export default function LectureContentPanel({
+  lecture,
+  focus,
+  cited = false,
+  citedIn = "the answer",
+  onRetry,
+  onClose,
+  onOpenInNotebook = null,
+  widen = null,
+  switcher = null,
+  reading = null,
+}) {
   useI18n(); // re-render in a new interface language
   const [content, setContent] = useState(null);
   const [error, setError] = useState(null);
@@ -115,6 +133,17 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
   const shown = current ?? Math.max(0, focusIndex);
   const unit = UNIT[groups[shown]?.type ?? lecture.source_type] ?? UNIT.section;
 
+  // Reading progress: the blocks at least half on screen (an image: page 1 while shown).
+  const onVisiblePages = officeSlides ? null : reading?.onVisiblePages ?? null;
+  const observeBlocks = !isImage && supportsVisibility();
+  useReadingVisibility(bodyRef, content, observeBlocks ? onVisiblePages : null);
+  const fallbackPage = isImage ? (imageUrl ? 1 : null) : observeBlocks ? null : groups[shown]?.number ?? null;
+  useEffect(() => {
+    if (!onVisiblePages || observeBlocks) return undefined;
+    onVisiblePages(fallbackPage ? [fallbackPage] : []);
+    return () => onVisiblePages([]);
+  }, [onVisiblePages, observeBlocks, fallbackPage]);
+
   // Open at the focused slide or cell once the content is there.
   useEffect(() => {
     if (!focus || !content) return;
@@ -164,7 +193,15 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
 
   return (
     <section className="viewer lecture-view" aria-label={t("Lecture: {title}", { title: lecture.title })}>
-      <ViewerHead icon={icon} title={lecture.title} meta={`${lecture.original_filename} · ${lectureMeta(lecture)}`} widen={widen} switcher={switcher} onClose={onClose}>
+      <ViewerHead
+        icon={icon}
+        title={lecture.title}
+        meta={`${lecture.original_filename} · ${lectureMeta(lecture)}`}
+        progress={officeSlides ? null : reading?.progress ?? null}
+        widen={widen}
+        switcher={switcher}
+        onClose={onClose}
+      >
         {onOpenInNotebook && (
           <Button size="sm" icon="play" onClick={onOpenInNotebook} title={t("Open this notebook in the runnable notebook")}>
             {t("Run in notebook")}
@@ -271,6 +308,7 @@ export default function LectureContentPanel({ lecture, focus, cited = false, cit
               <article
                 key={`${group.type}-${group.number}`}
                 data-source={`${group.type}-${group.number}`}
+                data-read-page={group.number}
                 className={`source-block ${highlighted ? "source-block--focused" : ""}`}
               >
                 <h3 className="source-block__title">{group.sections[0].location.replace(/ \(.+\)| output$/, "")}</h3>

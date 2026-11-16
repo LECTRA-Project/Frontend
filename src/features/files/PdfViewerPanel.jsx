@@ -8,6 +8,7 @@ import { PdfPagesView, PdfThumbnails } from "./PdfPages.jsx";
 import { getFitZoomIndex, ZOOM_STEPS } from "./pdfZoom.js";
 import { citedBannerText, pageTileLabel, sourcePlace } from "./citedText.js";
 import { ViewerBanner, ViewerHead, ZoomControls } from "./ViewerChrome.jsx";
+import { supportsVisibility } from "../lectures/useReadingVisibility.js";
 import "./files.css";
 
 /*
@@ -32,6 +33,11 @@ import "./files.css";
     citedIn     where that source was: "the answer" (default) or "the exam results"
     onCollapse  closes the viewer
     widen       { wide, disabled, onToggle } for the Widen / Restore button (optional)
+    reading     optional, for the course completion (null in basic mode):
+                { progress: { viewed, total, unit } | null, onVisiblePages(pages) }.
+                The header shows "Read 12 of 65"; onVisiblePages gets the pages on screen
+                (pdf.js: every page at least half visible; the browser's frame: the
+                current page), and [] when the viewer closes.
 
   The toolbar's Pages button shows or hides the sidebar; it starts open when the panel is
   at least PAGES_OPEN_WIDTH wide. First / Last page sit next to Previous / Next.
@@ -40,7 +46,7 @@ import "./files.css";
 // The pages sidebar starts open in panels at least this wide.
 const PAGES_OPEN_WIDTH = 600;
 
-export default function PdfViewerPanel({ material, initialPage = 1, cited = false, citedIn = "the answer", onCollapse, widen = null, switcher = null }) {
+export default function PdfViewerPanel({ material, initialPage = 1, cited = false, citedIn = "the answer", onCollapse, widen = null, switcher = null, reading = null }) {
   const { t } = useI18n();
   const usePdfjs = canRenderPdf();
   const ready = Boolean(material.url) && !material.loading && !material.loadError;
@@ -139,6 +145,17 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
     setCitedPage(null);
   }
 
+  // Reading progress: pdf.js reports the pages on screen itself (PdfPagesView); the
+  // browser's frame (or no IntersectionObserver) reports the current page here.
+  const onVisiblePages = reading?.onVisiblePages ?? null;
+  const observed = Boolean(drawn) && supportsVisibility();
+  const shown = ready && (Boolean(drawn) || framed);
+  useEffect(() => {
+    if (!onVisiblePages || observed) return undefined;
+    onVisiblePages(shown ? [page] : []);
+    return () => onVisiblePages([]);
+  }, [onVisiblePages, observed, shown, page]);
+
   // Scrolling the pages moves the current page without scrolling again.
   const handleScrolledTo = useCallback((number) => setPage(number), []);
 
@@ -165,6 +182,7 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
         citedPage={onCitedPage ? citedPage : null}
         onPageChange={handleScrolledTo}
         onFitPercent={setFitPercent}
+        onVisiblePages={observed ? onVisiblePages : null}
       />
     );
   } else {
@@ -185,7 +203,15 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
 
   return (
     <section ref={panelRef} className="viewer pdf" aria-label={t("PDF viewer: {name}", { name: material.name })}>
-      <ViewerHead title={material.name} meta={meta} newTabUrl={material.url ?? null} widen={widen} switcher={switcher} onClose={onCollapse} />
+      <ViewerHead
+        title={material.name}
+        meta={meta}
+        newTabUrl={material.url ?? null}
+        progress={reading?.progress ?? null}
+        widen={widen}
+        switcher={switcher}
+        onClose={onCollapse}
+      />
 
       <div className="viewer__toolbar">
         {hasPages && (

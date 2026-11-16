@@ -1,10 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, setAuthToken } from "../client.js";
 import {
   deleteLecture,
+  getReadingProgress,
   listAllLectures,
   listLectures,
+  recordReadingProgress,
+  recordReadingProgressKeepalive,
   renameLecture,
   reprocessLecture,
   uploadLecture,
@@ -82,6 +85,38 @@ describe("lectures service", () => {
       constructor: ApiError,
       status: 422,
       message: "Title must contain 1 to 255 characters",
+    });
+  });
+
+  it("reads and records the reading progress", async () => {
+    const progress = { viewed_pages: [1, 2, 5], viewed: 3, total: 65, percent: 5 };
+    api.onGet("/student_profile/lectures/a/progress").reply(200, ok(progress));
+    api.onPost("/student_profile/lectures/a/progress").reply((config) => {
+      expect(config.headers.Authorization).toBe("Bearer test-token");
+      expect(JSON.parse(config.data)).toEqual({ pages: [1, 2, 5] });
+      return [200, ok(progress, "Reading progress saved")];
+    });
+    await expect(getReadingProgress("a")).resolves.toEqual(progress);
+    await expect(recordReadingProgress("a", [1, 2, 5])).resolves.toEqual(progress);
+  });
+
+  describe("keepalive progress (tab hidden or page closing)", () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("posts with keepalive and the auth header", async () => {
+      const progress = { viewed_pages: [7], viewed: 1, total: 65, percent: 2 };
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify(ok(progress)), { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(recordReadingProgressKeepalive("a", [7])).resolves.toEqual(progress);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("/api/student_profile/lectures/a/progress");
+      expect(init).toMatchObject({ method: "POST", keepalive: true, body: JSON.stringify({ pages: [7] }) });
+      expect(init.headers.Authorization).toBe("Bearer test-token");
+    });
+
+    it("rejects with the HTTP status when the request fails", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 404 })));
+      await expect(recordReadingProgressKeepalive("gone", [1])).rejects.toMatchObject({ constructor: ApiError, status: 404 });
     });
   });
 });
