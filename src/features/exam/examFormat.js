@@ -60,6 +60,18 @@ export function questionNumbers(numbers) {
   return t("Questions {list} and {last}", { list: numbers.slice(0, -1).join(", "), last: numbers.at(-1) });
 }
 
+/* The mistakes of a submitted exam, as the backend counts them for "Practise my mistakes":
+   graded questions without full points (wrong, partly correct or not answered). Answers
+   still waiting to be graded aren't known to be mistakes. */
+export function mistakesOf(exam) {
+  return (exam?.questions ?? []).filter(({ result }) => result?.graded && (result.points ?? 0) < (result.max_points ?? 0));
+}
+
+/* One question per mistake, 3 to 10 (the sizes an exam can have). */
+export function mistakesQuestionCount(mistakes) {
+  return Math.min(Math.max(mistakes, 3), 10);
+}
+
 /* The verdict of a checked answer, as a label and a tone for its badge. */
 export function verdictOf(result) {
   if (!result?.answered) return { label: t("Not answered"), tone: "bad" };

@@ -114,21 +114,57 @@ describe("exam setup", () => {
     await waitFor(() => expect(search(router)).toEqual({ chat: "s-empty", exam: "e-new-1" }));
     expect(await screen.findByRole("heading", { name: "Writing your questions…" })).toBeInTheDocument();
     // The settings are kept for Retry.
-    expect(JSON.parse(localStorage.getItem(STORAGE("e-new-1"))).settings).toEqual({ lectureIds: [KI02.id, KI03.id], questionCount: 3, types: ["short_answer"] });
+    expect(JSON.parse(localStorage.getItem(STORAGE("e-new-1"))).settings).toEqual({ lectureIds: [KI02.id, KI03.id], questionCount: 3, types: ["short_answer"], difficulty: "mixed" });
   });
 
-  it("explains 409 and opens the exam already being generated", async () => {
+  it("offers the difficulty, Mixed by default, and sends the one chosen", async () => {
+    setup();
+    const { user } = await openSetup();
+    const group = screen.getByRole("group", { name: "Difficulty" });
+    expect(within(group).getAllByRole("radio").map((radio) => radio.labels[0].textContent)).toEqual(["Mixed", "Easy", "Medium", "Hard"]);
+    expect(within(group).getByRole("radio", { name: "Mixed" })).toBeChecked();
+    expect(group).toHaveAccessibleDescription("Each question at the level that suits its pages.");
+
+    await user.click(within(group).getByRole("radio", { name: "Hard" }));
+    expect(group).toHaveAccessibleDescription("Compare methods and reason about trade-offs.");
+    await user.click(generate());
+    expect(exams.started).toEqual([{ lecture_ids: [KI02.id], question_count: 5, types: ["multiple_choice", "short_answer"], difficulty: "hard" }]);
+    expect(JSON.parse(localStorage.getItem(STORAGE("e-new-1"))).settings.difficulty).toBe("hard");
+  });
+
+  it("shows the difficulty in German", async () => {
+    localStorage.setItem("lectra:language:v1:user-1", "de");
+    setup();
+    renderApp("/workspace/exam?chat=s-hunt");
+    const group = await screen.findByRole("group", { name: "Schwierigkeit" });
+    expect(within(group).getAllByRole("radio").map((radio) => radio.labels[0].textContent)).toEqual(["Gemischt", "Leicht", "Mittel", "Schwer"]);
+    expect(group).toHaveAccessibleDescription("Jede Frage auf dem Niveau, das zu ihren Seiten passt.");
+  });
+
+  it("explains 409 and opens the exam already being generated, named by the 409 itself", async () => {
     const busy = examFixture("e-busy", { status: "generating", count: 7, ready: 2 });
     setup({
       examList: [busy],
-      startError: [409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: null }],
+      startError: [409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: { exam_id: "e-busy" } }],
     });
     const { user, router } = await openSetup();
+    const historyReads = () => api.history.get.filter((request) => request.url === "/exams").length;
+    const before = historyReads();
     await user.click(generate());
     expect(await screen.findByText(/An exam is already being generated/)).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Open that exam" }));
     expect(search(router)).toEqual({ chat: "s-hunt", exam: "e-busy" });
     expect(await screen.findByRole("heading", { name: "Writing your questions…" })).toBeInTheDocument();
+    // No extra request: the history isn't read to find the exam.
+    expect(historyReads()).toBe(before);
+  });
+
+  it("explains a 409 without an exam to open", async () => {
+    setup({ startError: [409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: null }] });
+    const { user } = await openSetup();
+    await user.click(generate());
+    expect(await screen.findByText(/An exam is already being generated/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open that exam" })).not.toBeInTheDocument();
   });
 
   it("shows the 422 message that names the material", async () => {

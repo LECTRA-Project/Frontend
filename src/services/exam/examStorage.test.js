@@ -14,7 +14,7 @@ describe("exam answers on this device", () => {
 
   it("keeps the answers per user and exam", () => {
     expect(saveExamProgress("u-1", "e-1", { answers: { q1: ["a", "c"], q2: "Because" }, current: 1 })).toBe(true);
-    expect(loadExamProgress("u-1", "e-1")).toEqual({ answers: { q1: ["a", "c"], q2: "Because" }, current: 1, settings: null });
+    expect(loadExamProgress("u-1", "e-1")).toEqual({ answers: { q1: ["a", "c"], q2: "Because" }, current: 1, settings: null, started: false });
     expect(loadExamProgress("u-2", "e-1").answers).toEqual({});
     expect(loadExamProgress("u-1", "e-2").answers).toEqual({});
   });
@@ -23,16 +23,24 @@ describe("exam answers on this device", () => {
     const settings = { lectureIds: ["l-1"], questionCount: 3, types: ["short_answer"] };
     updateExamProgress("u-1", "e-1", { settings });
     updateExamProgress("u-1", "e-1", { answers: { q1: "x" } });
-    expect(loadExamProgress("u-1", "e-1")).toEqual({ answers: { q1: "x" }, current: 0, settings });
+    expect(loadExamProgress("u-1", "e-1")).toEqual({ answers: { q1: "x" }, current: 0, settings, started: false });
     clearExamProgress("u-1", "e-1");
     expect(loadExamProgress("u-1", "e-1").settings).toBeNull();
   });
 
+  it("remembers that the student started while the questions were written", () => {
+    updateExamProgress("u-1", "e-1", { started: true });
+    updateExamProgress("u-1", "e-1", { answers: { q1: ["a"] } });
+    expect(loadExamProgress("u-1", "e-1")).toMatchObject({ answers: { q1: ["a"] }, started: true });
+    localStorage.setItem("lectra:exam:v1:u-1:e-2", JSON.stringify({ answers: {}, started: "yes" }));
+    expect(loadExamProgress("u-1", "e-2").started).toBe(false);
+  });
+
   it("reads damaged data as empty", () => {
     localStorage.setItem("lectra:exam:v1:u-1:e-1", "{not json");
-    expect(loadExamProgress("u-1", "e-1")).toEqual({ answers: {}, current: 0, settings: null });
+    expect(loadExamProgress("u-1", "e-1")).toEqual({ answers: {}, current: 0, settings: null, started: false });
     localStorage.setItem("lectra:exam:v1:u-1:e-1", JSON.stringify({ answers: null, current: -3 }));
-    expect(loadExamProgress("u-1", "e-1")).toEqual({ answers: {}, current: 0, settings: null });
+    expect(loadExamProgress("u-1", "e-1")).toEqual({ answers: {}, current: 0, settings: null, started: false });
   });
 
   it("reports false instead of throwing when the browser refuses to save or read", () => {
