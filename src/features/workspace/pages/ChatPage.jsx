@@ -44,6 +44,11 @@ export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
   - Every code block in an answer has a Copy button (just that code), and every answer has a
     Copy button under it (the whole answer as Markdown, with its sources). When the
     clipboard can't be used, a dialog shows the text selected for copying by hand.
+  - The latest answer from the materials ends with the assistant's suggestion of the next
+    step ("Shall I explain the next section …?") and a "Yes, please" button that asks for it.
+  - A chat in a project shows the project's name in the bar (it opens the project page). Its
+    materials are the project's. ⋯ → "Move to project…" moves a chat into a project (or to
+    another one); "Remove from project" makes it a normal chat with a copy of the materials.
 */
 export default function ChatPage() {
   const { chatView } = useOutletContext();
@@ -65,6 +70,9 @@ export function ChatView({
   onRename,
   onDelete,
   onSend,
+  onMoveToProject = null,
+  onRemoveFromProject = null,
+  onOpenProject = () => {},
   note,
   cellContext,
   cellDragActive,
@@ -91,6 +99,10 @@ export function ChatView({
   const title = displayChatTitle(session?.title) ?? t("New chat");
   const count = materials.length;
   const empty = !loading && messages.length === 0;
+  // Only the latest answer offers its suggestion, and only while a question can be sent.
+  const lastMessage = messages.at(-1);
+  const suggesting =
+    !busy && available === true && lastMessage?.role === "assistant" && lastMessage.suggestion ? lastMessage.id : null;
 
   /*
     Keep the newest message in view — except when older messages were just added above
@@ -171,6 +183,15 @@ export function ChatView({
     return copied;
   }
 
+  async function removeFromProject() {
+    try {
+      await onRemoveFromProject();
+      setActionError(null);
+    } catch (err) {
+      setActionError(err.message);
+    }
+  }
+
   async function confirmDelete() {
     setDeleting(false);
     try {
@@ -230,11 +251,27 @@ export function ChatView({
             </span>
           </Link>
         )}
+        {session?.project && renaming === null && (
+          <button
+            type="button"
+            className="project-tag project-tag--button chat__project"
+            title={t("Open the project {name}", { name: session.project.name })}
+            aria-label={t("Open the project {name}", { name: session.project.name })}
+            onClick={() => onOpenProject(session.project.id)}
+          >
+            <Icon name="folder" size={13} />
+            <span className="project-tag__name">{session.project.name}</span>
+          </button>
+        )}
         {session && renaming === null && (
           <Menu
             label={t("Chat actions")}
             items={[
               { label: t("Rename chat"), icon: "edit", onSelect: () => setRenaming(title) },
+              ...(onMoveToProject ? [{ label: t("Move to project…"), icon: "folder", disabled: busy, onSelect: onMoveToProject }] : []),
+              ...(session.project && onRemoveFromProject
+                ? [{ label: t("Remove from project"), icon: "arrowLeft", disabled: busy, onSelect: removeFromProject }]
+                : []),
               { label: t("Delete chat"), icon: "trash", danger: true, onSelect: () => setDeleting(true) },
             ]}
           />
@@ -257,7 +294,9 @@ export function ChatView({
             <p className="chat__empty-text">
               {available === false
                 ? t("This server has no chat assistant yet, so questions can’t be answered here.")
-                : t(
+                : session?.project
+                  ? t("This chat is in the project {name} and answers from the project’s materials.", { name: session.project.name })
+                  : t(
                     "Each chat has its own materials. Upload the lectures for this chat and the answers will come from them, with the pages they are based on.",
                   )}
             </p>
@@ -282,6 +321,7 @@ export function ChatView({
                 onUploadAgain={onUploadClick}
                 onCopy={copy}
                 onGrow={followAnswer}
+                onAcceptSuggestion={message.id === suggesting ? () => onSend(t("Yes, please")) : null}
               />
             ))}
             {busy && (
@@ -336,7 +376,7 @@ export function ChatView({
   );
 }
 
-function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow }) {
+function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow, onAcceptSuggestion }) {
   const { t } = useI18n();
   if (message.role === "system") {
     return (
@@ -387,15 +427,24 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
     );
   }
   return (
-    <AssistantAnswer message={message} materialType={materialType} lectureTitle={lectureTitle} onOpenSource={onOpenSource} onCopy={onCopy} onGrow={onGrow} />
+    <AssistantAnswer
+      message={message}
+      materialType={materialType}
+      lectureTitle={lectureTitle}
+      onOpenSource={onOpenSource}
+      onCopy={onCopy}
+      onGrow={onGrow}
+      onAcceptSuggestion={onAcceptSuggestion}
+    />
   );
 }
 
 /*
   An answer. One that just arrived (message.fresh) is typed out word by word
-  (useTypewriter); its sources and Copy button fade in once it is complete.
+  (useTypewriter); its sources, Copy button and suggestion fade in once it is complete.
+  `onAcceptSuggestion` is set on the latest answer only: it then shows its suggestion.
 */
-function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, onCopy, onGrow }) {
+function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, onCopy, onGrow, onAcceptSuggestion }) {
   const { t } = useI18n();
   const { text, typing } = useTypewriter(message.id, message.content, message.fresh);
   const chips = sourceChips(message.sources, materialType, lectureTitle);
@@ -438,15 +487,22 @@ function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, on
           onClick={handleAnswerClick}
         />
         {!typing && (
-          <AnswerFooter chips={chips} content={message.content} onOpenSource={onOpenSource} onCopy={onCopy} />
+          <AnswerFooter
+            chips={chips}
+            content={message.content}
+            suggestion={onAcceptSuggestion ? message.suggestion : null}
+            onAcceptSuggestion={onAcceptSuggestion}
+            onOpenSource={onOpenSource}
+            onCopy={onCopy}
+          />
         )}
       </article>
     </li>
   );
 }
 
-/* The answer's sources and Copy button (shown once the answer is complete). */
-function AnswerFooter({ chips, content, onOpenSource, onCopy }) {
+/* The answer's sources, Copy button and suggestion (shown once the answer is complete). */
+function AnswerFooter({ chips, content, suggestion = null, onAcceptSuggestion = null, onOpenSource, onCopy }) {
   const { t } = useI18n();
   return (
     <>
@@ -470,6 +526,18 @@ function AnswerFooter({ chips, content, onOpenSource, onCopy }) {
       <div className="chat-answer__actions">
         <CopyAnswerButton text={answerText(content, chips)} onCopy={onCopy} />
       </div>
+      {suggestion && (
+        <div className="chat-suggestion">
+          <span className="chat-suggestion__label">
+            <Icon name="arrowRight" size={14} />
+            {t("Next step")}
+          </span>
+          <p className="chat-suggestion__text">{suggestion}</p>
+          <button type="button" className="btn btn--secondary btn--sm chat-suggestion__accept" onClick={onAcceptSuggestion}>
+            {t("Yes, please")}
+          </button>
+        </div>
+      )}
     </>
   );
 }

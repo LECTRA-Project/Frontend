@@ -1,0 +1,361 @@
+/* ---------- Projects: project page, all projects, dialogs, project tag ---------- */
+
+/* The project tag: a small label with the project's name (chat list rows, chat bar). */
+.project-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 45%;
+  min-width: 0;
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--text-secondary);
+}
+.project-tag > svg {
+  flex: none;
+}
+.project-tag__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.project-tag--button:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.chat__project {
+  max-width: 40%;
+}
+
+/* A project page and the all-projects page take the chat's place. */
+.project {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.project__bar > svg {
+  flex: none;
+  color: var(--accent);
+}
+.project__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+}
+.project__start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* As wide as the page's content (a flex item with auto margins would shrink to its text). */
+.project__start .composer {
+  width: 100%;
+}
+.project__start .chat__disclaimer {
+  margin-top: 0;
+}
+.project__note,
+.project__error {
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-align: center;
+}
+.project__error {
+  color: var(--danger);
+}
+.project__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.project__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 6px;
+}
+.project__materials {
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--bg-surface);
+}
+/* On the page the row actions are always shown (not only on hover as in the menu). */
+.project__material .cf-material__remove {
+  position: static;
+  opacity: 1;
+}
+.project__chats,
+.projects__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.project__chat {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-md);
+  color: var(--text-primary);
+}
+.project__chat:hover {
+  background: var(--accent-soft);
+}
+.project__chat > svg {
+  flex: none;
+  color: var(--text-secondary);
+}
+.project__chat-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project__chat-date {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* All projects */
+.projects .chat__empty .btn {
+  align-self: center;
+}
+.projects__item {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  text-align: left;
+  color: var(--text-primary);
+}
+.projects__item:hover {
+  border-color: var(--accent);
+}
+.projects__list {
+  gap: var(--space-2);
+}
+.projects__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.projects__name,
+.projects__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.projects__name {
+  font-weight: 600;
+}
+.projects__meta {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.projects__pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.projects__page {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Projects in the menu: the 3 most recently active, + and "View all projects". */
+.cf-projects {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cf-projects__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 2px 2px 6px;
+}
+.cf-projects__head .icon-btn {
+  width: 28px;
+  height: 28px;
+  color: var(--accent);
+}
+.cf-projects__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cf-project {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-md);
+  color: var(--text-primary);
+}
+.cf-project:hover {
+  background: var(--accent-soft);
+}
+.cf-project--current {
+  background: var(--accent-hover);
+  font-weight: 600;
+}
+.cf-project--empty {
+  color: var(--text-secondary);
+}
+.cf-project > svg {
+  flex: none;
+  color: var(--accent);
+}
+.cf-project__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cf-projects__all {
+  align-self: flex-start;
+  margin: 4px 10px 0;
+}
+/* A chat row with its project's tag: the tag stays short so the title keeps most of the row. */
+.cf-chat .project-tag {
+  max-width: 84px;
+}
+/* A chat row with its project's tag. */
+.cf-chat--tagged {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cf-chat__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dialogs */
+.project-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-5);
+  overflow-y: auto;
+}
+.project-form__hint {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.project-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.project-delete__list {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.project-move__choices {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: none;
+}
+.project-move__legend {
+  margin-bottom: 4px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.project-move__choice,
+.project-move__materials {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 var(--space-2);
+  border-radius: 8px;
+}
+.project-move__choice:hover {
+  background: var(--accent-soft);
+}
+.project-move__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-move__materials {
+  align-items: flex-start;
+  padding-top: var(--space-2);
+  font-size: var(--text-sm);
+}
+.project-move__materials input {
+  margin-top: 3px;
+}
+
+@media (max-width: 760px) {
+  .project__scroll {
+    gap: var(--space-5);
+    padding: var(--space-4) var(--space-3) var(--space-6);
+  }
+  .project__chat-date {
+    display: none;
+  }
+  .chat__project {
+    max-width: 35%;
+  }
+}

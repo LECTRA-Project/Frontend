@@ -9,9 +9,12 @@ import {
   listAllChatMessages,
   listChatMessages,
   listChatSessions,
+  moveChatToProject,
+  removeChatFromProject,
   renameChatSession,
   sendChatMessage,
 } from "../../api/services/chat.js";
+import { createProjectChat } from "../../api/services/projects.js";
 import { t } from "../../i18n/i18n.js";
 
 // Chats in the menu are loaded this many at a time (more as the list is scrolled).
@@ -37,6 +40,10 @@ export const MESSAGES_PAGE_SIZE = 100;
     renamed or deleted from the library.
   - createChat(ids, title) creates a chat with those materials (none is fine) without
     opening it; askIn(id, payload) opens a chat (loading its messages) and sends there.
+  - Projects: a chat in a project (session.project) has the project's materials; a change of
+    them in one chat shows in all the project's chats. createInProject(projectId) creates a
+    chat in a project (not opened); moveToProject / removeFromProject move a chat in and out;
+    updateProject / forgetProject follow a renamed, changed or deleted project.
   - send() shows the question at once, then replaces it with the saved question and the
     answer. The backend saves nothing when answering fails, so a failed question stays
     visible with the error and can simply be asked again.
@@ -77,6 +84,11 @@ export function useLectureChat({ enabled }) {
   const messagesRequest = useRef(null);
   // The chat on screen, readable after an await (a send can finish after the student switched chats).
   const activeRef = useRef(null);
+  // The chats loaded, readable in callbacks without depending on them.
+  const sessionsRef = useRef(sessions);
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
   const select = useCallback((id) => {
     activeRef.current = id;
@@ -160,11 +172,16 @@ export function useLectureChat({ enabled }) {
 
   const putSession = useCallback((session, { toTop = false } = {}) => {
     setSessions((list) => {
-      const others = list.filter((item) => item.id !== session.id);
+      // The chats of a project share its materials: a change in one shows in all of them.
+      const shared = (item) =>
+        session.project && item.project?.id === session.project.id
+          ? { ...item, project: session.project, lectures: session.lectures, lecture: session.lecture }
+          : item;
+      const others = list.filter((item) => item.id !== session.id).map(shared);
       if (toTop) return [session, ...others];
       const index = list.findIndex((item) => item.id === session.id);
       if (index === -1) return [session, ...others];
-      const next = [...list];
+      const next = list.map(shared);
       next[index] = session;
       return next;
     });
@@ -357,6 +374,61 @@ export function useLectureChat({ enabled }) {
     [putSession]
   );
 
+  /* A new chat in project `projectId`, listed first but not opened. */
+  const createInProject = useCallback(
+    async (projectId) => {
+      const created = await createProjectChat(projectId);
+      putSession(created, { toTop: true });
+      return created;
+    },
+    [putSession]
+  );
+
+  /* Moves chat `id` into a project (it then has the project's materials). Returns the session. */
+  const moveToProject = useCallback(
+    async (id, projectId, { addMaterials = true } = {}) => {
+      const session = await moveChatToProject(id, projectId, { addMaterials });
+      putSession(session);
+      return session;
+    },
+    [putSession]
+  );
+
+  /* Takes chat `id` out of its project (it keeps a copy of the materials). Returns the session. */
+  const removeFromProject = useCallback(
+    async (id) => {
+      const session = await removeChatFromProject(id);
+      putSession(session);
+      return session;
+    },
+    [putSession]
+  );
+
+  /*
+    A project changed (renamed, or its materials changed on the project page): its chats show
+    the new name and materials. `project` is the project as the API returns it.
+  */
+  const updateProject = useCallback((project) => {
+    setSessions((list) =>
+      list.map((item) => {
+        if (item.project?.id !== project.id) return item;
+        const next = { ...item, project: { id: project.id, name: project.name } };
+        if (project.lectures) Object.assign(next, { lectures: project.lectures, lecture: project.lectures[0] ?? null });
+        return next;
+      })
+    );
+  }, []);
+
+  /* A project was deleted with its chats: they leave the list (the open one: a new chat). */
+  const forgetProject = useCallback(
+    (projectId) => {
+      const gone = sessionsRef.current.filter((item) => item.project?.id === projectId).map((item) => item.id);
+      setSessions((list) => list.filter((item) => item.project?.id !== projectId));
+      if (gone.includes(activeRef.current)) startNewChat();
+    },
+    [startNewChat]
+  );
+
   /*
     Opens chat `sessionId` (unless it is open already) and asks there, once its messages are
     loaded, so the question isn't replaced by the loaded list. Resolves like send(); false
@@ -437,6 +509,11 @@ export function useLectureChat({ enabled }) {
     detachLecture,
     send,
     createChat,
+    createInProject,
+    moveToProject,
+    removeFromProject,
+    updateProject,
+    forgetProject,
     askIn,
     rename,
     remove,

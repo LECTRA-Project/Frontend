@@ -53,6 +53,8 @@ export default {
   Done: "Fertig",
   "1 line": "1 Zeile",
   "{count} lines": "{count} Zeilen",
+  "Next step": "Nächster Schritt",
+  "Yes, please": "Ja, bitte",
 
   // Composer
   "Drop to add this cell to your question": "Loslassen, um diese Zelle zu deiner Frage hinzuzufügen",

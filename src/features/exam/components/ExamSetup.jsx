@@ -24,7 +24,8 @@ import { formatExamDate } from "../examFormat.js";
 
   Props:
     materials      [{ id, title, meta, selectable, reason }]
-    fromChat       true: `materials` are the open chat's; false: the library
+    fromChat       true: `materials` are the open chat's (or project's); false: the library
+    projectName    the project the Exam view was opened from (its materials), or null
     loading        materials still loading
     unfinished     { exams, loading, error, onReload }  (see useUnfinishedExams)
     userKey        whose answers on this device to count
@@ -44,6 +45,7 @@ export default function ExamSetup({
   onOpenExam,
   onDiscard,
   preset = null,
+  projectName = null,
 }) {
   const { t } = useI18n();
   const hintId = useId();
@@ -99,14 +101,20 @@ export default function ExamSetup({
               ? t("The materials “{concept}” came from are chosen. Change them if you like.", { concept: preset.concept })
               : preset
                 ? t("The materials and settings of that exam are chosen. Change them if you like.")
-                : fromChat
-                  ? t("Questions are generated from this chat’s materials. Your answers are kept on this device.")
-                  : t("This chat has no materials, so pick from your library. Your answers are kept on this device.")}
+                : fromChat && projectName
+                  ? t("Questions are generated from the materials of {name}. Your answers are kept on this device.", { name: projectName })
+                  : fromChat
+                    ? t("Questions are generated from this chat’s materials. Your answers are kept on this device.")
+                    : projectName
+                      ? t("{name} has no materials, so pick from your library. Your answers are kept on this device.", { name: projectName })
+                      : t("This chat has no materials, so pick from your library. Your answers are kept on this device.")}
           </p>
         </div>
 
         <fieldset className="exam-field">
-          <legend className="exam-field__legend">{fromChat ? t("Materials in this chat") : t("Your materials")}</legend>
+          <legend className="exam-field__legend">
+            {fromChat && projectName ? t("Materials in {name}", { name: projectName }) : fromChat ? t("Materials in this chat") : t("Your materials")}
+          </legend>
           {loading ? (
             <p className="exam-muted" role="status">
               {t("Loading materials…")}

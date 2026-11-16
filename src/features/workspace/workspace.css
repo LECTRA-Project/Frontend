@@ -787,6 +787,7 @@ button.cf-material__open:hover {
   .chat-msg--thinking,
   .chat-msg--fresh .chat-sources,
   .chat-msg--fresh .chat-answer__actions,
+  .chat-msg--fresh .chat-suggestion,
   .chat-thinking__dots span {
     animation: none;
   }
@@ -1123,6 +1124,39 @@ button.cf-material__open:hover {
   display: flex;
   gap: var(--space-1);
   margin-left: -8px;
+}
+/* The latest answer's suggestion of the next step, with "Yes, please". */
+.chat-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+}
+.chat-suggestion__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-basis: 100%;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+.chat-suggestion__text {
+  flex: 1 1 240px;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.chat-suggestion__accept {
+  flex: none;
+}
+.chat-msg--fresh .chat-suggestion {
+  animation: chat-fade-in 300ms ease-out;
 }
 .chat-answer__copy {
   gap: 6px;

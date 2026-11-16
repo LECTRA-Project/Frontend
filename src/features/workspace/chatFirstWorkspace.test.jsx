@@ -221,6 +221,13 @@ describe("chat-first workspace: chats and their materials", () => {
     await user.click(within(menu()).getByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" }));
     await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" });
     await user.click(within(menu()).getByRole("button", { name: "Remove KI 02 Classification Part1 from this chat" }));
+    // It asks first; Cancel keeps it.
+    const ask = screen.getByRole("dialog", { name: "Remove from this chat?" });
+    expect(ask).toHaveTextContent("“KI 02 Classification Part1” will be removed from this chat. The file stays in your library.");
+    await user.click(within(ask).getByRole("button", { name: "Cancel" }));
+    expect(materialNames()).toContain("Open KI 02 Classification Part1 beside the chat");
+    await user.click(within(menu()).getByRole("button", { name: "Remove KI 02 Classification Part1 from this chat" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Remove from this chat?" })).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(materialNames()).not.toContain("Open KI 02 Classification Part1 beside the chat"));
     expect(api.history.delete.map((request) => request.url)).toContain(`/student_profile/chat/sessions/s-hunt/lectures/${KI02.id}`);
     // The list updates first; the viewer closes on the same change a moment later.

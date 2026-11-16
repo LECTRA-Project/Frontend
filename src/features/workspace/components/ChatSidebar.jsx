@@ -10,6 +10,7 @@ import { STATUS_LABEL } from "../../lectures/materialTypes.js";
 import { groupChats } from "../chatLayout.js";
 import { displayChatTitle } from "../../../services/notebook/cellContext.js";
 import { useI18n } from "../../../i18n/i18n.js";
+import "../projects.css";
 
 /*
   The collapsible left menu of the chat-first workspace (272 px; a 64 px icon rail when
@@ -17,7 +18,7 @@ import { useI18n } from "../../../i18n/i18n.js";
   grouped by their last activity.
 
   "Materials in this chat" lists only the open chat's materials: a click opens one in the
-  viewer beside the chat, × removes it from the chat (the lecture itself is kept), and the
+  viewer beside the chat, × removes it from the chat after asking (the lecture itself is kept), and the
   upload button uploads new files into this chat. A small ring shows how far each material
   is (its completion_percent; none when the backend doesn't send it), and the open button
   describes itself with it ("58% complete"). Lectures already uploaded can be added
@@ -48,7 +49,18 @@ import { useI18n } from "../../../i18n/i18n.js";
                                                      the end of the list, more load as it
                                                      comes into view (or with its button)
     onRemoveChat(session)         deletes a chat after confirmation; resolves true when removed
+    onMoveChat(session)           opens "Move to project" for a chat (none: not offered)
     available                     false when the server has no chat API
+
+  Projects (a course's materials and chats together): a section above the chats with the 3
+  most recently active projects, + (a new project) and, with more than 3, "View all projects". A chat in a
+  project shows the project's name as a small tag; its materials are the project's
+  ("Materials in <project>"), so adding or removing one changes the project.
+    projects            { recent, total } (see useProjects), or null without projects
+    currentProjectId    the project open on its page, or the open chat's project
+    onOpenProject(id), onNewProject(), onViewAllProjects()
+    projectName         the open chat's project name (null for a normal chat)
+    showMaterials       false hides the open chat's materials (on the project pages)
 */
 export default function ChatSidebar({
   open,
@@ -78,10 +90,19 @@ export default function ChatSidebar({
   loadingMoreChats = false,
   onLoadMoreChats = () => {},
   onRemoveChat,
+  onMoveChat = null,
   available = true,
+  projects = null,
+  currentProjectId = null,
+  onOpenProject = () => {},
+  onNewProject = () => {},
+  onViewAllProjects = () => {},
+  projectName = null,
+  showMaterials = true,
 }) {
   const { t } = useI18n();
   const [removing, setRemoving] = useState(null); // the chat whose Remove is being confirmed
+  const [unlinking, setUnlinking] = useState(null); // the material whose × is being confirmed
   const newChatRef = useRef(null);
   const scrollRef = useRef(null);
   const moreRef = useRef(null);
@@ -131,10 +152,11 @@ export default function ChatSidebar({
         </div>
 
         <div className="cf-side__scroll" ref={scrollRef}>
+          {showMaterials && (
           <section className="cf-materials" id="cf-materials" tabIndex={-1} aria-labelledby="cf-materials-title">
             <div className="cf-materials__head">
-              <h2 id="cf-materials-title" className="cf-section-title">
-                {t("Materials in this chat")}
+              <h2 id="cf-materials-title" className="cf-section-title" title={projectName ?? undefined}>
+                {projectName ? t("Materials in {name}", { name: projectName }) : t("Materials in this chat")}
               </h2>
               <div className="cf-materials__actions">
                 {addable.length > 0 && (
@@ -220,7 +242,7 @@ export default function ChatSidebar({
                         icon="close"
                         label={t("Remove {name} from this chat", { name: material.name })}
                         className="cf-material__remove"
-                        onClick={() => onRemoveMaterial(material)}
+                        onClick={() => setUnlinking(material)}
                       />
                     </span>
                   </li>
@@ -252,6 +274,50 @@ export default function ChatSidebar({
               ))}
             </ul>
           </section>
+          )}
+
+          {projects && (
+            <section className="cf-projects" aria-labelledby="cf-projects-title">
+              <div className="cf-projects__head">
+                <h2 id="cf-projects-title" className="cf-section-title">
+                  {t("Projects")}
+                </h2>
+                <IconButton icon="plus" label={t("New project")} onClick={onNewProject} disabled={!available} />
+              </div>
+              {projects.recent.length === 0 ? (
+                <button type="button" className="cf-project cf-project--empty" onClick={onNewProject} disabled={!available}>
+                  <Icon name="folder" size={16} />
+                  <span className="cf-project__name">{t("Create your first project")}</span>
+                </button>
+              ) : (
+                <ul className="cf-projects__list" aria-label={t("Recent projects")}>
+                  {projects.recent.map((project) => {
+                    const current = project.id === currentProjectId;
+                    return (
+                      <li key={project.id}>
+                        <button
+                          type="button"
+                          className={`cf-project ${current ? "cf-project--current" : ""}`}
+                          aria-current={current ? "page" : undefined}
+                          title={project.name}
+                          onClick={() => onOpenProject(project.id)}
+                        >
+                          <Icon name="folder" size={16} />
+                          <span className="cf-project__name">{project.name}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {/* Only when the menu can't list them all. */}
+              {projects.total > projects.recent.length && (
+                <button type="button" className="cf-link-button cf-projects__all" onClick={onViewAllProjects}>
+                  {t("View all projects")}
+                </button>
+              )}
+            </section>
+          )}
 
           <section className="cf-chats" aria-labelledby="cf-chats-title">
             <h2 id="cf-chats-title" className="cf-section-title cf-chats__title">
@@ -281,19 +347,39 @@ export default function ChatSidebar({
                         <li key={session.id} className={`cf-chat-row ${current ? "cf-chat-row--current" : ""}`}>
                           <button
                             type="button"
-                            className={`cf-chat ${current ? "cf-chat--current" : ""}`}
+                            className={`cf-chat ${current ? "cf-chat--current" : ""} ${session.project ? "cf-chat--tagged" : ""}`}
                             aria-current={current ? "page" : undefined}
-                            title={displayChatTitle(session.title)}
+                            title={
+                              session.project
+                                ? t("{title} (in {project})", { title: displayChatTitle(session.title), project: session.project.name })
+                                : displayChatTitle(session.title)
+                            }
                             onClick={() => onOpenChat(session.id)}
                           >
-                            {displayChatTitle(session.title)}
+                            {session.project ? (
+                              <>
+                                <span className="cf-chat__title">{displayChatTitle(session.title)}</span>
+                                {" "}
+                                <span className="visually-hidden">{t("in {project}", { project: session.project.name })}</span>
+                                {/* A label only: the whole row opens the chat. */}
+                                <span className="project-tag" aria-hidden="true">
+                                  <Icon name="folder" size={11} />
+                                  <span className="project-tag__name">{session.project.name}</span>
+                                </span>
+                              </>
+                            ) : (
+                              displayChatTitle(session.title)
+                            )}
                           </button>
                           {/* Like the material rows: with a mouse, ⋯ shows on hover or focus. It never opens the chat. */}
                           <span className="cf-chat__actions" onClick={(event) => event.stopPropagation()}>
                             <Menu
                               label={t("Actions for {title}", { title: displayChatTitle(session.title) })}
                               className="cf-chat__more"
-                              items={[{ label: t("Remove"), icon: "trash", danger: true, onSelect: () => setRemoving(session) }]}
+                              items={[
+                                ...(onMoveChat ? [{ label: t("Move to project…"), icon: "folder", onSelect: () => onMoveChat(session) }] : []),
+                                { label: t("Remove"), icon: "trash", danger: true, onSelect: () => setRemoving(session) },
+                              ]}
                             />
                           </span>
                         </li>
@@ -311,6 +397,26 @@ export default function ChatSidebar({
           </section>
         </div>
 
+        {unlinking && (
+          <ConfirmDialog
+            title={projectName ? t("Remove from the project?") : t("Remove from this chat?")}
+            confirmLabel={t("Remove")}
+            danger
+            onConfirm={() => {
+              const material = unlinking;
+              setUnlinking(null);
+              onRemoveMaterial(material);
+            }}
+            onCancel={() => setUnlinking(null)}
+          >
+            {projectName
+              ? t("“{name}” will be removed from the project {project}: none of its chats answer from it any more. The file stays in your library.", {
+                  name: unlinking.name,
+                  project: projectName,
+                })
+              : t("“{name}” will be removed from this chat. The file stays in your library.", { name: unlinking.name })}
+          </ConfirmDialog>
+        )}
         {removing && (
           <ConfirmDialog title={t("Remove chat?")} confirmLabel={t("Remove")} danger onConfirm={confirmRemove} onCancel={() => setRemoving(null)}>
             {t("“{title}” and all its messages will be deleted. Its materials are kept.", { title: displayChatTitle(removing.title) })}

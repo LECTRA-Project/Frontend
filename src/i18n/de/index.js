@@ -5,6 +5,7 @@ import exam from "./exam.js";
 import files from "./files.js";
 import models from "./models.js";
 import notebook from "./notebook.js";
+import projects from "./projects.js";
 import python from "./python.js";
 import settings from "./settings.js";
 import statistics from "./statistics.js";
@@ -17,6 +18,7 @@ export default {
   ...models,
   ...workspace,
   ...chat,
+  ...projects,
   ...notebook,
   ...python,
   ...exam,

@@ -8,6 +8,8 @@ import { GuestOnly, RequireAuth } from "../features/auth/RouteGuards.jsx";
 import WorkspaceLayout from "../features/workspace/WorkspaceLayout.jsx";
 import ChatPage from "../features/workspace/pages/ChatPage.jsx";
 import ExamPage from "../features/workspace/pages/ExamPage.jsx";
+import ProjectPage from "../features/workspace/pages/ProjectPage.jsx";
+import ProjectsPage from "../features/workspace/pages/ProjectsPage.jsx";
 import MyProfilePage from "../features/profile/MyProfilePage.jsx";
 import AccountSettingsPage from "../features/profile/AccountSettingsPage.jsx";
 import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
@@ -25,6 +27,9 @@ import StatisticsPage from "../features/statistics/StatisticsPage.jsx";
   /workspace           Study workspace with the chat in the centre (notebook and viewer beside it);
                        without ?chat= it is a new chat, where sign-in lands
   /workspace/exam      Study workspace with the Exam view in place of the chat
+                       (?project=<id>: the project's materials preselected)
+  /workspace/projects  All projects (?page=2: 30 per page)
+  /workspace/projects/<id>  A project: its materials and chats, and a box that starts a chat in it
   /profile             My profile
   /settings            Account settings
   /statistics          Statistics
@@ -50,6 +55,8 @@ export const routes = [
         children: [
           { index: true, element: <ChatPage /> },
           { path: "exam", element: <ExamPage /> },
+          { path: "projects", element: <ProjectsPage /> },
+          { path: "projects/:projectId", element: <ProjectPage /> },
         ],
       },
       { path: "/profile", element: <MyProfilePage /> },

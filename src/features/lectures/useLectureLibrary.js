@@ -94,10 +94,11 @@ export function useLectureLibrary({ pollInterval = POLL_INTERVAL_MS } = {}) {
 
   /*
     Upload files one after another; returns the created lectures. `chatId` tags the
-    uploads with the chat they are for (null: a new chat; undefined: the library only).
+    uploads with the chat they are for (null: a new chat; undefined: the library only);
+    `projectId` with the project they are for.
   */
-  const upload = useCallback(async (files, { chatId } = {}) => {
-    const pending = files.map((file) => ({ id: crypto.randomUUID(), name: file.name, file, chatId, progress: 0, error: null }));
+  const upload = useCallback(async (files, { chatId, projectId } = {}) => {
+    const pending = files.map((file) => ({ id: crypto.randomUUID(), name: file.name, file, chatId, projectId, progress: 0, error: null }));
     setUploads((list) => [...list, ...pending]);
     const created = [];
     for (const item of pending) {
