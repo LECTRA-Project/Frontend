@@ -393,9 +393,49 @@ describe("chat-first workspace: chats and their materials", () => {
       expect(await navigator.clipboard.readText()).toBe(CODE);
       await waitFor(() => expect(button).toHaveTextContent("Copied"));
       expect(screen.getByText("Code copied.")).toBeInTheDocument();
-      // The code shown is unchanged, and user messages have no copy buttons.
+      // The code shown is unchanged; the question has its own Copy and Edit, not Copy code.
       expect(document.querySelector(".chat-code pre").textContent).toBe(CODE + "\n");
-      expect(within(screen.getByText("Show me code").closest("li")).queryByRole("button")).toBeNull();
+      const question = screen.getByText("Show me code").closest("li");
+      expect(within(question).getAllByRole("button").map((item) => item.getAttribute("aria-label"))).toEqual(["Copy message", "Edit message"]);
+    });
+
+    it("copies a question the student sent", async () => {
+      const { user } = await openCodeChat();
+      const question = screen.getByText("Show me code").closest("li");
+      await user.click(within(question).getByRole("button", { name: "Copy message" }));
+      expect(await navigator.clipboard.readText()).toBe("Show me code");
+      expect(within(question).getByRole("button", { name: "Message copied" })).toHaveTextContent("Copied");
+      expect(screen.getByText("Message copied.")).toBeInTheDocument();
+    });
+
+    it("edits a sent question and sends it again as a new question; Cancel and Escape keep it", async () => {
+      const { user } = await openCodeChat();
+      const question = () => screen.getByText("Show me code").closest("li");
+      const sent = api.history.post.filter((request) => request.url.endsWith("/messages")).length;
+
+      await user.click(within(question()).getByRole("button", { name: "Edit message" }));
+      const box = screen.getByRole("textbox", { name: "Edit your message" });
+      expect(box).toHaveValue("Show me code");
+      expect(box).toHaveFocus();
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("textbox", { name: "Edit your message" })).not.toBeInTheDocument();
+
+      await user.click(within(question()).getByRole("button", { name: "Edit message" }));
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("textbox", { name: "Edit your message" })).not.toBeInTheDocument();
+
+      await user.click(within(question()).getByRole("button", { name: "Edit message" }));
+      const edit = screen.getByRole("textbox", { name: "Edit your message" });
+      await user.clear(edit);
+      await user.type(edit, "Show me shorter code");
+      await user.click(screen.getByRole("button", { name: "Send" }));
+
+      await waitFor(() => expect(api.history.post.filter((request) => request.url.endsWith("/messages"))).toHaveLength(sent + 1));
+      const request = api.history.post.filter((item) => item.url.endsWith("/messages")).at(-1);
+      expect(JSON.parse(request.data).content).toBe("Show me shorter code");
+      // The original question stays; the edited one is asked at the end.
+      expect(await screen.findByText("Show me shorter code")).toBeInTheDocument();
+      expect(screen.getByText("Show me code")).toBeInTheDocument();
     });
 
     it("copies the whole answer as Markdown with its sources, without the question or labels", async () => {

@@ -13,12 +13,13 @@ import { PROVIDERS } from "./providers.js";
 
 /*
   "AI provider API keys" in Account settings: the student's own Claude, Gemini and GPT keys,
-  all handled from one "Add model" dropdown.
+  and the chat model — two separate controls.
 
-  - The dropdown lists Lectra and the three providers. A provider without a key offers
-    "Add API key for …"; a provider with a key lists its models and offers replacing or
-    removing the key (which ends in …). Adding or replacing opens one key form below the
-    dropdown, named for its provider. Removing asks first.
+  - API key: a provider dropdown (Claude, Gemini, GPT, each saying whether a key is saved)
+    with Add key, or Replace key and Remove key, for the chosen provider. Adding or
+    replacing opens the key form under it, named for its provider. Removing asks first.
+  - Chat model: Lectra and the models the saved keys unlock — models only, no key actions.
+    A provider without a key is not listed; a key that doesn't work says so.
   - The key is typed into a password field (it can be shown while typing), sent once to
     PUT /users/me/api-keys/{provider} and then dropped from the page. The backend checks it
     with the provider before saving it encrypted, so "saved" means the provider accepted it.
@@ -28,7 +29,7 @@ import { PROVIDERS } from "./providers.js";
     the saved key and keeps only the chat models LECTRA can call, so nothing is invented.
     The list is reloaded when a key is saved, replaced or removed; loading, failures and
     rejected keys are shown, with "Try again". After a key is saved its models are loaded
-    and the dropdown gets the focus to choose one.
+    and the Chat model dropdown gets the focus to choose one.
   - The choice is the chat's model (useChatModel: per user in this browser), so Account
     settings and the model button in the chat always show the same model, and the chat
     sends it with the next question. A chosen model whose key was removed or stopped
@@ -37,8 +38,6 @@ import { PROVIDERS } from "./providers.js";
   - Opened from the chat's model dialog (/settings#api-key-<provider>): that provider's key
     form opens, and "Back to the chat" returns to the chat with the model dialog open again.
 */
-const ACTION = /^(add|replace|remove):(\w+)$/;
-
 export default function ApiKeysSection() {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -54,12 +53,14 @@ export default function ApiKeysSection() {
   const [loadError, setLoadError] = useState(null);
   const [form, setForm] = useState(null); // provider id whose key form is open
   const [removing, setRemoving] = useState(null); // provider asked about
+  const [pickedProvider, setKeyProvider] = useState(linkedProvider); // chosen in the API key dropdown (null: not yet)
   const [notice, setNotice] = useState(null); // { kind: "success" | "error" | "info", text }
   // The models the saved keys unlock: { state: "idle" | "loading" | "ready" | "error", models, unavailable, error }
   const [catalog, setCatalog] = useState({ state: "idle", models: [], unavailable: [], error: null });
   const [chatChoice, setChatChoice] = useState(() => readChatModel(userKey)); // { id, name, provider }
   const modelsRequest = useRef(null);
-  const selectRef = useRef(null);
+  const keySelectRef = useRef(null);
+  const modelSelectRef = useRef(null);
 
   // Asks the server (which asks each provider with the saved key). Resolves with the
   // result, or null when it failed or was replaced by a newer request.
@@ -122,29 +123,37 @@ export default function ApiKeysSection() {
     return () => controller.abort();
   }, [load]);
 
-  // Back to the dropdown once the key form or the dialog is gone (after that render).
-  const refocus = useRef(false);
-  function focusDropdown() {
-    refocus.current = true;
+  // Focus a dropdown once the key form or the dialog is gone (after that render).
+  const refocus = useRef(null); // the ref to focus next
+  function focusLater(ref) {
+    refocus.current = ref;
   }
   useEffect(() => {
     if (!refocus.current || removing) return;
-    refocus.current = false;
-    selectRef.current?.focus();
+    const ref = refocus.current;
+    refocus.current = null;
+    ref.current?.focus();
   });
 
   function saved(provider, data) {
     setKeys((list) => [...(list ?? []).filter((item) => item.provider !== provider.id), data]);
     setForm(null);
     setNotice({ kind: "success", text: t("Key saved. {provider} accepted it.", { provider: provider.name }) });
-    focusDropdown();
+    // Its models are loaded next: choose one in Chat model.
+    focusLater(modelSelectRef);
     // A new or replaced key may unlock other models: ask again.
     loadModels();
   }
 
   function cancelForm() {
     setForm(null);
-    focusDropdown();
+    focusLater(keySelectRef);
+  }
+
+  function chooseKeyProvider(id) {
+    setKeyProvider(id);
+    setForm(null);
+    setNotice(null);
   }
 
   function chooseChatModel(model) {
@@ -176,8 +185,18 @@ export default function ApiKeysSection() {
     } catch (err) {
       setNotice({ kind: "error", text: err.message });
     }
-    focusDropdown();
+    focusLater(keySelectRef);
   }
+
+  // The key the chat uses now: its model's provider (none while the chat uses Lectra).
+  const inUseProvider = PROVIDERS.some((item) => item.id === chatChoice.provider) ? chatChoice.provider : null;
+  // Until the student picks one, the API key dropdown shows the key in use, else the
+  // first saved key, else the first provider.
+  const keyProvider =
+    pickedProvider ??
+    (inUseProvider && keys?.some((item) => item.provider === inUseProvider) ? inUseProvider : null) ??
+    PROVIDERS.find((item) => keys?.some((key) => key.provider === item.id))?.id ??
+    PROVIDERS[0].id;
 
   const formProvider = PROVIDERS.find((item) => item.id === form) ?? null;
   const removingProvider = PROVIDERS.find((item) => item.id === removing) ?? null;
@@ -220,26 +239,36 @@ export default function ApiKeysSection() {
       )}
 
       {keys && (
-        <ModelDropdown
-          keys={keys}
-          catalog={catalog}
-          selected={chatChoice}
-          notice={notice}
-          onChoose={chooseChatModel}
-          onAction={act}
-          onRetry={loadModels}
-          selectRef={selectRef}
-        >
-          {formProvider && (
-            <KeyForm
-              key={formProvider.id}
-              provider={formProvider}
-              saved={keys.find((item) => item.provider === formProvider.id) ?? null}
-              onSaved={(data) => saved(formProvider, data)}
-              onCancel={cancelForm}
-            />
-          )}
-        </ModelDropdown>
+        <>
+          <KeyRow
+            keys={keys}
+            catalog={catalog}
+            provider={keyProvider}
+            inUse={inUseProvider}
+            notice={notice}
+            onProvider={chooseKeyProvider}
+            onAction={act}
+            selectRef={keySelectRef}
+          >
+            {formProvider && (
+              <KeyForm
+                key={formProvider.id}
+                provider={formProvider}
+                saved={keys.find((item) => item.provider === formProvider.id) ?? null}
+                onSaved={(data) => saved(formProvider, data)}
+                onCancel={cancelForm}
+              />
+            )}
+          </KeyRow>
+          <ModelDropdown
+            keys={keys}
+            catalog={catalog}
+            selected={chatChoice}
+            onChoose={chooseChatModel}
+            onRetry={loadModels}
+            selectRef={modelSelectRef}
+          />
+        </>
       )}
 
       {removingProvider && (
@@ -250,7 +279,7 @@ export default function ApiKeysSection() {
           onConfirm={confirmRemove}
           onCancel={() => {
             setRemoving(null);
-            focusDropdown();
+            focusLater(keySelectRef);
           }}
         >
           <p>{t("Its models are no longer offered in the chat. You can add a key again at any time.")}</p>
@@ -261,11 +290,92 @@ export default function ApiKeysSection() {
 }
 
 /*
-  "Add model": Lectra, then each provider. With a usable key a provider lists its models,
-  then "Replace key…" and "Remove key…"; without a key it offers adding one. Server messages
-  never contain a key.
+  "API key": choose a provider, then add its key, or replace or remove the saved one.
+  The key form (children) opens under it. Server messages never contain a key.
 */
-function ModelDropdown({ keys, catalog, selected, notice, onChoose, onAction, onRetry, selectRef, children }) {
+function KeyRow({ keys, catalog, provider, inUse, notice, onProvider, onAction, selectRef, children }) {
+  const { t } = useI18n();
+  const selectId = useId();
+  const statusId = useId();
+  const current = PROVIDERS.find((item) => item.id === provider) ?? PROVIDERS[0];
+  const key = keys.find((item) => item.provider === current.id) ?? null;
+  const problem = catalog.unavailable.find((item) => item.provider === current.id) ?? null;
+
+  return (
+    <div className="settings__row settings__row--model">
+      <div className="settings__model-head">
+        <div>
+          <label className="settings__label" htmlFor={selectId}>
+            {t("API key")}
+          </label>
+          <p className="settings__help">{t("Add, replace or remove the key for each provider.")}</p>
+        </div>
+        <select
+          ref={selectRef}
+          id={selectId}
+          className="settings__select settings__model-select"
+          value={current.id}
+          aria-describedby={statusId}
+          onChange={(event) => onProvider(event.target.value)}
+        >
+          {PROVIDERS.map((item) => {
+            const saved = keys.find((entry) => entry.provider === item.id);
+            const label = saved
+              ? t("{provider} · key ends in {last4}", { provider: item.name, last4: saved.key_last4 })
+              : t("{provider} · no key", { provider: item.name });
+            return (
+              <option key={item.id} value={item.id}>
+                {saved && item.id === inUse ? t("{key} · in use", { key: label }) : label}
+              </option>
+            );
+          })}
+        </select>
+      </div>
+
+      <div id={statusId} className="settings__model-notes">
+        {key ? (
+          <p className={`settings__key-status settings__key-status--${problem ? "error" : "success"}`}>
+            {problem
+              ? t("Saved key ending in {last4} isn't working.", { last4: key.key_last4 })
+              : t("Key saved, ending in {last4}.", { last4: key.key_last4 })}
+            {current.id === inUse && ` ${t("The chat uses this key now.")}`}
+          </p>
+        ) : (
+          <p className="settings__help">{t("No {provider} key saved.", { provider: current.name })}</p>
+        )}
+        <div className="settings__key-actions">
+          {key ? (
+            <>
+              <Button size="sm" onClick={() => onAction("replace", current.id)}>
+                {t("Replace key")}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onAction("remove", current.id)}>
+                {t("Remove key")}
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="primary" icon="plus" onClick={() => onAction("add", current.id)}>
+              {t("Add key")}
+            </Button>
+          )}
+        </div>
+        {notice && (
+          <p className={`settings__key-status settings__key-status--${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}>
+            {notice.text}
+          </p>
+        )}
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
+/*
+  "Chat model": Lectra, then the models of each provider with a saved key. A provider
+  without a key is not listed (its key is added under API key).
+*/
+function ModelDropdown({ keys, catalog, selected, onChoose, onRetry, selectRef }) {
   const { t } = useI18n();
   const selectId = useId();
   const noteId = useId();
@@ -297,11 +407,6 @@ function ModelDropdown({ keys, catalog, selected, notice, onChoose, onAction, on
   const canRetry = hasKeys && !loading && (catalog.state === "error" || problems.length > 0 || groups.some((group) => group.state === "empty"));
 
   function change(event) {
-    const action = ACTION.exec(event.target.value);
-    if (action) {
-      onAction(action[1], action[2]);
-      return;
-    }
     const model = [lectra, ...own].find((item) => item.id === event.target.value);
     if (model) onChoose(model);
   }
@@ -311,9 +416,13 @@ function ModelDropdown({ keys, catalog, selected, notice, onChoose, onAction, on
       <div className="settings__model-head">
         <div>
           <label className="settings__label" htmlFor={selectId}>
-            {t("Add model")}
+            {t("Chat model")}
           </label>
-          <p className="settings__help">{t("Choose the model that answers in the chat, or add a provider's API key.")}</p>
+          <p className="settings__help">
+            {hasKeys
+              ? t("The model that answers in the chat.")
+              : t("The model that answers in the chat. Add an API key above to use Claude, Gemini or GPT models.")}
+          </p>
         </div>
         <select
           ref={selectRef}
@@ -331,29 +440,22 @@ function ModelDropdown({ keys, catalog, selected, notice, onChoose, onAction, on
           <optgroup label="LECTRA">
             <option value={lectra.id}>{t("Lectra (default)")}</option>
           </optgroup>
-          {groups.map((group) => (
-            <optgroup key={group.id} label={group.name}>
-              {group.state === "models" &&
-                group.models.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              {group.state === "add" && <option value={`add:${group.id}`}>{t("Add API key for {provider}…", { provider: group.name })}</option>}
-              {group.state === "broken" && <option disabled>{t("Key not working")}</option>}
-              {group.state === "loading" && <option disabled>{t("Loading models…")}</option>}
-              {group.state === "error" && <option disabled>{t("Models not loaded")}</option>}
-              {group.state === "empty" && <option disabled>{t("No models available")}</option>}
-              {group.key && (
-                <>
-                  <option value={`replace:${group.id}`}>
-                    {t("Replace {provider} key (ends in {last4})…", { provider: group.name, last4: group.key.key_last4 })}
-                  </option>
-                  <option value={`remove:${group.id}`}>{t("Remove {provider} key…", { provider: group.name })}</option>
-                </>
-              )}
-            </optgroup>
-          ))}
+          {groups
+            .filter((group) => group.key)
+            .map((group) => (
+              <optgroup key={group.id} label={group.name}>
+                {group.state === "models" &&
+                  group.models.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                {group.state === "broken" && <option disabled>{t("Key not working")}</option>}
+                {group.state === "loading" && <option disabled>{t("Loading models…")}</option>}
+                {group.state === "error" && <option disabled>{t("Models not loaded")}</option>}
+                {group.state === "empty" && <option disabled>{t("No models available")}</option>}
+              </optgroup>
+            ))}
         </select>
       </div>
 
@@ -390,17 +492,7 @@ function ModelDropdown({ keys, catalog, selected, notice, onChoose, onAction, on
             </button>
           </p>
         )}
-        {notice && (
-          <p
-            className={`settings__key-status settings__key-status--${notice.kind}`}
-            role={notice.kind === "error" ? "alert" : "status"}
-          >
-            {notice.text}
-          </p>
-        )}
       </div>
-
-      {children}
     </div>
   );
 }
