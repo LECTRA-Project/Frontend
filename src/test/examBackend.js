@@ -43,8 +43,34 @@ export const QUESTIONS = [
   },
 ];
 
+/*
+  The questions after the first three, for exams of 5 to 10 questions (QUESTIONS stays the
+  3-question exam most tests use): a short answer, then multiple choice.
+*/
+export const MORE_QUESTIONS = [
+  { id: "q-4", position: 4, type: "short_answer", question: "What does the Gini index measure?", choices: null, points: 2, lecture_id: KI02.id, source_pages: [24] },
+  ...Array.from({ length: 6 }, (_, offset) => ({
+    id: `q-${offset + 5}`,
+    position: offset + 5,
+    type: "multiple_choice",
+    question: `Which statement about split ${offset + 5} is true?`,
+    choices: [
+      { id: "a", text: `Split ${offset + 5} lowers the impurity` },
+      { id: "b", text: `Split ${offset + 5} raises the impurity` },
+    ],
+    points: 1,
+    lecture_id: KI02.id,
+    source_pages: [30 + offset],
+  })),
+];
+const ALL_QUESTIONS = [...QUESTIONS, ...MORE_QUESTIONS];
+
 // What the backend keeps for grading: the correct choices, the reference answers and the rubrics.
 export const SOLUTIONS = {
+  "q-4": { correct_choice_ids: null, reference_solution: "How mixed the classes in a node are.", rubric: [{ id: "c1", description: "Names the impurity", points: 2 }] },
+  ...Object.fromEntries(
+    MORE_QUESTIONS.slice(1).map((question) => [question.id, { correct_choice_ids: ["a"], reference_solution: "It lowers the impurity.", rubric: [{ id: "c1", description: "Selects the correct choices", points: 1 }] }])
+  ),
   q1: { correct_choice_ids: ["b", "d"], reference_solution: "The test that gives the **purest** subsets.", rubric: [{ id: "c1", description: "Selects the correct choices", points: 1 }] },
   q2: {
     correct_choice_ids: null,
@@ -170,6 +196,10 @@ function grade(question, answer, state) {
     const verdict = share === 1 ? "correct" : share > 0 ? "partially_correct" : "incorrect";
     return { ...base, verdict, points: share * question.points, feedback: verdict === "correct" ? "Correct." : `You selected ${answer.selected_choice_ids.join(", ")}.` };
   }
+  if (question.id === "q-4") {
+    const right = answer.answer_text.includes("mixed");
+    return { ...base, verdict: right ? "correct" : "incorrect", points: right ? 2 : 0, feedback: right ? "Correct." : "That is not what the Gini index measures." };
+  }
   const partly = answer.answer_text.includes("class");
   return {
     ...base,
@@ -192,9 +222,15 @@ function totals(exam) {
 }
 
 /*
-  A generating exam gets one more question on every read (`failAt`: it fails at that many),
-  then becomes ready with QUESTIONS. An exam given with `questions` keeps them (e.g. a
-  submitted exam with its results).
+  A generating exam gets one more question on every read, in order (QUESTIONS, then
+  MORE_QUESTIONS), and every read returns the questions written so far, like the backend.
+  It becomes ready once `question_count` are written. An exam given with `questions` keeps
+  them (e.g. a submitted exam with its results).
+
+  state.paused       reads don't write a question; state.advance(id) writes the next one
+  state.failAt       generation fails instead of writing question number `failAt`
+                     (the questions before it stay, the exam can't be submitted)
+  state.finalCount   the exam is ready with this many questions (the others failed)
 
   state.submitGate   a promise the submit waits for (to see the grading state)
   state.submitError  [status, body] to answer the submit with (regradeError: the regrade)
@@ -210,7 +246,9 @@ export function installExamBackend(api, { exams = [], startError = null } = {}) 
     reads: 0,
     nextId: 1,
     startError,
+    paused: false,
     failAt: null,
+    finalCount: null,
     submitGate: null,
     submitError: null,
     regradeError: null,
@@ -222,22 +260,30 @@ export function installExamBackend(api, { exams = [], startError = null } = {}) 
     const { questions: _questions, ...rest } = exam;
     return rest;
   };
-  const withQuestions = (exam) => (exam.questions ? exam : { ...exam, questions: exam.status === "ready" ? QUESTIONS.slice(0, exam.question_count) : [] });
+  const written = (exam) => ALL_QUESTIONS.slice(0, Math.max(0, exam.questions_ready));
+  const withQuestions = (exam) => (exam.questions ? exam : { ...exam, questions_ready: Math.max(0, exam.questions_ready), questions: written(exam) });
+  // One more question, or the end of the generation (ready, or failed with `failAt`).
+  const writeNext = (exam) => {
+    if (exam.status !== "generating") return;
+    if (state.failAt !== null && exam.questions_ready + 1 >= state.failAt) {
+      exam.status = "failed";
+      exam.error = "Not enough questions could be generated. Please try again in a minute";
+      return;
+    }
+    const target = Math.min(state.finalCount ?? exam.question_count, exam.question_count);
+    if (exam.questions_ready < target) exam.questions_ready += 1;
+    if (exam.questions_ready >= target) exam.status = "ready";
+  };
+  state.advance = (id, count = 1) => {
+    for (let step = 0; step < count; step += 1) writeNext(find(id));
+  };
 
   api.onGet("/exams").reply(() => [200, ok({ exams: state.exams.map(summary), page: 1, page_size: 100, total: state.exams.length, total_pages: 1 })]);
   api.onGet(/\/exams\/[^/]+$/).reply((config) => {
     const exam = find(idAt(config));
     if (!exam) return [404, { status: false, message: "Exam not found", data: null }];
     state.reads += 1;
-    if (exam.status === "generating") {
-      exam.questions_ready += 1;
-      if (state.failAt !== null && exam.questions_ready >= state.failAt) {
-        exam.status = "failed";
-        exam.error = "Not enough questions could be generated. Please try again in a minute";
-      } else if (exam.questions_ready >= exam.question_count) {
-        exam.status = "ready";
-      }
-    }
+    if (!state.paused) writeNext(exam);
     return [200, ok(withQuestions(exam))];
   });
   api.onPost("/exams").reply((config) => {
@@ -264,7 +310,7 @@ export function installExamBackend(api, { exams = [], startError = null } = {}) 
     if (state.submitError) return state.submitError;
     if (!exam) return [404, { status: false, message: "Exam not found", data: null }];
     if (exam.status !== "ready") return [409, { status: false, message: "This exam was already submitted", data: null }];
-    const questions = QUESTIONS.slice(0, exam.question_count).map((question) => ({
+    const questions = written(exam).map((question) => ({
       ...question,
       result: grade(question, body.answers.find((answer) => answer.task_id === question.id), state),
     }));

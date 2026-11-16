@@ -8,6 +8,8 @@
   Value:  { answers: { <question id>: ["a", "c"] (multiple choice) | "text" (short answer) },
             current: index of the question on screen,
             settings: { lectureIds, questionCount, types } | null  (how it was started, for Retry),
+            started: true once the student started answering while the questions were still
+                     written, so a reload lands in the questions instead of the progress,
             savedAt: ISO string }
 
   Storage can be unavailable (private mode, blocked site data) or full: reading then gives
@@ -15,7 +17,7 @@
 */
 const KEY_PREFIX = "lectra:exam:v1:";
 
-export const EMPTY_PROGRESS = Object.freeze({ answers: {}, current: 0, settings: null });
+export const EMPTY_PROGRESS = Object.freeze({ answers: {}, current: 0, settings: null, started: false });
 
 function storageKey(userKey, examId) {
   return `${KEY_PREFIX}${userKey}:${examId}`;
@@ -38,6 +40,7 @@ export function loadExamProgress(userKey, examId) {
       answers: saved && typeof saved.answers === "object" && saved.answers !== null ? saved.answers : {},
       current: Number.isInteger(saved?.current) && saved.current >= 0 ? saved.current : 0,
       settings: saved?.settings ?? null,
+      started: saved?.started === true,
     };
   } catch {
     return { ...EMPTY_PROGRESS };
@@ -49,8 +52,8 @@ export function saveExamProgress(userKey, examId, progress) {
   try {
     const target = store();
     if (!target) return false;
-    const { answers = {}, current = 0, settings = null } = progress;
-    target.setItem(storageKey(userKey, examId), JSON.stringify({ answers, current, settings, savedAt: new Date().toISOString() }));
+    const { answers = {}, current = 0, settings = null, started = false } = progress;
+    target.setItem(storageKey(userKey, examId), JSON.stringify({ answers, current, settings, started, savedAt: new Date().toISOString() }));
     return true;
   } catch {
     return false;
