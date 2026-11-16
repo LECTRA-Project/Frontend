@@ -252,6 +252,11 @@ export default function ExamPage() {
     });
   }
 
+  // "Practise my mistakes": a new exam from the submitted one's mistakes, started at once.
+  function practiseMistakes(done, questionCount) {
+    return start({ fromExamId: done.id, questionCount });
+  }
+
   async function discard(target) {
     await unfinished.discard(target.id);
     clearExamProgress(userKey, target.id);
@@ -383,6 +388,10 @@ export default function ExamPage() {
         onRegrade={regrade}
         onNewExam={() => newExamFrom(exam)}
         onAsk={onAskAbout ? (question) => onAskAbout(exam, question) : null}
+        onPractise={(count) => practiseMistakes(exam, count)}
+        practising={starting}
+        practiseError={startError}
+        onOpenExam={(id) => openExam(id)}
       />
     );
   } else if (exam.status === "submitted") {

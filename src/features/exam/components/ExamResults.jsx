@@ -5,7 +5,7 @@ import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import { useI18n } from "../../../i18n/i18n.js";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
-import { choiceLetter, formatPoints, pointsOutOf, verdictOf } from "../examFormat.js";
+import { choiceLetter, formatPoints, mistakesOf, mistakesQuestionCount, pointsOutOf, verdictOf } from "../examFormat.js";
 import { canAskAbout } from "../askAboutAnswer.js";
 
 /*
@@ -21,6 +21,8 @@ import { canAskAbout } from "../askAboutAnswer.js";
     page beside the exam; a source whose lecture was deleted shows the page as plain text.
     A wrong, partly correct or unanswered question has "Ask about this" at the end of that
     row: it opens the chat assistant with a prepared question about it.
+    "Practise my mistakes" (only when there are mistakes) starts a new exam whose questions
+    are written from the pages of those questions, one each (3 to 10).
 
   Props:
     exam              the submitted exam, with every question's `result`
@@ -28,10 +30,19 @@ import { canAskAbout } from "../askAboutAnswer.js";
     onRegrade()       → Promise; grades the waiting answers and refreshes the exam (rejects
                       with the error to show)
     onNewExam()       a new exam on the same materials
+    onPractise(count) starts an exam on the mistakes (wrong, partly correct, not answered),
+                      one question each (3 to 10); null hides "Practise my mistakes", which
+                      is also hidden when there is no mistake
+    practising        true while that exam is being started
+    practiseError     { message, busyId } when it couldn't be started; busyId offers
+                      "Open that exam" with onOpenExam(id)
     onAsk(question)   → Promise; opens the chat and asks about that question (rejects with
                       the error to show); null hides "Ask about this"
 */
-export default function ExamResults({ exam, onOpenSource, onRegrade, onNewExam, onAsk = null }) {
+export default function ExamResults({
+  exam, onOpenSource, onRegrade, onNewExam, onAsk = null,
+  onPractise = null, practising = false, practiseError = null, onOpenExam = null,
+}) {
   const { t } = useI18n();
   const questions = exam.questions ?? [];
   const counts = { correct: 0, partially_correct: 0, incorrect: 0, waiting: 0 };
@@ -44,7 +55,14 @@ export default function ExamResults({ exam, onOpenSource, onRegrade, onNewExam, 
 
   return (
     <>
-      <ScoreSummary exam={exam} counts={counts} ungraded={ungraded} onRegrade={onRegrade} onNewExam={onNewExam} />
+      <ScoreSummary
+        exam={exam}
+        counts={counts}
+        ungraded={ungraded}
+        onRegrade={onRegrade}
+        onNewExam={onNewExam}
+        practise={{ onPractise, practising, practiseError, onOpenExam }}
+      />
       <ol className="exam-results" aria-label={t("Your answers")}>
         {questions.map((question, index) => (
           <li key={question.id}>
@@ -56,7 +74,7 @@ export default function ExamResults({ exam, onOpenSource, onRegrade, onNewExam, 
   );
 }
 
-function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam }) {
+function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam, practise }) {
   const { t } = useI18n();
   const [regrading, setRegrading] = useState(false);
   const [regradeError, setRegradeError] = useState(null);
@@ -64,6 +82,8 @@ function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam }) {
   const known = percent !== null && percent !== undefined && exam.total_points !== null && exam.total_points !== undefined;
   const ratio = known ? Math.max(0, Math.min(100, percent)) : 0;
   const pointVars = { points: formatPoints(exam.total_points), max: formatPoints(exam.max_points) };
+  const mistakes = mistakesOf(exam).length;
+  const canPractise = Boolean(practise.onPractise) && mistakes > 0;
   const points = known ? (exam.max_points === 1 ? t("{points} of {max} point", pointVars) : t("{points} of {max} points", pointVars)) : null;
 
   async function regrade() {
@@ -115,10 +135,37 @@ function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam }) {
               {regrading ? t("Grading…") : t("Grade again")}
             </Button>
           )}
-          <Button variant={ungraded > 0 ? "secondary" : "primary"} onClick={onNewExam}>
+          {canPractise && (
+            <Button
+              variant={ungraded > 0 ? "secondary" : "primary"}
+              onClick={() => practise.onPractise(mistakesQuestionCount(mistakes))}
+              disabled={practise.practising}
+              aria-describedby="exam-practise-hint"
+            >
+              {practise.practising ? t("Starting…") : t("Practise my mistakes")}
+            </Button>
+          )}
+          <Button variant={ungraded > 0 || canPractise ? "secondary" : "primary"} onClick={onNewExam}>
             {t("New exam on the same materials")}
           </Button>
         </div>
+        {canPractise && (
+          <p id="exam-practise-hint" className="exam-muted exam-small">
+            {mistakes === 1
+              ? t("New questions from the pages of your mistake.")
+              : t("New questions from the pages of your {count} mistakes.", { count: mistakes })}
+          </p>
+        )}
+        {practise.practiseError && (
+          <div className="exam-alert" role="alert">
+            <p>{practise.practiseError.message}</p>
+            {practise.practiseError.busyId && practise.onOpenExam && (
+              <Button size="sm" onClick={() => practise.onOpenExam(practise.practiseError.busyId)}>
+                {t("Open that exam")}
+              </Button>
+            )}
+          </div>
+        )}
         {regrading && (
           <p className="exam-muted exam-small" role="status">
             {t("Grading the waiting answers, a few seconds each…")}

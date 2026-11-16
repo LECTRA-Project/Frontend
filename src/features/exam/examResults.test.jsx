@@ -4,13 +4,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { makeToken, mockApi, renderApp, saveToken } from "../../test/helpers.jsx";
 import { daysAgo, installChatBackend } from "../../test/chatBackend.js";
-import { examFixture, installExamBackend, KI02, KI03, QUESTIONS, SLIDES, submittedExam } from "../../test/examBackend.js";
+import { examFixture, installExamBackend, KI02, KI03, QUESTIONS, resultFixture, SLIDES, submittedExam } from "../../test/examBackend.js";
 
 /*
   Submitting an exam and its checked answers, over the real app routes with the fake chat
   and exams backends: the confirmation, the grading state, 409 / 422, the results (every
   verdict, not answered, waiting + Grade again, a lecturer's correction, a deleted lecture),
-  Open page, New exam on the same materials and a submitted exam opened by its link.
+  Open page, New exam on the same materials, Practise my mistakes and a submitted exam
+  opened by its link.
 */
 
 let api;
@@ -323,5 +324,65 @@ describe("results", () => {
     expect(await screen.findByRole("region", { name: "Your answers are checked" })).toBeInTheDocument();
     expect(screen.queryByText("This exam was submitted")).not.toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(4);
+  });
+});
+
+describe("practise my mistakes", () => {
+  it("starts an exam on the mistakes at once, one question each (at least 3)", async () => {
+    setup({ examList: [submittedExam()] });
+    const { user, router } = await openAt("/workspace/exam?chat=s-hunt&exam=e-done");
+    // Partly correct (corrected to 2.5 of 3), wrong and not answered: 3 mistakes.
+    expect(await screen.findByText("New questions from the pages of your 3 mistakes.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Practise my mistakes" }));
+
+    expect(exams.started).toEqual([{ from_exam_id: "e-done", only: "mistakes", question_count: 3 }]);
+    await waitFor(() => expect(search(router)).toEqual({ chat: "s-hunt", exam: "e-new-1" }));
+    // Retry of the new exam starts from the same mistakes.
+    expect(JSON.parse(localStorage.getItem(STORAGE("e-new-1")))).toMatchObject({ settings: { fromExamId: "e-done", questionCount: 3 } });
+  });
+
+  it("leaves answers still waiting to be graded out of the mistakes", async () => {
+    setup({ examList: [submittedExam({ ungraded: true })] });
+    const { user } = await openAt("/workspace/exam?exam=e-done");
+    expect(await screen.findByText("New questions from the pages of your 2 mistakes.")).toBeInTheDocument();
+    // Grade again stays the main action while an answer waits.
+    expect(screen.getByRole("button", { name: "Grade again" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Practise my mistakes" }));
+    expect(exams.started).toEqual([{ from_exam_id: "e-done", only: "mistakes", question_count: 3 }]);
+  });
+
+  it("asks for up to 10 questions", async () => {
+    const done = submittedExam();
+    const wrong = Array.from({ length: 12 }, (_, index) => {
+      const question = { ...QUESTIONS[2], id: `w${index}`, position: index + 1 };
+      return { ...question, result: resultFixture(question, { selected_choice_ids: ["b"], verdict: "incorrect", points: 0 }) };
+    });
+    setup({ examList: [{ ...done, question_count: 12, questions: wrong }] });
+    const { user } = await openAt("/workspace/exam?exam=e-done");
+    await user.click(await screen.findByRole("button", { name: "Practise my mistakes" }));
+    expect(exams.started).toEqual([{ from_exam_id: "e-done", only: "mistakes", question_count: 10 }]);
+  });
+
+  it("isn't offered when every answer was right", async () => {
+    const done = submittedExam();
+    const right = done.questions.map((question) => ({ ...question, result: resultFixture(question) }));
+    setup({ examList: [{ ...done, total_points: 7, score_percent: 100, questions: right }] });
+    await openAt("/workspace/exam?exam=e-done");
+    expect(await screen.findByRole("heading", { name: "Your answers are checked" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Practise my mistakes" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New exam on the same materials" })).toBeInTheDocument();
+  });
+
+  it("offers the exam still being generated when another one is busy", async () => {
+    const busy = examFixture("e-busy", { status: "generating", count: 5 });
+    setup({ examList: [submittedExam(), busy] });
+    exams.startError = [409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: null }];
+    const { user, router } = await openAt("/workspace/exam?exam=e-done");
+    await user.click(await screen.findByRole("button", { name: "Practise my mistakes" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("An exam is already being generated");
+    await user.click(within(alert).getByRole("button", { name: "Open that exam" }));
+    await waitFor(() => expect(search(router)).toEqual({ exam: "e-busy" }));
   });
 });
