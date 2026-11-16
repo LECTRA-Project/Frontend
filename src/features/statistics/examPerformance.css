@@ -1,0 +1,330 @@
+/* Statistics → Exam performance (ExamPerformance.jsx) */
+
+.exam-stats {
+  margin-top: var(--space-6);
+}
+.exam-stats__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* All time / Last 4 weeks */
+.exam-stats__range {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+}
+.exam-stats__range-option {
+  min-height: 30px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.exam-stats__range-option:hover {
+  color: var(--text-primary);
+}
+.exam-stats__range-option[aria-pressed="true"] {
+  background: var(--bg-surface);
+  color: var(--accent-strong);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--border-default);
+}
+.exam-stats__range-option:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.exam-stats__summary {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The parts: two columns where there is room, the chart, concepts and history across. */
+.exam-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5) var(--space-6);
+  margin-top: var(--space-4);
+}
+.exam-stats__block {
+  min-width: 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-default);
+}
+.exam-stats__block--wide {
+  grid-column: 1 / -1;
+}
+.exam-stats__heading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.exam-stats__muted {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Per lecture / per question type: name | bar | %, then the details. */
+.exam-stats__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exam-stats__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(72px, 120px) 40px;
+  grid-template-areas:
+    "name bar percent"
+    "details details details";
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: 2px;
+  padding: var(--space-2) 0;
+}
+.exam-stats__row + .exam-stats__row {
+  border-top: 1px dashed var(--border-default);
+}
+.exam-stats__name {
+  grid-area: name;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.exam-stats__tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.exam-stats__bar {
+  grid-area: bar;
+  position: relative;
+  display: block;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+}
+.exam-stats__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+/* The best score: a small mark on the bar. */
+.exam-stats__best {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--accent-strong);
+}
+.exam-stats__percent {
+  grid-area: percent;
+  text-align: right;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.exam-stats__details {
+  grid-area: details;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-2);
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.exam-stats__details > span + span::before {
+  content: "·";
+  margin-right: var(--space-2);
+  color: var(--text-tertiary);
+}
+
+/* Weakest concepts */
+.exam-stats__concepts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exam-stats__concept {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+.exam-stats__concept + .exam-stats__concept {
+  border-top: 1px dashed var(--border-default);
+}
+.exam-stats__concept-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.exam-stats__concept-name {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.exam-stats__concept-name::first-letter {
+  text-transform: uppercase;
+}
+.exam-stats__concept-score {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.exam-stats__concept-score strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+/* Fewer than half correct. */
+.exam-stats__concept-score .exam-stats__low {
+  color: var(--danger);
+}
+.exam-stats__concept .btn {
+  flex: none;
+}
+
+/* History: the table scrolls sideways inside its own box when the screen is narrow. */
+.exam-stats__scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+.exam-stats__scroll:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.exam-stats__table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.exam-stats__table th,
+.exam-stats__table td {
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.exam-stats__table thead th {
+  background: var(--bg-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.exam-stats__table tbody tr {
+  border-top: 1px solid var(--border-default);
+}
+.exam-stats__history-row {
+  cursor: pointer;
+}
+.exam-stats__history-row:hover {
+  background: var(--accent-soft);
+}
+.exam-stats__table .exam-stats__num {
+  text-align: right;
+  white-space: nowrap;
+}
+.exam-stats__date {
+  white-space: nowrap;
+}
+.exam-stats__date a {
+  color: var(--accent-strong);
+  font-weight: 500;
+  text-decoration: none;
+}
+.exam-stats__date a:hover,
+.exam-stats__date a:focus-visible {
+  text-decoration: underline;
+}
+.exam-stats__materials {
+  min-width: 180px;
+  color: var(--text-secondary);
+}
+.exam-stats__waiting {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  font-size: 12px;
+  font-weight: 500;
+}
+.exam-stats__more {
+  margin-top: var(--space-2);
+}
+
+/* Loading, error and no exam yet */
+.exam-stats__state {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.exam-stats__state--error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.exam-stats__state--error p {
+  margin: 0;
+  color: var(--danger);
+}
+.exam-stats__empty {
+  margin-top: var(--space-4);
+  padding: var(--space-5);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-align: center;
+}
+.exam-stats__empty p {
+  margin: 0 0 var(--space-3);
+}
+.exam-stats__empty .exam-stats__empty-title {
+  margin-bottom: 2px;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.exam-stats__empty .btn {
+  text-decoration: none;
+}
+.exam-stats__empty a.btn--secondary {
+  color: var(--text-primary);
+}
+
+/* Phones: one column. */
+@media (max-width: 640px) {
+  .exam-stats__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

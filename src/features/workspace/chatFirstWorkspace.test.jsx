@@ -214,7 +214,7 @@ describe("chat-first workspace: chats and their materials", () => {
     expect(api.history.post.some((request) => request.url === "/student_profile/chat/sessions/s-hunt/lectures")).toBe(true);
 
     await user.click(within(menu()).getByRole("button", { name: "Add one of your materials to this chat" }));
-    await user.click(screen.getByRole("menuitem", { name: "Exercise 3-1 Classification" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Exercise 3-1 Classification" }));
     await waitFor(() => expect(materialNames()).toHaveLength(3));
 
     // Removing the material open in the viewer closes the viewer too.
@@ -223,10 +223,11 @@ describe("chat-first workspace: chats and their materials", () => {
     await user.click(within(menu()).getByRole("button", { name: "Remove KI 02 Classification Part1 from this chat" }));
     await waitFor(() => expect(materialNames()).not.toContain("Open KI 02 Classification Part1 beside the chat"));
     expect(api.history.delete.map((request) => request.url)).toContain(`/student_profile/chat/sessions/s-hunt/lectures/${KI02.id}`);
-    expect(viewer()).toBeNull();
+    // The list updates first; the viewer closes on the same change a moment later.
+    await waitFor(() => expect(viewer()).toBeNull());
     // The lecture itself is kept: it can be added again.
     await user.click(within(menu()).getByRole("button", { name: "Add one of your materials to this chat" }));
-    expect(screen.getByRole("menuitem", { name: "KI 02 Classification Part1" })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: "KI 02 Classification Part1" })).toBeInTheDocument();
   });
 
   it("asks in a new chat without materials: the chat is created empty and the answer is marked general", async () => {

@@ -17,7 +17,8 @@ import { formatExamDate } from "../examFormat.js";
     processing, failed, images) can't be picked.
   - Number of questions (3, 5, 7, 10) and question types (at least one).
   - With `preset` (New exam on the same materials) its lectures, number and types are
-    chosen at first instead.
+    chosen at first instead. A preset with a `concept` (Statistics → "Practice this")
+    brings only the lectures that concept came from.
   - "Continue an exam" lists the exams being generated or ready to answer, each with
     Continue and Discard (after a confirmation).
 
@@ -29,7 +30,7 @@ import { formatExamDate } from "../examFormat.js";
     userKey        whose answers on this device to count
     onStart({ lectureIds, questionCount, types }), starting, startError { message, busyId }
     onOpenExam(id), onDiscard(exam) → Promise (rejects with the error to show)
-    preset         { lectureIds, questionCount, types } to start from, or null
+    preset         { lectureIds, questionCount, types, concept } to start from, or null
 */
 export default function ExamSetup({
   materials,
@@ -94,11 +95,13 @@ export default function ExamSetup({
             {t("New exam")}
           </h3>
           <p className="exam-card__lead">
-            {preset
-              ? t("The materials and settings of that exam are chosen. Change them if you like.")
-              : fromChat
-                ? t("Questions are generated from this chat’s materials. Your answers are kept on this device.")
-                : t("This chat has no materials, so pick from your library. Your answers are kept on this device.")}
+            {preset?.concept
+              ? t("The materials “{concept}” came from are chosen. Change them if you like.", { concept: preset.concept })
+              : preset
+                ? t("The materials and settings of that exam are chosen. Change them if you like.")
+                : fromChat
+                  ? t("Questions are generated from this chat’s materials. Your answers are kept on this device.")
+                  : t("This chat has no materials, so pick from your library. Your answers are kept on this device.")}
           </p>
         </div>
 

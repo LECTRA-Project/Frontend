@@ -8,6 +8,7 @@ import { get } from "../http.js";
 
     GET /stats/completion    getCompletion    course completion per lecture
     GET /stats/overview      getOverview      the overall numbers (the cards at the top)
+    GET /stats/exams         getExamStats     exam performance and history (from / to optional)
 
   Shapes (data of the { status, message, data } envelope):
     completion  { lectures: [{ lecture_id, title, source_type: "page" | "slide" | "cell" | null,
@@ -29,6 +30,19 @@ import { get } from "../http.js";
                 reading, asking in a chat or submitting an exam; days are UTC days, and
                 current_streak ends today, or yesterday when nothing happened today yet.
                 A new student gets zeros and nulls.
+    exams       { exams_submitted, exams_scored, average_percent: number | null, best_percent: number | null,
+                  history: [{ exam_id, title, submitted_at, lectures: [{ lecture_id | null, title }],
+                              question_count, score_percent: number | null }],
+                  by_week: [{ week_start: "YYYY-MM-DD", exams, average_percent }],
+                  by_lecture: [{ lecture_id | null, title, exams, average_percent, best_percent }],
+                  by_type: [{ type, questions, correct, correct_percent, points_percent: number | null }],
+                  weakest_concepts: [{ concept, questions, correct, correct_percent, lecture_ids: [] }] }
+                Only submitted exams count. history is newest first, by_week oldest first
+                (weeks start on Monday, UTC), by_lecture lowest average first. score_percent
+                is null while an answer waits to be graded (such exams are left out of the
+                averages). A deleted lecture has lecture_id null and keeps its title.
+                weakest_concepts: up to 5, each asked in at least 2 questions.
+                from / to: inclusive UTC days ("YYYY-MM-DD"); from after to is a 422.
 
   To add a route: one function below, built like getCompletion, and a line in the list above.
 */
@@ -48,4 +62,12 @@ export async function getCompletion({ signal } = {}) {
 
 export async function getOverview({ signal } = {}) {
   return unwrap(await get(`${BASE}/overview`, { signal }), t("Unable to load your overall numbers."));
+}
+
+/* `from` / `to`: "YYYY-MM-DD" (inclusive UTC days), both optional. */
+export async function getExamStats({ from, to, signal } = {}) {
+  const params = {};
+  if (from) params.from = from;
+  if (to) params.to = to;
+  return unwrap(await get(`${BASE}/exams`, { params, signal }), t("Unable to load your exam performance."));
 }

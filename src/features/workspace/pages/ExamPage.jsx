@@ -82,7 +82,8 @@ export default function ExamPage() {
   const [startError, setStartError] = useState(null); // { message, busyId }
   const [notice, setNotice] = useState(null);
   const [grading, setGrading] = useState(false);
-  // { lectureIds, questionCount, types } for "New exam on the same materials".
+  // { lectureIds, questionCount, types } for "New exam on the same materials";
+  // { lectureIds, concept } for "Practice this" on the Statistics page.
   const [preset, setPreset] = useState(() => location.state?.examPreset ?? null);
 
   /* ---------- URL ---------- */
