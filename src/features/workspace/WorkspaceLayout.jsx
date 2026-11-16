@@ -718,6 +718,26 @@ export default function WorkspaceLayout() {
   const examProjectLectures =
     examProjectId && examProject?.id === examProjectId ? (examProject.lectures ?? []).map((item) => libraryById.get(item.id) ?? item) : [];
 
+  /*
+    Edit on a sent question: the edited message (with the notebook cells it had) is asked
+    again as a new question. The draft and its added cells in the composer are untouched.
+    Returns false when it is too long to send.
+  */
+  function handleResend(content) {
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      setTooLong(
+        t("The edited question is {length} characters; the limit is {limit}. Shorten it.", {
+          length: content.length,
+          limit: MAX_MESSAGE_LENGTH,
+        })
+      );
+      return false;
+    }
+    setTooLong(null);
+    chat.send({ question: content, content, model: chatModel.selected.id });
+    return true;
+  }
+
   /* ---------- Asking about an exam answer ---------- */
   /*
     "Ask about this" on a checked exam answer: opens a chat and asks the prepared question.
@@ -787,6 +807,7 @@ export default function WorkspaceLayout() {
     onOpenProject: openProject,
     onMoveToProject: chatAvailable === true && session ? () => setMoving(session) : null,
     onRemoveFromProject: () => takeOutOfProject(session),
+    onResend: handleResend,
     model: chatModel,
     olderMessages: chat.olderMessages,
     loadingOlder: chat.loadingOlderMessages,

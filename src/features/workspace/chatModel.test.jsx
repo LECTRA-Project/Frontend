@@ -172,7 +172,7 @@ describe("the chat in German", () => {
   });
 });
 
-describe("model chosen in Account settings (Add model)", () => {
+describe("model chosen in Account settings (Chat model)", () => {
   it("is shown in the composer and sent with the next question", async () => {
     setup({ default: "lectra", models: [LECTRA, OPUS, MINI], unavailable: [] });
     api.onGet("/users/me/api-keys").reply(200, ok({ api_keys: [
@@ -180,7 +180,7 @@ describe("model chosen in Account settings (Add model)", () => {
     ] }));
     const user = userEvent.setup();
     const { router } = renderApp("/settings");
-    const select = await screen.findByRole("combobox", { name: "Add model" });
+    const select = await screen.findByRole("combobox", { name: "Chat model" });
     await waitFor(() => expect(within(select).getByRole("option", { name: OPUS.name })).toBeInTheDocument());
     await user.selectOptions(select, OPUS.id);
 
