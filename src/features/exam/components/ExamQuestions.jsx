@@ -8,6 +8,7 @@ import { MAX_ANSWER_LENGTH } from "../../../api/services/exams.js";
 import { countAnswered, isAnswered, loadExamProgress, saveExamProgress } from "../../../services/exam/examStorage.js";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
 import { choiceLetter, pagesLabel, pointsLabel } from "../examFormat.js";
+import { shortcutFor } from "../examShortcuts.js";
 import ExamGrading from "./ExamGrading.jsx";
 import ExamReview from "./ExamReview.jsx";
 import ExamSubmitDialog from "./ExamSubmitDialog.jsx";
@@ -39,6 +40,13 @@ import ExamSubmitDialog from "./ExamSubmitDialog.jsx";
   Once ready with fewer questions than asked (the backend keeps an exam with at least 3),
   a notice says so. A failed exam (status "failed") keeps the answers visible, read-only,
   under `banner` (the error with Retry, from the page).
+
+  Keyboard shortcuts (examShortcuts.js): 1 to 9 toggle the choices of a multiple choice question,
+  ← / → go to the previous / next question, Enter on the last question opens the review.
+  They only act when the focus is on the page or in the exam, never while typing (text
+  boxes and fields), with a modifier key or on a key a control handles itself (Enter on a
+  button), so screen reader and browser keys keep working. A toggled choice is announced.
+  "Keyboard shortcuts" under Previous / Next lists them (not shown on touch screens).
 
   Render it with key={exam.id}: the saved answers are read once, when it mounts, and the
   component stays mounted while the exam goes from generating to ready (so focus and the
@@ -78,6 +86,8 @@ export default function ExamQuestions({
   const headingRef = useRef(null);
   const moved = useRef(focusOnStart);
   const wasWaiting = useRef(false);
+  const [showKeys, setShowKeys] = useState(false);
+  const [keyNote, setKeyNote] = useState("");
 
   // While questions are still written, one step past the last one: the question being written.
   const last = pending > 0 ? written : written - 1;
@@ -166,6 +176,33 @@ export default function ExamQuestions({
     }
   }
 
+  // The shortcuts, bound again after every render so they act on the question on screen.
+  useEffect(() => {
+    const listener = (event) => {
+    if (grading || reviewing) return;
+    const action = shortcutFor(event, {
+      choices: question?.type === "multiple_choice" && !readOnly ? question.choices?.length ?? 0 : 0,
+      canPrevious: index > 0,
+      canNext: index < expected - 1 && !waiting,
+      canFinish: index >= expected - 1 && !generating && !readOnly && !waiting,
+    });
+    if (!action) return;
+    event.preventDefault();
+    if (action.type === "previous") go(index - 1);
+    else if (action.type === "next") go(index + 1);
+    else if (action.type === "finish") finish();
+    else if (action.type === "choice") {
+      const choice = question.choices[action.index];
+      const on = !(Array.isArray(answers[question.id]) && answers[question.id].includes(choice.id));
+      toggleChoice(choice.id);
+      const letter = choiceLetter(action.index);
+      setKeyNote(on ? t("Choice {letter} selected", { letter }) : t("Choice {letter} cleared", { letter }));
+    }
+    };
+    document.addEventListener("keydown", listener);
+    return () => document.removeEventListener("keydown", listener);
+  });
+
   if (grading) return <ExamGrading questions={questions} answers={answers} />;
 
   const lectureTitle = question && exam.lectures?.find((item) => item.lecture_id && item.lecture_id === question.lecture_id)?.title;
@@ -209,6 +246,9 @@ export default function ExamQuestions({
       )}
       <p className="visually-hidden" role="status" aria-live="polite">
         {heard.text}
+      </p>
+      <p className="visually-hidden" aria-live="polite">
+        {keyNote}
       </p>
 
       <nav aria-label={t("Questions")}>
@@ -410,8 +450,31 @@ export default function ExamQuestions({
                   : t("{count} questions are still being written. You can finish once they’re ready.", { count: pending })}
             </p>
           )}
+          <div className="exam-keys">
+            <button
+              type="button"
+              className="exam-keys__toggle"
+              aria-expanded={showKeys}
+              aria-controls="exam-keys-list"
+              onClick={() => setShowKeys((open) => !open)}
+            >
+              <Icon name={showKeys ? "chevronDown" : "chevronRight"} /> {t("Keyboard shortcuts")}
+            </button>
+            {showKeys && (
+              <dl id="exam-keys-list" className="exam-keys__list">
+                <dt><kbd>1</kbd>–<kbd>9</kbd></dt>
+                <dd>{t("Select or clear choice A to I")}</dd>
+                <dt><kbd>←</kbd> <kbd>→</kbd></dt>
+                <dd>{t("Previous / next question")}</dd>
+                <dt><kbd>Enter</kbd></dt>
+                <dd>{t("On the last question: review your answers")}</dd>
+                <dd className="exam-keys__note">{t("Off while you type an answer.")}</dd>
+              </dl>
+            )}
+          </div>
         </>
       )}
     </>
   );
 }
+
