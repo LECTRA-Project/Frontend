@@ -33,7 +33,7 @@ import { del, get, post } from "../http.js";
               lecture_id null: the lecture was deleted since.
 
   Errors when starting: 404 a lecture isn't the student's, 409 another exam is still being
-  generated, 422 an invalid body or a lecture without readable text (the message names it).
+  generated (data { exam_id } names it, see busyExamId), 422 an invalid body or a lecture without readable text (the message names it).
   From mistakes: 404 the exam isn't the student's, 422 it isn't submitted or has no mistakes.
   Errors when submitting: 409 the exam isn't ready or was already submitted, 422 an answer
   that doesn't fit its question. Regrading: 409 when nothing is left to grade.
@@ -121,6 +121,11 @@ function unwrap(response, fallback) {
     throw new ApiError({ message: response?.message || fallback, data: response });
   }
   return response.data;
+}
+
+/* The exam still being generated that a 409 from startExam names, or null. */
+export function busyExamId(error) {
+  return error?.status === 409 ? error.data?.data?.exam_id ?? null : null;
 }
 
 /* Starts generating an exam; the questions are written afterwards (poll getExam). */

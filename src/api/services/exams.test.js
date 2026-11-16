@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ApiError, setAuthToken } from "../client.js";
-import { deleteExam, getExam, isUnfinished, listAllExams, listExams, regradeExam, startExam, submitExam } from "./exams.js";
+import { busyExamId, deleteExam, getExam, isUnfinished, listAllExams, listExams, regradeExam, startExam, submitExam } from "./exams.js";
 import { mockApi, ok } from "../../test/helpers.jsx";
 
 const exam = (id, status = "generating") => ({ id, title: "KI 02", status, question_count: 5, questions_ready: 0, lectures: [], error: null });
@@ -30,7 +30,7 @@ describe("exams service", () => {
   });
 
   it("reports 409 and 422 with the backend's message and status", async () => {
-    api.onPost("/exams").replyOnce(409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: null });
+    api.onPost("/exams").replyOnce(409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: { exam_id: "e-busy" } });
     api.onPost("/exams").replyOnce(422, { status: false, message: "“KI 03” has no readable text yet, so no questions can be made from it", data: null });
     const settings = { lectureIds: ["l-1"], questionCount: 5, types: ["multiple_choice"] };
 
@@ -38,10 +38,13 @@ describe("exams service", () => {
     expect(busy).toBeInstanceOf(ApiError);
     expect(busy.status).toBe(409);
     expect(busy.message).toMatch(/already being generated/);
+    expect(busyExamId(busy)).toBe("e-busy");
 
     const noText = await startExam(settings).catch((err) => err);
     expect(noText.status).toBe(422);
     expect(noText.message).toMatch(/“KI 03” has no readable text/);
+    expect(busyExamId(noText)).toBeNull();
+    expect(busyExamId(null)).toBeNull();
   });
 
   it("reads an exam with its questions", async () => {
