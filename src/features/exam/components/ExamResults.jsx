@@ -2,6 +2,7 @@ import { useState } from "react";
 import "katex/dist/katex.min.css";
 
 import Button from "../../../components/ui/Button.jsx";
+import { difficultyLabel } from "../../../api/services/exams.js";
 import Icon from "../../../components/ui/Icon.jsx";
 import { useI18n } from "../../../i18n/i18n.js";
 import { renderMarkdown } from "../../../services/notebook/markdown.js";
@@ -196,6 +197,9 @@ function ResultCard({ question, number, onOpenSource, onAsk }) {
         <span className="exam-muted exam-small">
           {t("Question {number} · {points}", { number, points: pointsOutOf(result.graded ? result.points : null, result.max_points ?? question.points) })}
         </span>
+        {difficultyLabel(question.difficulty) && (
+          <span className="exam-level">{t("Difficulty: {level}", { level: difficultyLabel(question.difficulty) })}</span>
+        )}
         {result.corrected && <span className="exam-tag">{t("Corrected by your lecturer")}</span>}
       </div>
       <div
