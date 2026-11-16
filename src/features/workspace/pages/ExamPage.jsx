@@ -21,6 +21,10 @@ import "../../exam/exam.css";
     no ?exam=          Step 1, set up (or continue an unfinished exam)       ExamSetup
     ?exam=<id>         generating: "2 of 5 questions ready" (polled), failed: Retry / Back
                                                                              ExamGenerating
+                       generating, after "Start with the first questions": the questions
+                       written so far (more come in; Finish waits for ready)  ExamQuestions
+                       failed after starting: the error with Retry / Back above
+                       the answers, read-only                                 ExamQuestions
                        ready: Step 2, the questions; Finish opens the review  ExamQuestions
                        "Submit and check" (after a confirmation): "Checking your answers…"
                        while the backend grades, then the results
@@ -83,6 +87,9 @@ export default function ExamPage() {
   const [startError, setStartError] = useState(null); // { message, busyId }
   const [notice, setNotice] = useState(null);
   const [grading, setGrading] = useState(false);
+  // The exam the student just chose to start while its questions are written (the choice
+  // is also saved on this device, so a reload or a link lands in the questions again).
+  const [startedNow, setStartedNow] = useState(null);
   // { lectureIds, questionCount, types } for "New exam on the same materials";
   // { lectureIds, concept } for "Practice this" on the Statistics page.
   const [preset, setPreset] = useState(() => location.state?.examPreset ?? null);
@@ -169,6 +176,12 @@ export default function ExamPage() {
     deleteExam(failed.id).catch(() => {});
   }
 
+  // "Start with the first questions": answer while the others are written.
+  function startEarly() {
+    updateExamProgress(userKey, exam.id, { started: true });
+    setStartedNow(exam.id);
+  }
+
   /* ---------- Submitting ---------- */
   // The answers on this device are done with; the settings stay for "New exam on the same materials".
   function forgetAnswers(id) {
@@ -252,6 +265,10 @@ export default function ExamPage() {
   const materials = (fromChat ? chatLectures : library).map(toExamMaterial);
   const presetGone = preset && !materialsLoading ? presetIds.filter((id) => !materials.some((item) => item.id === id)).length : 0;
 
+  const written = exam?.questions?.length ?? 0;
+  const startedEarly = Boolean(exam) && written > 0 && (startedNow === exam.id || loadExamProgress(userKey, exam.id).started);
+  const answering = Boolean(exam) && written > 0 && (exam.status === "ready" || ((exam.status === "generating" || exam.status === "failed") && startedEarly));
+
   let step = "setup";
   let body;
   if (!examId) {
@@ -311,6 +328,36 @@ export default function ExamPage() {
         {t("Loading the exam…")}
       </p>
     );
+  } else if (answering) {
+    // One element for generating, ready and failed, so it stays mounted (focus, typing)
+    // while the exam changes under it.
+    step = exam.status === "failed" ? "failed" : grading ? "grading" : "ready";
+    body = (
+      <ExamQuestions
+        key={exam.id}
+        exam={exam}
+        userKey={userKey}
+        sourceType={sourceType}
+        onSubmit={exam.status === "ready" ? submit : null}
+        grading={grading}
+        loadError={examState.error}
+        onReload={examState.reload}
+        focusOnStart={startedNow === exam.id}
+        banner={
+          exam.status === "failed" ? (
+            <ExamGenerating
+              exam={exam}
+              answered
+              onRetry={retry}
+              onBack={() => toSetup()}
+              retrying={starting}
+              retryError={startError}
+              onOpenExam={(id) => openExam(id)}
+            />
+          ) : null
+        }
+      />
+    );
   } else if (exam.status === "generating" || exam.status === "failed") {
     step = exam.status;
     body = (
@@ -323,11 +370,9 @@ export default function ExamPage() {
         onOpenExam={(id) => openExam(id)}
         loadError={examState.error}
         onReload={examState.reload}
+        onStart={startEarly}
       />
     );
-  } else if (exam.status === "ready" && exam.questions?.length) {
-    step = grading ? "grading" : "ready";
-    body = <ExamQuestions key={exam.id} exam={exam} userKey={userKey} sourceType={sourceType} onSubmit={submit} grading={grading} />;
   } else if (exam.status === "submitted" && exam.questions?.length && exam.questions.every((question) => question.result)) {
     step = "submitted";
     body = (

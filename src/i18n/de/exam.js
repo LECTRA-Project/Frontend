@@ -79,6 +79,35 @@ export default {
   "Questions ready": "Fertige Fragen",
   "You can leave this page: the exam waits for you under “Continue an exam”.":
     "Du kannst diese Seite verlassen: Die Prüfung wartet unter „Prüfung fortsetzen“ auf dich.",
+  "Start with the first questions": "Mit den ersten Fragen beginnen",
+  "The others appear while you answer. You can submit once all of them are ready.":
+    "Die übrigen erscheinen, während du antwortest. Abgeben kannst du, sobald alle fertig sind.",
+  "It can’t be submitted, so your answers below are kept read-only. Retry starts a new exam with the same settings.":
+    "Sie kann nicht abgegeben werden, deshalb bleiben deine Antworten unten nur lesbar. „Erneut versuchen“ startet eine neue Prüfung mit denselben Einstellungen.",
+
+  // Answering while the questions are written
+  "Question {number} is ready.": "Frage {number} ist fertig.",
+  "Questions {list} and {last} are ready.": "Fragen {list} und {last} sind fertig.",
+  "All questions are ready. You can finish the exam now.": "Alle Fragen sind fertig. Du kannst die Prüfung jetzt abschließen.",
+  "All questions are written: this exam has {count} instead of {asked}. You can finish it now.":
+    "Alle Fragen sind geschrieben: Diese Prüfung hat {count} statt {asked}. Du kannst sie jetzt abschließen.",
+  "This exam has {count} questions instead of {asked}: 1 question couldn’t be written.":
+    "Diese Prüfung hat {count} statt {asked} Fragen: 1 Frage konnte nicht geschrieben werden.",
+  "This exam has {count} questions instead of {asked}: {missing} questions couldn’t be written.":
+    "Diese Prüfung hat {count} statt {asked} Fragen: {missing} Fragen konnten nicht geschrieben werden.",
+  "Question {number}, being written": "Frage {number}, wird geschrieben",
+  "Being written": "Wird geschrieben",
+  "Question {number} of {total}": "Frage {number} von {total}",
+  "Question {number} is being written…": "Frage {number} wird geschrieben…",
+  "It shows here as soon as it’s ready. Your answers so far are saved.":
+    "Sie erscheint hier, sobald sie fertig ist. Deine bisherigen Antworten sind gespeichert.",
+  "This exam can’t be submitted, so the answer can’t be changed.":
+    "Diese Prüfung kann nicht abgegeben werden, deshalb lässt sich die Antwort nicht mehr ändern.",
+  "The exam is almost ready. You can finish it in a moment.": "Die Prüfung ist fast fertig. Gleich kannst du sie abschließen.",
+  "1 question is still being written. You can finish once it’s ready.":
+    "1 Frage wird noch geschrieben. Du kannst abschließen, sobald sie fertig ist.",
+  "{count} questions are still being written. You can finish once they’re ready.":
+    "{count} Fragen werden noch geschrieben. Du kannst abschließen, sobald sie fertig sind.",
 
   // Answering
   "The exam could not be submitted.": "Die Prüfung konnte nicht abgegeben werden.",
