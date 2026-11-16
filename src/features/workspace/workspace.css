@@ -695,12 +695,77 @@ button.cf-material__open:hover {
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
-.chat-msg--student {
+/* A question: the bubble on the right, with Copy and Edit under it. */
+.chat-turn--student {
   align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   max-width: 80%;
+  min-width: 0;
+}
+.chat-msg--student {
+  max-width: 100%;
   padding: 10px 16px;
   border-radius: 18px 18px 6px 18px;
   background: var(--accent-hover);
+}
+/* Shown on hover or keyboard focus; always on touch screens (no hover). */
+.chat-msg__actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.chat-turn--student:hover .chat-msg__actions,
+.chat-turn--student:focus-within .chat-msg__actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .chat-msg__actions {
+    opacity: 1;
+  }
+}
+.chat-msg__action {
+  color: var(--text-secondary);
+}
+.chat-msg__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* Editing a sent question. */
+.chat-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(560px, 100%);
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  background: var(--bg-surface);
+}
+.chat-edit__input {
+  width: 100%;
+  resize: vertical;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.chat-edit__input:focus {
+  outline: none;
+}
+.chat-edit__note {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.chat-edit__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }
 /* An answer: its own calm, full-width block on the left, below the question. */
 .chat-msg--assistant {
@@ -1722,7 +1787,7 @@ button.cf-material__open:hover {
   .chat__dock {
     padding: var(--space-2) var(--space-3) var(--space-3);
   }
-  .chat-msg--student {
+  .chat-turn--student {
     max-width: 90%;
   }
   .chat-msg--assistant {

@@ -83,4 +83,19 @@ export default {
   "Unable to delete the chat.": "Der Chat konnte nicht gelöscht werden.",
   "Unable to get an answer.": "Es konnte keine Antwort abgerufen werden.",
   "Unable to load the messages.": "Die Nachrichten konnten nicht geladen werden.",
+
+  // Copy and edit a sent question
+  "Copy message": "Nachricht kopieren",
+  "Message copied": "Nachricht kopiert",
+  "Message copied.": "Nachricht kopiert.",
+  "Edit message": "Nachricht bearbeiten",
+  "Edit and send again": "Bearbeiten und erneut senden",
+  "Wait for the answer before editing": "Warte auf die Antwort, bevor du bearbeitest",
+  Edit: "Bearbeiten",
+  "Edit your message": "Deine Nachricht bearbeiten",
+  Send: "Senden",
+  "The notebook cell is sent again too.": "Die Notebook-Zelle wird ebenfalls erneut gesendet.",
+  "The {count} notebook cells are sent again too.": "Die {count} Notebook-Zellen werden ebenfalls erneut gesendet.",
+  "The edited question is {length} characters; the limit is {limit}. Shorten it.":
+    "Die bearbeitete Frage hat {length} Zeichen; erlaubt sind {limit}. Kürze sie.",
 };

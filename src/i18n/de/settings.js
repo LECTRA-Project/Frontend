@@ -49,17 +49,26 @@ export default {
   "Loading the models available with your keys…": "Die mit deinen Schlüsseln verfügbaren Modelle werden geladen …",
   "{model} can't be used any more. Choose another model.":
     "{model} kann nicht mehr verwendet werden. Wähle ein anderes Modell.",
-  "Add model": "Modell hinzufügen",
-  "Choose the model that answers in the chat, or add a provider's API key.":
-    "Wähle das Modell, das im Chat antwortet, oder füge den API-Schlüssel eines Anbieters hinzu.",
-  "Add API key for {provider}…": "API-Schlüssel für {provider} hinzufügen …",
+  "API key": "API-Schlüssel",
+  "Add, replace or remove the key for each provider.": "Füge den Schlüssel für jeden Anbieter hinzu, ersetze oder entferne ihn.",
+  "{provider} · key ends in {last4}": "{provider} · Schlüssel endet auf {last4}",
+  "{provider} · no key": "{provider} · kein Schlüssel",
+  "Key saved, ending in {last4}.": "Schlüssel gespeichert, endet auf {last4}.",
+  "Saved key ending in {last4} isn't working.": "Der gespeicherte Schlüssel, der auf {last4} endet, funktioniert nicht.",
+  "No {provider} key saved.": "Kein {provider}-Schlüssel gespeichert.",
+  "{key} · in use": "{key} · in Verwendung",
+  "The chat uses this key now.": "Der Chat verwendet gerade diesen Schlüssel.",
+  "Add key": "Schlüssel hinzufügen",
+  "Replace key": "Schlüssel ersetzen",
+  "Chat model": "Chatmodell",
+  "The model that answers in the chat.": "Das Modell, das im Chat antwortet.",
+  "The model that answers in the chat. Add an API key above to use Claude, Gemini or GPT models.":
+    "Das Modell, das im Chat antwortet. Füge oben einen API-Schlüssel hinzu, um Claude-, Gemini- oder GPT-Modelle zu nutzen.",
   "Chat model: {model} · {provider}": "Chatmodell: {model} · {provider}",
   "Chat model: Lectra · LECTRA's own models": "Chatmodell: Lectra · die eigenen Modelle von LECTRA",
   "{provider} offers no chat models LECTRA can use with this key.":
     "{provider} bietet mit diesem Schlüssel keine Chatmodelle an, die LECTRA nutzen kann.",
   "Key not working": "Schlüssel funktioniert nicht",
-  "Replace {provider} key (ends in {last4})…": "{provider}-Schlüssel ersetzen (endet auf {last4}) …",
-  "Remove {provider} key…": "{provider}-Schlüssel entfernen …",
   "Replaces the saved key ending in {last4}.": "Ersetzt den gespeicherten Schlüssel, der auf {last4} endet.",
   "The {provider} key was removed. Its models are no longer offered in the chat.":
     "Der {provider}-Schlüssel wurde entfernt. Seine Modelle werden im Chat nicht mehr angeboten.",

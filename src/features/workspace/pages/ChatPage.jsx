@@ -22,6 +22,7 @@ import { sourceChips } from "../chatLayout.js";
 import { copyText } from "../../../services/clipboard.js";
 import { t, useI18n } from "../../../i18n/i18n.js";
 import useTypewriter from "../useTypewriter.js";
+import { MAX_MESSAGE_LENGTH } from "../../../api/services/chat.js";
 
 // The backend's fixed answer when a chat's lectures have no extracted text saved.
 export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
@@ -41,6 +42,8 @@ export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
     from there (?exam= in the URL) the bar has "Back to exam results".
   - While the assistant answers, a bubble with animated dots shows where the answer will
     appear; a new answer is then typed out word by word (useTypewriter.js).
+  - Every question has Copy (its text) and Edit, which sends the edited question again as
+    a new message (StudentMessage).
   - Every code block in an answer has a Copy button (just that code), and every answer has a
     Copy button under it (the whole answer as Markdown, with its sources). When the
     clipboard can't be used, a dialog shows the text selected for copying by hand.
@@ -84,6 +87,7 @@ export function ChatView({
   loadingOlder = false,
   onLoadOlder = () => {},
   examLink = null,
+  onResend = () => false,
   model = null,
 }) {
   const { t } = useI18n();
@@ -322,6 +326,8 @@ export function ChatView({
                 onCopy={copy}
                 onGrow={followAnswer}
                 onAcceptSuggestion={message.id === suggesting ? () => onSend(t("Yes, please")) : null}
+                onResend={onResend}
+                canResend={!busy && available === true}
               />
             ))}
             {busy && (
@@ -376,7 +382,125 @@ export function ChatView({
   );
 }
 
-function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow, onAcceptSuggestion }) {
+/*
+  A question the student sent, with Copy and Edit under it (shown on hover or focus, always
+  on touch screens). Edit turns the bubble into a text box; Send asks the edited question
+  as a new message at the end of the chat (the backend can't change a sent message), with
+  the notebook cells the question had. Questions from the exam results can be copied only.
+*/
+function StudentMessage({ message, onCopy, onResend, canResend }) {
+  const { t } = useI18n();
+  const [draft, setDraft] = useState(null); // the text being edited, or null
+  const [copied, setCopied] = useState(false);
+  const exam = parseExamQuestionMessage(message.content);
+  // Notebook cells added to the question are shown as code cards, not as the raw text block.
+  const { text, cells } = exam ? { text: message.content, cells: [] } : parseNotebookContext(message.content);
+
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = setTimeout(() => setCopied(false), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  async function copy() {
+    setCopied(await onCopy(text, t("Message copied.")));
+  }
+
+  function send(event) {
+    event?.preventDefault();
+    const value = draft.trim();
+    if (!value || !canResend) return;
+    // The notebook block (if any) follows the typed text in the message: keep it.
+    if (onResend(value + message.content.slice(text.length)) !== false) setDraft(null);
+  }
+
+  const pending = message.pending ? "chat-msg--pending" : "";
+  return (
+    <li className="chat-turn chat-turn--student">
+      {draft !== null ? (
+        <form className="chat-edit" onSubmit={send}>
+          <label className="visually-hidden" htmlFor={`edit-${message.id}`}>
+            {t("Edit your message")}
+          </label>
+          <textarea
+            id={`edit-${message.id}`}
+            className="chat-edit__input"
+            value={draft}
+            rows={Math.min(8, Math.max(2, draft.split("\n").length))}
+            maxLength={MAX_MESSAGE_LENGTH}
+            autoFocus
+            onFocus={(event) => event.currentTarget.setSelectionRange(draft.length, draft.length)}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setDraft(null);
+              if (event.key === "Enter" && !event.shiftKey) send(event);
+            }}
+          />
+          {cells.length > 0 && (
+            <p className="chat-edit__note">
+              {cells.length === 1 ? t("The notebook cell is sent again too.") : t("The {count} notebook cells are sent again too.", { count: cells.length })}
+            </p>
+          )}
+          <div className="chat-edit__actions">
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setDraft(null)}>
+              {t("Cancel")}
+            </button>
+            <button type="submit" className="btn btn--primary btn--sm" disabled={!draft.trim() || !canResend}>
+              {t("Send")}
+            </button>
+          </div>
+        </form>
+      ) : exam ? (
+        <ExamQuestionMessage message={message} exam={exam} />
+      ) : (
+        <div className={`chat-msg chat-msg--student ${pending}`}>
+          <span className="chat-msg__text">{text}</span>
+          {cells.length > 0 && (
+            <ul className="chat-cells" aria-label={t("Notebook cells added to this question")}>
+              {cells.map((cell, index) => (
+                <ChatCell key={`${cell.label}-${index}`} cell={cell} />
+              ))}
+            </ul>
+          )}
+          {message.extras?.map((extra) => (
+            <span key={extra} className="chat-msg__files">
+              {extra}
+            </span>
+          ))}
+        </div>
+      )}
+      {draft === null && !message.pending && (
+        <div className="chat-msg__actions">
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm chat-msg__action"
+            aria-label={copied ? t("Message copied") : t("Copy message")}
+            title={t("Copy message")}
+            onClick={copy}
+          >
+            <Icon name={copied ? "check" : "copy"} size={14} />
+            {copied ? t("Copied") : t("Copy")}
+          </button>
+          {!exam && (
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm chat-msg__action"
+              aria-label={t("Edit message")}
+              title={canResend ? t("Edit and send again") : t("Wait for the answer before editing")}
+              disabled={!canResend}
+              onClick={() => setDraft(text)}
+            >
+              <Icon name="edit" size={14} />
+              {t("Edit")}
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow, onAcceptSuggestion, onResend, canResend }) {
   const { t } = useI18n();
   if (message.role === "system") {
     return (
@@ -386,27 +510,7 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
     );
   }
   if (message.role === "user") {
-    const exam = parseExamQuestionMessage(message.content);
-    if (exam) return <ExamQuestionMessage message={message} exam={exam} />;
-    // Notebook cells added to the question are shown as code cards, not as the raw text block.
-    const { text, cells } = parseNotebookContext(message.content);
-    return (
-      <li className={`chat-msg chat-msg--student ${message.pending ? "chat-msg--pending" : ""}`}>
-        <span className="chat-msg__text">{text}</span>
-        {cells.length > 0 && (
-          <ul className="chat-cells" aria-label={t("Notebook cells added to this question")}>
-            {cells.map((cell, index) => (
-              <ChatCell key={`${cell.label}-${index}`} cell={cell} />
-            ))}
-          </ul>
-        )}
-        {message.extras?.map((extra) => (
-          <span key={extra} className="chat-msg__files">
-            {extra}
-          </span>
-        ))}
-      </li>
-    );
+    return <StudentMessage message={message} onCopy={onCopy} onResend={onResend} canResend={canResend} />;
   }
   if (message.content.startsWith(NO_TEXT_ANSWER)) {
     return (
@@ -550,7 +654,7 @@ function AnswerFooter({ chips, content, suggestion = null, onAcceptSuggestion = 
 function ExamQuestionMessage({ message, exam }) {
   const { t } = useI18n();
   return (
-    <li className={`chat-msg chat-msg--student chat-msg--exam ${message.pending ? "chat-msg--pending" : ""}`}>
+    <div className={`chat-msg chat-msg--student chat-msg--exam ${message.pending ? "chat-msg--pending" : ""}`}>
       <span className="chat-exam__from">
         <Icon name="graduation" size={14} />
         {t("From your exam results")}
@@ -581,7 +685,7 @@ function ExamQuestionMessage({ message, exam }) {
           </div>
         ))}
       </dl>
-    </li>
+    </div>
   );
 }
 
