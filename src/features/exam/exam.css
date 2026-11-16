@@ -468,6 +468,71 @@
   margin: 0;
   text-align: right;
 }
+
+/* ---------- Keyboard shortcuts (not on touch screens) ---------- */
+.exam-keys {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.exam-keys__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.exam-keys__toggle:hover {
+  color: var(--text-primary);
+}
+.exam-keys__toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.exam-keys__list {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.exam-keys__list dt {
+  text-align: right;
+  white-space: nowrap;
+}
+.exam-keys__list dd {
+  margin: 0;
+}
+.exam-keys__list .exam-keys__note {
+  grid-column: 1 / -1;
+  text-align: right;
+  opacity: 0.75;
+}
+.exam-keys kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: center;
+}
+@media (hover: none) and (pointer: coarse) {
+  .exam-keys {
+    display: none;
+  }
+}
 .exam-choice--locked {
   cursor: default;
 }
