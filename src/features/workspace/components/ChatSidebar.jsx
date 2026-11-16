@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
-
+import CompletionRing from "../../../components/ui/CompletionRing.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
 import Menu from "../../../components/ui/Menu.jsx";
@@ -18,7 +18,9 @@ import { useI18n } from "../../../i18n/i18n.js";
 
   "Materials in this chat" lists only the open chat's materials: a click opens one in the
   viewer beside the chat, × removes it from the chat (the lecture itself is kept), and the
-  upload button uploads new files into this chat. Lectures already uploaded can be added
+  upload button uploads new files into this chat. A small ring shows how far each material
+  is (its completion_percent; none when the backend doesn't send it), and the open button
+  describes itself with it ("58% complete"). Lectures already uploaded can be added
   from "Add one of your materials". Each material's ⋯ menu manages it in the library:
   Rename, and Delete from library (it then leaves every chat). A failed one can be retried.
   Each chat's ⋯ menu has Remove, which asks first and then deletes the chat and its messages
@@ -171,12 +173,14 @@ export default function ChatSidebar({
               {materials.map((material) => {
                 const opened = viewerLectureId === material.id;
                 const status = material.status && material.status !== "completed" ? STATUS_LABEL[material.status] : null;
+                const ringId = typeof material.completion === "number" ? `cf-completion-${material.id}` : undefined;
                 return (
                   <li key={material.id} className={`cf-material ${opened ? "cf-material--open" : ""}`}>
                     <button
                       type="button"
                       className="cf-material__open"
                       aria-label={t("Open {name} beside the chat", { name: material.name })}
+                      aria-describedby={ringId}
                       aria-pressed={opened}
                       title={t("Open beside the chat")}
                       onClick={() => onOpenMaterial(material)}
@@ -191,6 +195,7 @@ export default function ChatSidebar({
                           {status && <span className={`cf-material__status cf-material__status--${material.status}`}> · {status}</span>}
                         </span>
                       </span>
+                      {ringId && <CompletionRing id={ringId} percent={material.completion} />}
                     </button>
                     {material.status === "failed" && (
                       <IconButton

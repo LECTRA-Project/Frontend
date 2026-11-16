@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getReadingProgress, recordReadingProgress, recordReadingProgressKeepalive } from "../../api/services/lectures.js";
 import { createReadingTracker } from "./readingTracker.js";
@@ -10,13 +10,18 @@ import { createReadingTracker } from "./readingTracker.js";
   `enabled` is false in basic mode (a backend without the AI routes) and while the
   backend's features are unknown: then nothing is sent or loaded.
 
+  `onRead(lectureId, { viewed, total })` (optional) is called when a lecture's count of
+  pages read goes up (e.g. to refresh its course completion): after a save that counted
+  new pages. Not for pages the backend already had, and not for the first load when a
+  lecture opens.
+
   Returns:
     progressFor(id)        { viewed, total } once loaded (null before, or when disabled)
     load(id, { signal })   GET the lecture's progress (failures are ignored)
     setVisible(id, pages)  the pages on screen now (from the viewers)
     leave(id)              the viewer closed or switched lecture: send what is left
 */
-export function useReadingProgress({ enabled }) {
+export function useReadingProgress({ enabled, onRead }) {
   const [progress, setProgress] = useState({}); // lectureId → { viewed, total }
 
   const update = useCallback((lectureId, data) => {
@@ -36,6 +41,20 @@ export function useReadingProgress({ enabled }) {
       onProgress: update,
     })
   );
+
+  // onRead: when a lecture's count goes up after it was first loaded (by the GET on opening).
+  const onReadRef = useRef(onRead);
+  useEffect(() => {
+    onReadRef.current = onRead;
+  });
+  const shown = useRef(new Map()); // lectureId → the `viewed` handled last
+  useEffect(() => {
+    for (const [lectureId, item] of Object.entries(progress)) {
+      const before = shown.current.get(lectureId);
+      shown.current.set(lectureId, item.viewed);
+      if (before !== undefined && item.viewed > before) onReadRef.current?.(lectureId, item);
+    }
+  }, [progress]);
 
   useEffect(() => {
     tracker.start();

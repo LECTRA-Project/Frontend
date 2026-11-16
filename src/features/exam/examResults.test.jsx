@@ -129,6 +129,15 @@ describe("submitting", () => {
     expect(JSON.parse(localStorage.getItem(STORAGE("e-ready")))).toMatchObject({ answers: {}, settings: SETTINGS });
   });
 
+  it("loads the materials again once graded, for their completion (best exam score)", async () => {
+    const { user, review } = await openReview({ q1: ["b"] });
+    const listReads = () => api.history.get.filter((request) => request.url === "/student_profile/lectures").length;
+    const before = listReads();
+    await user.click(within(await askToSubmit(user, review)).getByRole("button", { name: "Submit and check" }));
+    expect(await screen.findByRole("heading", { name: "Your answers are checked" })).toBeInTheDocument();
+    await waitFor(() => expect(listReads()).toBe(before + 1));
+  });
+
   it("says how many short answers are graded while checking", async () => {
     const { user, review } = await openReview({ q1: ["b"], q2: "A pure node" });
     exams.submitGate = new Promise(() => {});
