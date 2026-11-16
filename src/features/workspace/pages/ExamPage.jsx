@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, useOutletContext } from "react-router-d
 import Button from "../../../components/ui/Button.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import { t as translateNow, useI18n } from "../../../i18n/i18n.js";
-import { deleteExam, getExam, listAllExams, QUESTION_TYPES, regradeExam, startExam, submitExam } from "../../../api/services/exams.js";
+import { busyExamId, deleteExam, getExam, QUESTION_TYPES, regradeExam, startExam, submitExam } from "../../../api/services/exams.js";
 import { clearExamProgress, loadExamProgress, saveExamProgress, updateExamProgress } from "../../../services/exam/examStorage.js";
 import { toMaterial } from "../../lectures/materialTypes.js";
 import ExamSetup from "../../exam/components/ExamSetup.jsx";
@@ -143,16 +143,8 @@ export default function ExamPage() {
       openExam(created.id);
       return created;
     } catch (err) {
-      let busyId = null;
-      if (err?.status === 409) {
-        // The exam being generated, so it can be opened from here.
-        try {
-          busyId = (await listAllExams()).find((item) => item.status === "generating")?.id ?? null;
-        } catch {
-          busyId = null;
-        }
-      }
-      setStartError({ message: err.message || t("The exam could not be started."), busyId });
+      // 409: the exam being generated comes with the answer, so it can be opened from here.
+      setStartError({ message: err.message || t("The exam could not be started."), busyId: busyExamId(err) });
       return null;
     } finally {
       setStarting(false);

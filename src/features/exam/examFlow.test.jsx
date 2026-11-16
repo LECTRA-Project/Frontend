@@ -141,18 +141,30 @@ describe("exam setup", () => {
     expect(group).toHaveAccessibleDescription("Jede Frage auf dem Niveau, das zu ihren Seiten passt.");
   });
 
-  it("explains 409 and opens the exam already being generated", async () => {
+  it("explains 409 and opens the exam already being generated, named by the 409 itself", async () => {
     const busy = examFixture("e-busy", { status: "generating", count: 7, ready: 2 });
     setup({
       examList: [busy],
-      startError: [409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: null }],
+      startError: [409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: { exam_id: "e-busy" } }],
     });
     const { user, router } = await openSetup();
+    const historyReads = () => api.history.get.filter((request) => request.url === "/exams").length;
+    const before = historyReads();
     await user.click(generate());
     expect(await screen.findByText(/An exam is already being generated/)).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Open that exam" }));
     expect(search(router)).toEqual({ chat: "s-hunt", exam: "e-busy" });
     expect(await screen.findByRole("heading", { name: "Writing your questions…" })).toBeInTheDocument();
+    // No extra request: the history isn't read to find the exam.
+    expect(historyReads()).toBe(before);
+  });
+
+  it("explains a 409 without an exam to open", async () => {
+    setup({ startError: [409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: null }] });
+    const { user } = await openSetup();
+    await user.click(generate());
+    expect(await screen.findByText(/An exam is already being generated/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open that exam" })).not.toBeInTheDocument();
   });
 
   it("shows the 422 message that names the material", async () => {

@@ -376,7 +376,7 @@ describe("practise my mistakes", () => {
   it("offers the exam still being generated when another one is busy", async () => {
     const busy = examFixture("e-busy", { status: "generating", count: 5 });
     setup({ examList: [submittedExam(), busy] });
-    exams.startError = [409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: null }];
+    exams.startError = [409, { status: false, message: "An exam is already being generated. Wait until it is ready, then start the next one", data: { exam_id: "e-busy" } }];
     const { user, router } = await openAt("/workspace/exam?exam=e-done");
     await user.click(await screen.findByRole("button", { name: "Practise my mistakes" }));
 
