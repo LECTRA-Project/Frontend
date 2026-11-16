@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ApiError, setAuthToken } from "../client.js";
-import { getCompletion, getOverview } from "./statistics.js";
+import { getCompletion, getExamStats, getOverview } from "./statistics.js";
 import { mockApi, ok } from "../../test/helpers.jsx";
 
 const COMPLETION = {
@@ -25,6 +25,21 @@ const OVERVIEW = {
   study_days: 9,
   current_streak: 5,
   last_activity_at: "2026-11-16T09:03:37+00:00",
+};
+
+const EXAMS = {
+  exams_submitted: 2,
+  exams_scored: 1,
+  average_percent: 67,
+  best_percent: 67,
+  history: [
+    { exam_id: "e2", title: "KI 02", submitted_at: "2026-11-16T09:00:00+00:00", lectures: [{ lecture_id: "a", title: "KI 02" }], question_count: 3, score_percent: null },
+    { exam_id: "e1", title: "KI 02", submitted_at: "2026-11-10T09:00:00+00:00", lectures: [{ lecture_id: "a", title: "KI 02" }], question_count: 3, score_percent: 67 },
+  ],
+  by_week: [{ week_start: "2026-11-09", exams: 1, average_percent: 67 }],
+  by_lecture: [{ lecture_id: "a", title: "KI 02", exams: 1, average_percent: 67, best_percent: 67 }],
+  by_type: [{ type: "multiple_choice", questions: 3, correct: 2, correct_percent: 67, points_percent: 67 }],
+  weakest_concepts: [],
 };
 
 describe("statistics service", () => {
@@ -82,5 +97,38 @@ describe("statistics service", () => {
     await expect(getOverview()).rejects.toMatchObject({ constructor: ApiError, status: 401 });
     api.onGet("/stats/overview").replyOnce(200, { status: false, message: "", data: null });
     await expect(getOverview()).rejects.toMatchObject({ constructor: ApiError, message: "Unable to load your overall numbers." });
+  });
+
+  it("loads the exam performance with the auth header, and no dates by default", async () => {
+    api.onGet("/stats/exams").reply((config) => {
+      expect(config.headers.Authorization).toBe("Bearer test-token");
+      expect(config.params).toEqual({});
+      return [200, ok(EXAMS, "Exam statistics retrieved successfully")];
+    });
+    await expect(getExamStats()).resolves.toEqual(EXAMS);
+  });
+
+  it("sends from / to and the abort signal for the exam performance", async () => {
+    const controller = new AbortController();
+    api.onGet("/stats/exams").reply((config) => {
+      expect(config.params).toEqual({ from: "2026-10-20", to: "2026-11-16" });
+      expect(config.signal).toBe(controller.signal);
+      return [200, ok(EXAMS)];
+    });
+    await getExamStats({ from: "2026-10-20", to: "2026-11-16", signal: controller.signal });
+
+    api.onGet("/stats/exams").reply((config) => [200, ok({ ...EXAMS, params: config.params })]);
+    await expect(getExamStats({ from: "2026-10-20" })).resolves.toMatchObject({ params: { from: "2026-10-20" } });
+  });
+
+  it("turns exam performance failures into ApiError", async () => {
+    api.onGet("/stats/exams").replyOnce(422, { status: false, message: "from must not be after to", data: null });
+    await expect(getExamStats({ from: "2026-12-01", to: "2026-11-01" })).rejects.toMatchObject({
+      constructor: ApiError,
+      status: 422,
+      message: "from must not be after to",
+    });
+    api.onGet("/stats/exams").replyOnce(200, { status: false, message: "", data: null });
+    await expect(getExamStats()).rejects.toMatchObject({ constructor: ApiError, message: "Unable to load your exam performance." });
   });
 });

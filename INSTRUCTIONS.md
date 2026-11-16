@@ -126,7 +126,7 @@ Vite only exposes variables prefixed with `VITE_` to browser code. Do not put se
 | `/workspace?chat=<id>&exam=<id>` | A chat opened from the exam results (*Ask about this*): the chat has *Back to exam results*. `exam` stays while that chat is open (also with a material in the viewer) and is dropped when another chat or a new chat is opened. | Signed in |
 | `/profile` | Profile and password fields | Signed in |
 | `/settings` | Account preferences | Signed in |
-| `/statistics` | Statistics: the overall numbers and the course completion per lecture (see *Statistics* below) | Signed in |
+| `/statistics` | Statistics: the overall numbers, exam performance and history, and the course completion per lecture (see *Statistics* below) | Signed in |
 
 Unknown routes redirect to sign-in. Reset links remain accessible when a browser already has an authenticated session. The reset token must be present in the emailed URL to bootstrap the flow; after the app captures it, the URL is replaced with `/reset-password` before rendering.
 
@@ -169,7 +169,7 @@ The header's *Exam* replaces the chat with the Exam view. Its code is in `src/fe
 
 ### Statistics
 
-`/statistics` (`src/features/statistics/`) shows only the student's real numbers: **Overall** at the top and **Course completion** below. There is no sample data; `PerformanceChart.jsx` (a plain SVG line chart, with its styles in `statistics.css`) is not on the page yet and is kept for the weekly exam averages.
+`/statistics` (`src/features/statistics/`) shows only the student's real numbers: **Overall** at the top, **Exam performance** below it, and **Course completion** last. There is no sample data. Exam performance comes right after the overall cards because it explains their first two (exams taken, average score) in detail; the course completion is a longer list per lecture and closes the page.
 
 **Overall** (`OverviewCards.jsx`, texts in `overviewText.js`, from `GET /api/stats/overview` in `src/api/services/statistics.js`): five cards, each a label, a big value and a second line.
 
@@ -184,6 +184,15 @@ The header's *Exam* replaces the chat with the Exam view. Its code is in `src/fe
 - *Days:* the backend counts the streak in UTC days, so *today* and *yesterday* in the last-activity line are UTC days too (judged when the numbers were loaded); the line then always agrees with the streak. Near midnight this can differ from the student's local date by a day.
 - Real zeros are shown as zeros once the student has done anything. A **new student** (no lectures, no chats, no exams, no pages read, no study days and no `last_activity_at`) sees *Your numbers will show here* with three steps instead: *Upload a lecture* (with a link to a new chat, `/workspace`), *Read it* (a page counts after 2 s on screen) and *Take an exam*.
 - While loading, the cards keep their place with placeholders (and a hidden "Loading your overall numbers…" status); an error shows the message with *Try again*.
+
+**Exam performance** (`ExamPerformance.jsx`, texts in `examStatsText.js`, the chart in `PerformanceChart.jsx` with `statistics.css`, from `GET /api/stats/exams`): only submitted exams count.
+
+- *Header:* "4 exams · average 61% · best 100% · 1 waiting for a grade", and the period: *All time* (default) or *Last 4 weeks* (sent as `from`, today and the 27 UTC days before it; everything in the section follows it). The period is offered once the student has a submitted exam; a period without exams says so with *Show all time*.
+- *Average score per week* (`by_week`, oldest first; weeks start on Monday, UTC): a plain SVG line chart drawn in screen pixels (its width follows the box, so the labels keep their size on a phone). Weeks sit on a time axis, so a week without an exam leaves a gap instead of stretching the line. Each point carries its value ("75%") and week ("9 Nov", German "9. Nov.", the year when it isn't this year); labels that would overlap are thinned out, the last week always keeps them. The SVG's text alternative names every week and value, and *Show as a table* lists the weeks with their number of exams and average. One week is a single point in the middle, with "One week so far. Each week with a graded exam adds a point."
+- *Per lecture* (`by_lecture`, lowest average first, never re-sorted): the average as a bar with a mark at the best score, "Average 75% · Best 100% · 2 exams"; a deleted lecture keeps its title and is marked *deleted*. *Per question type* (`by_type`): multiple choice and short answer, the share of correct answers as a bar, "5 of 8 correct · 70% of the points" (partly correct answers earn points but don't count as correct). The two sit side by side where there is room.
+- *Weakest concepts* (`weakest_concepts`, up to 5, each asked in at least 2 questions): the concept, "2 of 6 correct · 33%", and *Practice this*, which opens the exam setup (`/workspace/exam`, router state `examPreset: { lectureIds, concept }`, like *New exam on the same materials*) with the concept's lectures chosen from the library and the default number and types. Lecture ids that don't appear in the response as an existing lecture (a deleted lecture has `lecture_id: null` there) are left out; without any left there is no button. Without such a concept the part says when concepts appear.
+- *History* (`history`, newest first): date (local time, "12 Nov, 14:05"), score (*Waiting for a grade* when `score_percent` is `null`), questions and materials (the lecture titles, also of deleted ones; last, so a phone shows the score without scrolling). A row (and its date, a link for the keyboard) opens the exam's results (`/workspace/exam?exam=<id>`). The table scrolls sideways inside its own box on a narrow screen (the box can be focused and scrolled with the keyboard). The first 10 exams show, *Show all N exams* the rest.
+- While loading it says so; an error shows the message with *Try again*; a student without a submitted exam sees *No exam submitted yet* with a short invitation and a *Take an exam* link (no upload button: the page already has two).
 
 **Course completion** (`CourseCompletion.jsx`, from `GET /api/stats/completion`):
 
@@ -229,12 +238,13 @@ Signed-in user endpoints (all require the bearer token):
 | `PATCH` | `/api/users/me` | Update `full_name` and/or `email` |
 | `PUT` | `/api/users/me/password` | Change password using `current_password` and `new_password` |
 
-Statistics and lecture endpoints used for the course completion (bearer token):
+Statistics and lecture endpoints used for the Statistics page and the course completion (bearer token):
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/stats/overview` | The overall numbers for the cards at the top of the Statistics page (zeros and `null`s for a new student) |
 | `GET` | `/api/stats/completion` | Completion per lecture (least complete first), `overall_percent` and `weights` for the Statistics page |
+| `GET` | `/api/stats/exams?from=YYYY-MM-DD&to=YYYY-MM-DD` | Exam performance and history (both dates optional, inclusive UTC days): `exams_submitted`, `exams_scored`, `average_percent`, `best_percent`, `history`, `by_week`, `by_lecture`, `by_type`, `weakest_concepts` |
 | `POST` | `/api/student_profile/lectures/{id}/progress` | Saves pages read; answers `{ viewed_pages, viewed, total, percent, completion_percent }`, the lecture's completion after the save |
 | `GET` | `/api/student_profile/lectures/{id}` | One lecture: read again for its `completion_percent` only when the save's answer has none (an older backend) |
 
@@ -333,7 +343,7 @@ The notebook is saved automatically one second after each change (code or Markdo
 
 ## 10. Demo behavior and current boundaries
 
-- The Statistics page shows only numbers from the backend (`GET /api/stats/overview`, `GET /api/stats/completion`). There is no sample data and there are no sample course materials.
+- The Statistics page shows only numbers from the backend (`GET /api/stats/overview`, `GET /api/stats/exams`, `GET /api/stats/completion`). There is no sample data and there are no sample course materials.
 - Lecture materials are stored by the backend. Processing status, extracted content, sourced answers and the reading progress need the AI-enabled backend (see section 5). The pages read are stored by the backend; which pages were already sent is remembered only for the open browser tab, so another tab or a reload may send a page again (harmless).
 - Notebooks are saved in browser local storage only (see section 9), not on the backend.
 - Exam answers are kept in browser local storage until the exam is submitted; after that the answers and results come from the backend. A submitted exam stays in the history and can't be deleted.

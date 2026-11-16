@@ -39,6 +39,8 @@ export default {
   "{count} questions from {materials} materials": "{count} Fragen aus {materials} Materialien",
   "The materials and settings of that exam are chosen. Change them if you like.":
     "Die Materialien und Einstellungen dieser Prüfung sind ausgewählt. Du kannst sie gern ändern.",
+  "The materials “{concept}” came from are chosen. Change them if you like.":
+    "Die Materialien, aus denen „{concept}“ stammt, sind ausgewählt. Du kannst sie gern ändern.",
   "Questions are generated from this chat’s materials. Your answers are kept on this device.":
     "Die Fragen werden aus den Materialien dieses Chats erstellt. Deine Antworten werden auf diesem Gerät gespeichert.",
   "This chat has no materials, so pick from your library. Your answers are kept on this device.":
