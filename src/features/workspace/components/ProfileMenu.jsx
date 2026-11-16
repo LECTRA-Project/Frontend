@@ -60,8 +60,6 @@ export default function ProfileMenu({ onClose }) {
         <MenuRow icon="user" label={t("My profile")} onClick={() => goTo("/profile")} />
         <MenuRow icon="sliders" label={t("Account settings")} onClick={() => goTo("/settings")} />
         <MenuRow icon="chart" label={t("Statistics")} onClick={() => goTo("/statistics")} />
-        {/* No help page exists yet, so this row is shown but marked as coming later. */}
-        <MenuRow icon="help" label={t("Help & Support")} hint={t("Later")} disabled />
       </div>
 
       <div className="profile-menu__group">

@@ -65,8 +65,8 @@ describe("choosing the chat model", () => {
     await user.click(within(dialog).getByRole("link", { name: "Add a Google Gemini API key in Account settings" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/settings"));
     expect(router.state.location.hash).toBe("#api-key-gemini");
-    // That provider's row, with its Add key button focused.
-    await waitFor(() => expect(screen.getByRole("button", { name: "Add a Google Gemini API key" })).toHaveFocus());
+    // That provider's key form, with its key field focused.
+    await waitFor(() => expect(screen.getByLabelText("Google Gemini API key")).toHaveFocus());
 
     // Back to the same chat, with the model dialog open again.
     await user.click(screen.getByRole("link", { name: "Back to the chat to choose a model" }));
@@ -172,18 +172,21 @@ describe("the chat in German", () => {
   });
 });
 
-describe("preferred model from Account settings", () => {
-  it("is listed first for its provider and marked as preferred", async () => {
-    const HAIKU = { id: "anthropic:claude-haiku-5-5", provider: "anthropic", model: "claude-haiku-5-5", name: "Claude Haiku 5.5" };
-    setup({ default: "lectra", models: [LECTRA, OPUS, HAIKU], unavailable: [] });
-    localStorage.setItem(`lectra:preferred-models:v1:${TEST_USER.id}`, JSON.stringify({ anthropic: HAIKU.id }));
+describe("model chosen in Account settings (Add model)", () => {
+  it("is shown in the composer and sent with the next question", async () => {
+    setup({ default: "lectra", models: [LECTRA, OPUS, MINI], unavailable: [] });
+    api.onGet("/users/me/api-keys").reply(200, ok({ api_keys: [
+      { provider: "anthropic", name: "Claude", key_last4: "x9Qa", created_at: "2026-11-01T10:00:00Z", updated_at: "2026-11-01T10:00:00Z" },
+    ] }));
     const user = userEvent.setup();
-    renderApp("/workspace?chat=s-1");
-    await user.click(await modelButton());
-    const dialog = screen.getByRole("dialog", { name: "Choose a model" });
-    const group = await within(dialog).findByRole("group", { name: "Anthropic Claude" });
-    const radios = within(group).getAllByRole("radio");
-    expect(radios[0]).toHaveAccessibleName(/Claude Haiku 5\.5.*Your preferred Anthropic Claude model/);
-    expect(radios[1]).toHaveAccessibleName("Claude Opus 5.5");
+    const { router } = renderApp("/settings");
+    const select = await screen.findByRole("combobox", { name: "Add model" });
+    await waitFor(() => expect(within(select).getByRole("option", { name: OPUS.name })).toBeInTheDocument());
+    await user.selectOptions(select, OPUS.id);
+
+    await router.navigate("/workspace?chat=s-1");
+    expect(await screen.findByRole("button", { name: "Model: Claude Opus 5.5. Choose a model" })).toBeInTheDocument();
+    await ask(user, "What is a split?");
+    await waitFor(() => expect(backend.sent).toEqual([{ id: "s-1", content: "What is a split?", model: OPUS.id }]));
   });
 });
