@@ -51,6 +51,8 @@ afterEach(() => {
 
 const menu = () => screen.getByRole("navigation", { name: "Chats and this chat's materials" });
 const recent = () => within(menu()).getByRole("list", { name: "Recent projects" });
+// The project names in the menu (each row also has its fold arrow and + New chat).
+const projectNames = () => [...recent().querySelectorAll(".cf-project")].map((button) => button.textContent);
 
 async function openWorkspace(path = "/workspace") {
   const user = userEvent.setup();
@@ -64,10 +66,7 @@ async function openWorkspace(path = "/workspace") {
 describe("projects in the menu", () => {
   it("lists the 3 most recently active projects and opens all of them", async () => {
     const user = await openWorkspace();
-    const names = within(recent())
-      .getAllByRole("button")
-      .map((button) => button.textContent);
-    expect(names).toEqual(["Machine Learning", "Linear Algebra", "Old course"]);
+    expect(projectNames()).toEqual(["Machine Learning", "Linear Algebra", "Old course"]);
 
     await user.click(within(menu()).getByRole("button", { name: "View all projects" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Projects" })).toBeInTheDocument();
@@ -86,13 +85,15 @@ describe("projects in the menu", () => {
       sessions: [],
     });
     await openWorkspace();
-    expect(within(recent()).getAllByRole("button")).toHaveLength(3);
+    expect(projectNames()).toHaveLength(3);
     expect(within(menu()).queryByRole("button", { name: "View all projects" })).not.toBeInTheDocument();
   });
 
   it("creates a project with a name and opens its page", async () => {
     const user = await openWorkspace();
-    await user.click(within(menu()).getByRole("button", { name: "New project" }));
+    // "New project" is both under New chat (first) and the + of the Projects section.
+    expect(within(menu()).getAllByRole("button", { name: "New project" })).toHaveLength(2);
+    await user.click(within(menu()).getAllByRole("button", { name: "New project" })[0]);
     const dialog = screen.getByRole("dialog", { name: "New project" });
     await user.type(within(dialog).getByLabelText("Project name"), "  Statistics  ");
     await user.click(within(dialog).getByRole("button", { name: "Create project" }));
@@ -100,7 +101,56 @@ describe("projects in the menu", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Statistics" })).toBeInTheDocument();
     expect(backend.projects.at(-1).name).toBe("Statistics");
     expect(screen.getByText("No chats yet. Ask a question above to start one.")).toBeInTheDocument();
-    await waitFor(() => expect(within(recent()).getAllByRole("button")[0]).toHaveTextContent("Statistics"));
+    await waitFor(() => expect(projectNames()[0]).toBe("Statistics"));
+    // Its page is open, so it is unfolded in the menu, ready for its first chat.
+    const chats = within(menu()).getByRole("list", { name: "Chats in Statistics" });
+    expect(within(chats).getByText("No chats yet")).toBeInTheDocument();
+    expect(within(chats).getByRole("button", { name: "New chat in Statistics" })).toHaveTextContent("New chat");
+  });
+
+  it("unfolds a project to show its chats, which open from there", async () => {
+    const user = await openWorkspace();
+    expect(within(menu()).queryByRole("list", { name: "Chats in Machine Learning" })).not.toBeInTheDocument();
+    const toggle = within(menu()).getByRole("button", { name: "Show the chats in Machine Learning" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+
+    expect(within(menu()).getByRole("button", { name: "Hide the chats in Machine Learning" })).toHaveAttribute("aria-expanded", "true");
+    const chats = within(menu()).getByRole("list", { name: "Chats in Machine Learning" });
+    expect([...chats.querySelectorAll("button.cf-project-chat:not(.cf-project-chat--new)")].map((item) => item.textContent)).toEqual([
+      "Decision trees",
+      "Support vectors",
+    ]);
+    await user.click(within(chats).getByRole("button", { name: "Support vectors" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Support vectors" })).toBeInTheDocument();
+    expect(within(chats).getByRole("button", { name: "Support vectors" })).toHaveAttribute("aria-current", "page");
+
+    await user.click(within(menu()).getByRole("button", { name: "Hide the chats in Machine Learning" }));
+    expect(within(menu()).queryByRole("list", { name: "Chats in Machine Learning" })).not.toBeInTheDocument();
+  });
+
+  it("starts more chats in a project from the menu, each opened at once in the project", async () => {
+    const user = await openWorkspace();
+    const before = backend.sessions.filter((item) => item.projectId === "p-ml").length;
+
+    // The + beside the project.
+    await user.click(within(menu()).getByRole("button", { name: "New chat in Machine Learning" }));
+    await waitFor(() => expect(backend.sessions.filter((item) => item.projectId === "p-ml")).toHaveLength(before + 1));
+    expect(await within(menu()).findByRole("heading", { name: "Materials in Machine Learning" })).toBeInTheDocument();
+    const chats = within(menu()).getByRole("list", { name: "Chats in Machine Learning" });
+
+    // And New chat inside the unfolded project: another one.
+    await user.click(within(chats).getByRole("button", { name: "New chat in Machine Learning" }));
+    await waitFor(() => expect(backend.sessions.filter((item) => item.projectId === "p-ml")).toHaveLength(before + 2));
+    expect(screen.getByRole("button", { name: "Open the project Machine Learning" })).toBeInTheDocument();
+  });
+
+  it("offers New chat in the project from a project chat's ⋯ menu", async () => {
+    const user = await openWorkspace();
+    const before = backend.sessions.filter((item) => item.projectId === "p-ml").length;
+    await user.click(within(menu()).getByRole("button", { name: "Actions for Decision trees" }));
+    await user.click(screen.getByRole("menuitem", { name: "New chat in Machine Learning" }));
+    await waitFor(() => expect(backend.sessions.filter((item) => item.projectId === "p-ml")).toHaveLength(before + 1));
   });
 
   it("shows a project chat with its project's tag; the row opens the chat", async () => {

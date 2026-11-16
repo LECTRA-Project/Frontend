@@ -116,4 +116,12 @@ export default {
   "Unable to add the material to this project.": "Das Material konnte nicht zu diesem Projekt hinzugefügt werden.",
   "Unable to remove the material from this project.": "Das Material konnte nicht aus diesem Projekt entfernt werden.",
   "Unable to load the project's chats.": "Die Chats des Projekts konnten nicht geladen werden.",
+
+  // Projects as folders in the menu
+  "New chat in {name}": "Neuer Chat in {name}",
+  "Chats in {name}": "Chats in {name}",
+  "Show the chats in {name}": "Chats in {name} anzeigen",
+  "Hide the chats in {name}": "Chats in {name} ausblenden",
+  "All {count} chats in the project": "Alle {count} Chats im Projekt",
+  "The chat could not be created in {name}.": "Der Chat konnte in {name} nicht erstellt werden.",
 };

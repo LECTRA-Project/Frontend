@@ -640,6 +640,24 @@ export default function WorkspaceLayout() {
     navigate(`/workspace/projects/${id}`);
   }
 
+  /*
+    "New chat" inside a project in the menu: an empty chat in the project (it answers from
+    the project's materials), opened at once. A project can have any number of chats.
+  */
+  async function newChatInProject(project) {
+    setTooLong(null);
+    closeOverlayMenu();
+    try {
+      const created = await chat.createInProject(project.id);
+      // The "?chat= changed" effect opens it (it is already in the chats list).
+      navigate(`/workspace?chat=${encodeURIComponent(created.id)}`);
+      projects.reload();
+      setProjectsVersion((value) => value + 1);
+    } catch (err) {
+      setNotice(err.message || t("The chat could not be created in {name}.", { name: project.name }));
+    }
+  }
+
   // A project's name or materials changed: its chats, the menu and the project pages follow.
   function projectChanged(project) {
     if (!project) return;
@@ -1098,6 +1116,8 @@ export default function WorkspaceLayout() {
             closeOverlayMenu();
             setNewProjectOpen(true);
           }}
+          onNewProjectChat={chatAvailable === true ? newChatInProject : null}
+          projectsAvailable={chatAvailable === true && !projects.error}
           onViewAllProjects={() => {
             closeOverlayMenu();
             navigate("/workspace/projects");

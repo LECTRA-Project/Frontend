@@ -258,6 +258,131 @@ button.project-tag--button:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A project as a folder: arrow | name (opens the project) | + (new chat in it, on hover). */
+.cf-project-row {
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+}
+.cf-project-row .cf-project {
+  flex: 1;
+  min-width: 0;
+  padding-left: 4px;
+}
+.cf-project-row:hover .cf-project:not(.cf-project--current) {
+  background: transparent;
+}
+.cf-project-row:hover:not(.cf-project-row--current) {
+  background: var(--accent-soft);
+}
+.cf-project-row--current {
+  background: var(--accent-hover);
+}
+.cf-project__toggle {
+  flex: none;
+  width: 24px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  margin-left: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+}
+.cf-project__toggle:hover {
+  color: var(--text-primary);
+}
+.cf-project__new.icon-btn {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin-right: 4px;
+  color: var(--accent);
+  opacity: 0;
+}
+.cf-project-row:hover .cf-project__new,
+.cf-project-row:focus-within .cf-project__new {
+  opacity: 1;
+}
+@media (hover: none) {
+  .cf-project__new.icon-btn {
+    opacity: 1;
+  }
+}
+.cf-project__chats {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 4px 26px;
+  padding: 0 0 0 8px;
+  border-left: 1px solid var(--border-default);
+  list-style: none;
+}
+.cf-project-chat {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+button.cf-project-chat:hover {
+  background: var(--accent-soft);
+}
+.cf-project-chat > svg {
+  flex: none;
+  color: var(--text-tertiary);
+}
+.cf-project-chat--current {
+  background: var(--accent-hover);
+  font-weight: 600;
+}
+.cf-project-chat--note {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+.cf-project-chat--new {
+  color: var(--accent-strong);
+}
+.cf-project-chat--new > svg {
+  color: var(--accent);
+}
+.cf-project-chat__all {
+  margin: 2px 8px;
+  font-size: var(--text-sm);
+}
+/* "New project" under New chat at the top of the menu. */
+.cf-side__new-project {
+  padding: 0 var(--space-3) var(--space-2);
+}
+.cf-new-project {
+  width: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.cf-new-project:hover {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+.cf-new-project > svg {
+  color: var(--accent);
+}
 .cf-projects__all {
   align-self: flex-start;
   margin: 4px 10px 0;
