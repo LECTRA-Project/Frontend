@@ -27,6 +27,7 @@
     "katex": "^0.18.11",
     "marked": "^18.1.2",
     "marked-katex-extension": "^5.1.13",
+    "mermaid": "^11.17.2",
     "pdfjs-dist": "4.10.38",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

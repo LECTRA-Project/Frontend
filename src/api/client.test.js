@@ -1,7 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { apiClient, ApiError, AUTH_EXPIRED_EVENT, getAuthToken, getTokenExpiry, isTokenExpired, resolveApiBaseUrl, setAuthToken } from "./client.js";
-import { makeToken, mockApi } from "../test/helpers.jsx";
+import {
+  apiClient,
+  ApiError,
+  AUTH_EXPIRED_EVENT,
+  getAuthToken,
+  getRefreshToken,
+  getTokenExpiry,
+  isTokenExpired,
+  resolveApiBaseUrl,
+  setAuthToken,
+  setRefreshToken,
+} from "./client.js";
+import { makeToken, mockApi, ok } from "../test/helpers.jsx";
 
 describe("apiClient", () => {
   let api;
@@ -66,7 +77,7 @@ describe("apiClient", () => {
     expect(error.message).toBe("The request timed out.");
   });
 
-  it("on 401 with a token: clears it and fires the expired event", async () => {
+  it("on 401 with a token and no refresh token: clears it and fires the expired event", async () => {
     setAuthToken("stale");
     const onExpired = vi.fn();
     window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
@@ -89,6 +100,93 @@ describe("apiClient", () => {
 
     expect(error.message).toBe("Invalid email or password");
     expect(onExpired).not.toHaveBeenCalled();
+  });
+});
+
+describe("session refresh on 401", () => {
+  let api;
+  let onExpired;
+  beforeEach(() => {
+    api = mockApi();
+    onExpired = vi.fn();
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    setAuthToken("old-access");
+    setRefreshToken("refresh-1");
+  });
+  afterEach(() => {
+    window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    api.restore();
+  });
+
+  const acceptOnly = (token) => (config) =>
+    config.headers.Authorization === `Bearer ${token}` ? [200, { ok: true }] : [401, { detail: "expired" }];
+
+  it("renews the token and replays the request, without signing out", async () => {
+    api.onPost("/auth/refresh").reply((config) =>
+      JSON.parse(config.data).refresh_token === "refresh-1"
+        ? [200, ok({ token: "new-access", refresh_token: "refresh-2" })]
+        : [401, { detail: "bad refresh" }]
+    );
+    api.onGet("/materials").reply(acceptOnly("new-access"));
+
+    const response = await apiClient.get("/materials");
+
+    expect(response.data).toEqual({ ok: true });
+    expect(getAuthToken()).toBe("new-access");
+    expect(getRefreshToken()).toBe("refresh-2");
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it("sends the refresh request without the expired bearer token", async () => {
+    api.onPost("/auth/refresh").reply((config) => [
+      config.headers.Authorization ? 400 : 200,
+      ok({ token: "new-access", refresh_token: "refresh-2" }),
+    ]);
+    api.onGet("/materials").reply(acceptOnly("new-access"));
+
+    await expect(apiClient.get("/materials")).resolves.toBeTruthy();
+  });
+
+  it("refreshes once for several requests that fail together", async () => {
+    api.onPost("/auth/refresh").reply(200, ok({ token: "new-access", refresh_token: "refresh-2" }));
+    api.onGet(/\/item\/\d/).reply(acceptOnly("new-access"));
+
+    await Promise.all([1, 2, 3].map((n) => apiClient.get(`/item/${n}`)));
+
+    expect(api.history.post.filter((r) => r.url === "/auth/refresh")).toHaveLength(1);
+  });
+
+  it("signs out when the refresh token is rejected too", async () => {
+    api.onPost("/auth/refresh").reply(401, { detail: "Your session has expired" });
+    api.onGet("/materials").reply(401, { detail: "expired" });
+
+    const error = await apiClient.get("/materials").catch((e) => e);
+
+    expect(error.status).toBe(401);
+    expect(getAuthToken()).toBeNull();
+    expect(getRefreshToken()).toBeNull();
+    expect(onExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays signed in when the refresh fails because the server can't be reached", async () => {
+    api.onPost("/auth/refresh").networkError();
+    api.onGet("/materials").reply(401, { detail: "expired" });
+
+    const error = await apiClient.get("/materials").catch((e) => e);
+
+    expect(error.status).toBeNull();
+    expect(getRefreshToken()).toBe("refresh-1");
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it("does not loop when the renewed token is rejected as well", async () => {
+    api.onPost("/auth/refresh").reply(200, ok({ token: "new-access", refresh_token: "refresh-2" }));
+    api.onGet("/materials").reply(401, { detail: "expired" });
+
+    await apiClient.get("/materials").catch(() => {});
+
+    expect(api.history.get).toHaveLength(2);
+    expect(onExpired).toHaveBeenCalledTimes(1);
   });
 });
 

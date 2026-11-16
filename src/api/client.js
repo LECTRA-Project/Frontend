@@ -23,9 +23,12 @@ export function resolveApiBaseUrl({ VITE_API_BASE_URL: base, VITE_API_PROXY_TARG
 export const API_BASE_URL = env.MODE === "test" ? "/api" : resolveApiBaseUrl(env);
 
 export const AUTH_TOKEN_KEY = "lectra.authToken";
+export const REFRESH_TOKEN_KEY = "lectra.refreshToken";
 
-// Fired on `window` when the backend rejects our token; AuthProvider signs the user out.
+// Fired on `window` when the session can't be renewed any more; AuthProvider signs the user out.
 export const AUTH_EXPIRED_EVENT = "lectra:auth-expired";
+// Fired on `window` after a new access token was saved; AuthProvider re-arms its refresh timer.
+export const AUTH_REFRESHED_EVENT = "lectra:auth-refreshed";
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -57,6 +60,28 @@ export function setAuthToken(token) {
   else store.removeItem(AUTH_TOKEN_KEY);
 }
 
+export function getRefreshToken() {
+  return storage()?.getItem(REFRESH_TOKEN_KEY) ?? null;
+}
+
+export function setRefreshToken(token) {
+  const store = storage();
+  if (!store) return;
+  if (token) store.setItem(REFRESH_TOKEN_KEY, token);
+  else store.removeItem(REFRESH_TOKEN_KEY);
+}
+
+/* Saves both tokens from a { token, refresh_token } response; clearSession() drops both. */
+export function saveSession({ token, refresh_token: refreshToken } = {}) {
+  setAuthToken(token);
+  if (refreshToken) setRefreshToken(refreshToken);
+}
+
+export function clearSession() {
+  setAuthToken(null);
+  setRefreshToken(null);
+}
+
 /* Expiry time of a JWT in milliseconds (from its `exp` claim), or null if unreadable. */
 export function getTokenExpiry(token) {
   try {
@@ -77,9 +102,55 @@ export function isTokenExpired(token, now = Date.now()) {
 
 apiClient.interceptors.request.use((config) => {
   const token = getAuthToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token && !config.skipAuth) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+/* ---- Session refresh ---- */
+
+/*
+  Swaps the saved refresh token for a new token pair (POST /auth/refresh).
+  Concurrent callers share one request, so a burst of 401s triggers a single refresh.
+
+  Resolves with the new access token. Rejects with the ApiError; a 401 there means the
+  session is really over (refresh token expired or revoked), anything else (network,
+  timeout, 5xx) is temporary and the session is kept.
+*/
+let refreshing = null;
+
+export function refreshSession() {
+  if (refreshing) return refreshing;
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    expireSession();
+    return Promise.reject(
+      new ApiError({
+        message: t("Your session has expired. Please sign in again."),
+        status: 401,
+      }),
+    );
+  }
+  refreshing = apiClient
+    .post("/auth/refresh", { refresh_token: refreshToken }, { skipAuth: true, skipAuthRefresh: true })
+    .then((response) => {
+      saveSession(response.data.data);
+      if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_REFRESHED_EVENT));
+      return response.data.data.token;
+    })
+    .catch((error) => {
+      if (error?.status === 401) expireSession();
+      throw error;
+    })
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
+function expireSession() {
+  clearSession();
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+}
 
 /* ---- Response interceptor: normalise every failure into an ApiError ---- */
 
@@ -117,29 +188,54 @@ function readServerError(data) {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (axios.isCancel(error)) return Promise.reject(error);
 
     const status = error.response?.status ?? null;
-    const data = error.response?.data ?? null;
+    const config = error.config;
 
-    // Our token was rejected (expired / invalid): drop it and tell the app to sign out.
+    // Our access token was rejected (usually: it expired). Renew the session with the
+    // refresh token and replay the request once, so the user just carries on.
     // A 401 from a request without a token (e.g. wrong password on login) is just an error.
-    if (status === 401 && error.config?.headers?.Authorization) {
-      setAuthToken(null);
-      if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    const sentAuth = config?.headers?.Authorization;
+    if (status === 401 && sentAuth && !config.skipAuthRefresh && !config.authRetried) {
+      const current = getAuthToken();
+      try {
+        // Another request may already have renewed the token while this one was in flight.
+        if (!current || sentAuth === `Bearer ${current}`) await refreshSession();
+      } catch (refreshError) {
+        // Refresh failed: a 401 has already ended the session (see refreshSession);
+        // for a temporary failure, report the original request's error and stay signed in.
+        if (refreshError?.status !== 401) return Promise.reject(refreshError);
+        return Promise.reject(toApiError(error));
+      }
+      return apiClient({ ...config, authRetried: true });
     }
 
-    const server = readServerError(data);
-    const message =
-      server.message ||
-      (error.code === "ECONNABORTED" && t("The request timed out.")) ||
-      (!error.response && t("Can't reach the server. Check your connection.")) ||
-      error.message ||
-      t("Something went wrong.");
+    // Retried and still rejected: the account is gone or the token is unusable.
+    if (status === 401 && sentAuth && config.authRetried) expireSession();
 
-    return Promise.reject(
-      new ApiError({ message, status, data, code: error.code ?? null, fieldErrors: server.fieldErrors })
-    );
-  }
+    return Promise.reject(toApiError(error));
+  },
 );
+
+function toApiError(error) {
+  const status = error.response?.status ?? null;
+  const data = error.response?.data ?? null;
+
+  const server = readServerError(data);
+  const message =
+    server.message ||
+    (error.code === "ECONNABORTED" && t("The request timed out.")) ||
+    (!error.response && t("Can't reach the server. Check your connection.")) ||
+    error.message ||
+    t("Something went wrong.");
+
+  return new ApiError({
+    message,
+    status,
+    data,
+    code: error.code ?? null,
+    fieldErrors: server.fieldErrors,
+  });
+}

@@ -8,6 +8,7 @@ import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
 import Modal from "../../../components/ui/Modal.jsx";
 import ChatComposer from "../components/ChatComposer.jsx";
 import { renderAnswerMarkdown, renderMarkdown } from "../../../services/notebook/markdown.js";
+import { hasDiagrams, renderDiagrams } from "../../../services/notebook/diagrams.js";
 import { LABELS as EXAM_LABELS, parseExamQuestionMessage } from "../../exam/askAboutAnswer.js";
 import {
   CELL_DROP_ZONE_ATTR,
@@ -394,12 +395,7 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
             {t("Not from your materials")}
           </span>
         )}
-        {/* The click handler only serves the code blocks' Copy buttons (native buttons, so keyboard works). */}
-        <div
-          className="chat-msg__md markdown-body"
-          onClick={handleAnswerClick}
-          dangerouslySetInnerHTML={{ __html: withCodeCopyButtons(renderAnswerMarkdown(message.content)) }}
-        />
+        <AnswerBody html={withCodeCopyButtons(renderAnswerMarkdown(message.content))} onClick={handleAnswerClick} />
         {chips.length > 0 && (
           <ul className="chat-sources" aria-label={t("Sources")}>
             {chips.map((chip) => (
@@ -481,6 +477,18 @@ function choiceItems(quote) {
 }
 
 const COPIED_MS = 2000;
+
+/* The answer's HTML; ```mermaid blocks in it are turned into diagrams after it is shown. */
+function AnswerBody({ html, onClick }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (hasDiagrams(ref.current)) renderDiagrams(ref.current);
+  }, [html]);
+  return (
+    // The click handler only serves the code blocks' Copy buttons (native buttons, so keyboard works).
+    <div ref={ref} className="chat-msg__md markdown-body" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
+  );
+}
 
 /* Wraps each code block so it gets a Copy button in its top-right corner. */
 function withCodeCopyButtons(html) {

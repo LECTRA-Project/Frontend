@@ -30,6 +30,7 @@ export default {
   "The request timed out.": "Die Anfrage hat zu lange gedauert.",
   "Can't reach the server. Check your connection.": "Der Server ist nicht erreichbar. Prüfe deine Verbindung.",
   "Something went wrong.": "Etwas ist schiefgelaufen.",
+  "Your session has expired. Please sign in again.": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.",
   "Unable to load your lectures.": "Deine Vorlesungen konnten nicht geladen werden.",
   "Unable to upload the lecture.": "Die Vorlesung konnte nicht hochgeladen werden.",
   "Unable to rename the lecture.": "Die Vorlesung konnte nicht umbenannt werden.",
