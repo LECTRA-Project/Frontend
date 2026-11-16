@@ -47,6 +47,7 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
     sessions: sessions.map((item) => ({ lectureIds: [], created_at: item.updated_at, ...item })),
     messages: { ...messages },
     sent: [],
+    viewed: {}, // lecture id → Set of pages read
     requests: [], // { key: "sessions" | "messages", page, size } for each list request
     // A promise the list of chats waits for (to act before the chats are loaded).
     sessionsGate: null,
@@ -87,6 +88,24 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
       text: `${UNIT[type]} ${index + 1} of ${found.title}`,
     }));
     return [200, ok({ sections, page: 1, page_size: 1000, total: sections.length, total_pages: 1 })];
+  });
+  // Reading progress: a lecture's pages are 1..source_count (an image: page 1).
+  const progress = (found) => {
+    const total = found.source_type ? found.source_count : 1;
+    const viewed = [...(state.viewed[found.id] ?? [])].filter((page) => page <= total).sort((a, b) => a - b);
+    return { viewed_pages: viewed, viewed: viewed.length, total, percent: total ? Math.round((100 * viewed.length) / total) : 0 };
+  };
+  api.onGet(/\/student_profile\/lectures\/[^/]+\/progress$/).reply((config) => {
+    const found = lecture(config.url.split("/")[3]);
+    return found ? [200, ok(progress(found))] : [404, { detail: "Lecture not found" }];
+  });
+  api.onPost(/\/student_profile\/lectures\/[^/]+\/progress$/).reply((config) => {
+    const found = lecture(config.url.split("/")[3]);
+    if (!found) return [404, { detail: "Lecture not found" }];
+    const { pages } = JSON.parse(config.data);
+    if (!Array.isArray(pages) || pages.length < 1 || pages.length > 200) return [422, { detail: "Invalid pages" }];
+    state.viewed[found.id] = new Set([...(state.viewed[found.id] ?? []), ...pages]);
+    return [200, ok(progress(found), "Reading progress saved")];
   });
   api.onGet(/\/student_profile\/lectures\/[^/]+$/).reply((config) => {
     const found = lecture(config.url.split("/").at(-1));

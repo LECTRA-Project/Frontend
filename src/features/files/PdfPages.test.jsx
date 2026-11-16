@@ -40,6 +40,7 @@ vi.mock("./pdfDocument.js", () => {
 });
 
 const { default: PdfViewerPanel } = await import("./PdfViewerPanel.jsx");
+const { installFakeIntersectionObserver } = await import("../../test/intersectionObserver.js");
 
 const material = { name: "Decision Trees", url: "blob:test/1", meta: "PDF · 4 pages", pages: 4 };
 
@@ -106,5 +107,28 @@ describe("PDF viewer drawn with pdf.js", () => {
     render(<PdfViewerPanel material={material} onCollapse={() => {}} />);
     await waitFor(() => expect(document.querySelector("iframe.pdf__frame")).not.toBeNull());
     expect(document.querySelector("iframe.pdf__frame").getAttribute("src")).toContain("blob:test/1#page=1");
+  });
+});
+
+describe("PDF reading progress with pdf.js", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reports every page at least half on screen while scrolling", async () => {
+    const io = installFakeIntersectionObserver();
+    const onVisiblePages = vi.fn();
+    const { unmount } = render(<PdfViewerPanel material={material} onCollapse={() => {}} reading={{ progress: null, onVisiblePages }} />);
+    await screen.findByLabelText("PDF pages");
+    await waitFor(() => expect(io.observers.size).toBeGreaterThan(0));
+
+    io.show({ 1: 1, 2: 0.3 });
+    expect(onVisiblePages).toHaveBeenLastCalledWith([1]);
+    io.show({ 1: 0.45, 2: 0.9 });
+    expect(onVisiblePages).toHaveBeenLastCalledWith([2]);
+    io.show({ 2: 0.55, 3: 0.5 }); // zoomed out: two pages on screen
+    expect(onVisiblePages).toHaveBeenLastCalledWith([2, 3]);
+    expect(onVisiblePages).not.toHaveBeenCalledWith([4]);
+
+    unmount();
+    expect(onVisiblePages).toHaveBeenLastCalledWith([]);
   });
 });

@@ -16,6 +16,7 @@ import EditLectureDialog from "../lectures/EditLectureDialog.jsx";
 import DeleteLectureDialog from "../lectures/DeleteLectureDialog.jsx";
 import { toMaterial } from "../lectures/materialTypes.js";
 import { useLectureLibrary } from "../lectures/useLectureLibrary.js";
+import { useReadingProgress } from "../lectures/useReadingProgress.js";
 import { useAuth } from "../auth/authContext.js";
 import { useNotebook } from "../notebook/useNotebook.js";
 import { usePythonKernel } from "../notebook/usePythonKernel.js";
@@ -114,8 +115,13 @@ function useElementWidth(ref) {
     slides, notebooks, images, cited notes sections   the extracted content (LectureContentPanel)
   A notebook can also be opened in the runnable notebook from the viewer.
 
+  Reading progress: the viewers report the pages on screen to the reading tracker
+  (useReadingProgress / readingTracker.js), which sends the pages read to the backend for
+  the course completion; the viewer header shows "Read 12 of 65".
+
   Basic mode: a backend without AI processing (detected by useLectureLibrary) has no
-  file/content endpoints. Files are then opened from the lecture's public S3 URL.
+  file/content endpoints. Files are then opened from the lecture's public S3 URL, and no
+  reading progress is sent or shown.
 
   This component owns the state shared between the panels: the chats, the viewer, the
   panel widths, the upload dialog, the notebook with its kernel, and the notebook cells
@@ -129,6 +135,8 @@ export default function WorkspaceLayout() {
   const userKey = user?.id ?? user?.email ?? "signed-in-user";
   const library = useLectureLibrary();
   const basic = library.features?.ai === false;
+  // Pages read, for the course completion: only once the backend is known to have the AI routes.
+  const reading = useReadingProgress({ enabled: library.features?.ai === true });
   // null while unknown; the chat-first workspace needs the chat API.
   const chatAvailable = library.features ? library.features.chat === true : null;
   const chat = useLectureChat({ enabled: chatAvailable === true });
@@ -208,6 +216,28 @@ export default function WorkspaceLayout() {
   const viewerOpen = viewerMaterial !== null;
   // A lecture opened from a link or with Back has no cited place.
   const opened = viewer?.lectureId === urlLectureId ? viewer : { focus: null, cited: false, seq: 0 };
+
+  /* ---------- Reading progress ---------- */
+  // A lecture's pages exist on the backend once its file is processed; an image is one page.
+  const readingId = viewerLecture?.id ?? null;
+  const readable = viewerMaterial !== null && (viewerMaterial.type === "image" || viewerLecture.processing_status === "completed");
+  const { load: loadProgress, leave: leaveLecture, setVisible: setVisiblePages } = reading;
+  useEffect(() => {
+    if (!readingId) return undefined;
+    const controller = new AbortController();
+    loadProgress(readingId, { signal: controller.signal });
+    return () => controller.abort();
+  }, [loadProgress, readingId, viewerLecture?.processing_status, viewerLecture?.content_version]);
+  // Closing the viewer or opening another lecture sends what is left of this one.
+  useEffect(() => (readingId ? () => leaveLecture(readingId) : undefined), [leaveLecture, readingId]);
+  const trackPages = useCallback((pages) => setVisiblePages(readingId, pages), [setVisiblePages, readingId]);
+  const progress = readingId ? reading.progressFor(readingId) : null;
+  const viewerReading = reading.enabled
+    ? {
+        progress: progress ? { ...progress, unit: viewerLecture.source_type ?? "page" } : null,
+        onVisiblePages: readable ? trackPages : null,
+      }
+    : null;
 
   /* ---------- Widths ---------- */
   const sidebarMode = phone ? "phone" : sidebarFits(rowWidth, viewerOpen) ? "docked" : "overlay";
@@ -724,6 +754,7 @@ export default function WorkspaceLayout() {
           onCollapse={() => closeViewer()}
           widen={viewerWiden}
           switcher={notebookOpen && !phone ? switcher("notebook") : null}
+          reading={viewerReading}
         />
       );
     } else if (viewerMaterial.type === "notes" && !showsSource && fileState?.file) {
@@ -749,6 +780,7 @@ export default function WorkspaceLayout() {
           widen={viewerWiden}
           switcher={notebookOpen && !phone ? switcher("notebook") : null}
           onOpenInNotebook={viewerMaterial.type === "notebook" ? () => openInNotebook(viewerMaterial) : null}
+          reading={viewerReading}
         />
       );
     }

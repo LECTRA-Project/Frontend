@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n/i18n.js";
 import { CSS_PX_PER_POINT } from "./pdfDocument.js";
 import { pageTileLabel } from "./citedText.js";
+import { useReadingVisibility } from "../lectures/useReadingVisibility.js";
 
 /*
   The PDF drawn with pdf.js, like Chrome's PDF viewer:
@@ -11,7 +12,9 @@ import { pageTileLabel } from "./citedText.js";
                   panel's width ("Fit") or at a fixed zoom; pages are drawn sharp (at the
                   screen's pixel ratio) only while near the visible area, with a text layer
                   so text can be selected and copied. Scrolling reports the current page;
-                  `scrollRequest` ({ page, seq }) scrolls to a page.
+                  `scrollRequest` ({ page, seq }) scrolls to a page. `onVisiblePages`
+                  (optional) gets the pages at least half on screen, for the reading
+                  tracker.
   PdfThumbnails   the sidebar of small page previews; clicking one goes to that page.
 
   `sizes` are the pages' sizes at scale 1 (PDF points): [{ width, height }], page 1 first.
@@ -98,6 +101,7 @@ function PdfPage({ lib, doc, number, size, scale, visible, cited }) {
     <div
       className={`pdf-page ${cited ? "pdf-page--cited" : ""}`}
       data-page={number}
+      data-read-page={number}
       aria-label={t("Page {number}", { number })}
       style={{ width: Math.floor(size.width * scale), height: Math.floor(size.height * scale), "--scale-factor": scale }}
     >
@@ -107,7 +111,7 @@ function PdfPage({ lib, doc, number, size, scale, visible, cited }) {
   );
 }
 
-export function PdfPagesView({ lib, doc, sizes, zoom, scrollRequest, citedPage, onPageChange, onFitPercent }) {
+export function PdfPagesView({ lib, doc, sizes, zoom, scrollRequest, citedPage, onPageChange, onFitPercent, onVisiblePages = null }) {
   const { t } = useI18n();
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -145,6 +149,7 @@ export function PdfPagesView({ lib, doc, sizes, zoom, scrollRequest, citedPage, 
   }, [sizes, scale]);
 
   const visible = useVisiblePages(scrollRef, ".pdf-page", sizes.length, 1200);
+  useReadingVisibility(scrollRef, sizes, onVisiblePages);
 
   function scrollToAnchor() {
     const { page, fraction } = anchor.current;

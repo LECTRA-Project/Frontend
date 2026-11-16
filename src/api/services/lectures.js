@@ -1,4 +1,4 @@
-import { apiClient, ApiError } from "../client.js";
+import { API_BASE_URL, apiClient, ApiError, getAuthToken } from "../client.js";
 import { t } from "../../i18n/i18n.js";
 import { del, get, patch, post } from "../http.js";
 
@@ -13,6 +13,8 @@ import { del, get, patch, post } from "../http.js";
     POST   /student_profile/lectures/{id}/reprocess      reprocessLecture
     GET    /student_profile/lectures/{id}/content        getLectureContent
     GET    /student_profile/lectures/{id}/file           fetchLectureFile (Blob)
+    GET    /student_profile/lectures/{id}/progress       getReadingProgress
+    POST   /student_profile/lectures/{id}/progress       recordReadingProgress / recordReadingProgressKeepalive
 
   The backend stores a lecture's title and file only: there is no course or description.
 */
@@ -107,4 +109,38 @@ export async function fetchLectureFile(id, { signal } = {}) {
     signal,
   });
   return response.data;
+}
+
+/*
+  Reading progress: which pages (slides, cells) of a lecture the student has opened.
+  Both calls answer { viewed_pages, viewed, total, percent }. `pages` holds 1 to 200 page
+  numbers; pages the lecture doesn't have are ignored, and sending a page again is harmless.
+*/
+export async function getReadingProgress(id, { signal } = {}) {
+  return unwrap(await get(`${BASE}/lectures/${id}/progress`, { signal }), t("Unable to load the reading progress."));
+}
+
+export async function recordReadingProgress(id, pages) {
+  return unwrap(await post(`${BASE}/lectures/${id}/progress`, { pages }), t("Unable to save the reading progress."));
+}
+
+/*
+  The same POST for a page that is being hidden or closed: a keepalive fetch outlives the
+  page (axios can't ask for that, and sendBeacon can't send the Authorization header).
+  No session refresh here: a rejected token just fails, and the caller tries again later.
+*/
+export async function recordReadingProgressKeepalive(id, pages) {
+  const token = getAuthToken();
+  const response = await fetch(`${API_BASE_URL}${BASE}/lectures/${id}/progress`, {
+    method: "POST",
+    keepalive: true,
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ pages }),
+  });
+  if (!response.ok) throw new ApiError({ message: t("Unable to save the reading progress."), status: response.status });
+  return unwrap(await response.json(), t("Unable to save the reading progress."));
 }
