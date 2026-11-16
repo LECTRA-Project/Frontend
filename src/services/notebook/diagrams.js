@@ -4,25 +4,24 @@
   securityLevel "strict" sanitises labels and disables click handlers in diagrams.
   A diagram that does not parse stays a code block, so the answer is never lost.
 */
+import { currentTheme } from "../../theme/theme.js";
+
 const SELECTOR = "pre > code.language-mermaid";
 let mermaidPromise = null;
 let diagramCount = 0;
+let mermaidTheme = null;
 
-function prefersDark() {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-}
-
+// Diagrams follow the app's theme (Account settings → Theme) at the time they are drawn.
 function loadMermaid() {
-  mermaidPromise ??= import("mermaid").then(({ default: mermaid }) => {
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      theme: prefersDark() ? "dark" : "default",
-      fontFamily: "inherit",
-    });
+  mermaidPromise ??= import("mermaid").then(({ default: mermaid }) => mermaid);
+  return mermaidPromise.then((mermaid) => {
+    const theme = currentTheme() === "dark" ? "dark" : "default";
+    if (theme !== mermaidTheme) {
+      mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme, fontFamily: "inherit" });
+      mermaidTheme = theme;
+    }
     return mermaid;
   });
-  return mermaidPromise;
 }
 
 export function hasDiagrams(container) {

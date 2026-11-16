@@ -21,9 +21,7 @@ export default {
   "Profile menu": "Profilmenü",
   "My profile": "Mein Profil",
   "Account settings": "Kontoeinstellungen",
-  Later: "Später",
   "Sign out": "Abmelden",
-  "{feature} will be added in a later phase": "{feature} kommt in einer späteren Phase",
 
   // API fallback messages
   "The request timed out.": "Die Anfrage hat zu lange gedauert.",

@@ -78,3 +78,50 @@
   --header-height: 64px;
   --focus-ring: 0 0 0 3px rgba(78, 122, 95, 0.35);
 }
+
+/*
+  Dark theme: <html data-theme="dark"> (set by src/theme/theme.js from Account settings →
+  Theme, or from the operating system when the theme is "System"). Only colours change.
+  The accent is lighter here, so text on it (buttons) is dark.
+*/
+:root[data-theme="dark"] {
+  --bg-canvas: #151715;
+  --bg-surface: #1e201e;
+  --bg-subtle: #191b19;
+  --bg-scrim: rgba(0, 0, 0, 0.55);
+  --bg-sunken: #111311;
+
+  --text-primary: #ecebe6;
+  --text-secondary: #b6b8b1;
+  --text-tertiary: #8d9089;
+  --text-on-accent: #10150f;
+
+  --border-default: #333632;
+  --border-strong: #474b46;
+
+  --accent: #7fb08f;
+  --accent-strong: #9ccaab;
+  --accent-soft: #212d24;
+  --accent-hover: #2a3a2f;
+
+  --placeholder: #333632;
+
+  --danger: #e58a7c;
+  --danger-strong: #f2aa9e;
+  --danger-soft: #3a2421;
+
+  --code-keyword: #8fc4a0;
+  --code-string: #e2a77a;
+  --code-number: #7fc0df;
+  --code-comment: #8d9089;
+  --code-function: #b9adf2;
+  --code-definition: #ecebe6;
+  --code-output-bg: #191b19;
+  --warning: #e3b562;
+  --warning-soft: #3a3120;
+  --warning-strong: #f1d08f;
+
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --focus-ring: 0 0 0 3px rgba(127, 176, 143, 0.45);
+}

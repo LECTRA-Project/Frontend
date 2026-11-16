@@ -1,31 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
 import PageShell from "../../components/PageShell.jsx";
-import Button from "../../components/ui/Button.jsx";
-import Toggle from "../../components/ui/Toggle.jsx";
-import TransientStatus from "../../components/ui/TransientStatus.jsx";
 import { LANGUAGES, useI18n } from "../../i18n/i18n.js";
+import { useTheme } from "../../theme/theme.js";
 import ApiKeysSection from "./ApiKeysSection.jsx";
 import "./profile.css";
 
-/*
-  Account settings — interface language, notifications and the student's own AI provider
-  API keys.
+const THEME_OPTIONS = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
 
+/*
+  Account settings — theme, interface language and the student's own AI provider API keys.
+  Every setting applies (and is saved) as soon as it is changed, so there is no Save button.
+
+  - Theme: System (follows the operating system), Light or Dark. Applies at once and is
+    saved in this browser (see src/theme/), so the sign-in page uses it too.
   - Interface language: applies at once and is saved for this user in this browser
     (see I18nProvider), so it is restored on the next visit.
   - API keys: saved on the server (see ApiKeysSection).
-  - DEMO MODE: notifications only change local state; "Save settings" saves
-    nothing for them.
 */
 export default function AccountSettingsPage() {
   const { t, language, setLanguage } = useI18n();
+  const { theme, setTheme } = useTheme();
   const location = useLocation();
-  const [settings, setSettings] = useState({
-    studyReminders: true,
-  });
-  const [saved, setSaved] = useState(false);
 
   // Opened from the chat's model dialog (/settings#api-keys): go to the API keys.
   useEffect(() => {
@@ -35,14 +36,26 @@ export default function AccountSettingsPage() {
     heading?.focus({ preventScroll: true });
   }, [location.hash]);
 
-  function update(key, value) {
-    setSettings({ ...settings, [key]: value });
-    setSaved(false);
-  }
-
   return (
     <PageShell title={t("Account settings")} subtitle={t("Manage preferences for your account.")}>
       <section className="card settings" aria-label={t("Settings")}>
+        <h2 className="settings__group">{t("Appearance")}</h2>
+        <div className="settings__row">
+          <div>
+            <label className="settings__label" htmlFor="theme">
+              {t("Theme")}
+            </label>
+            <p className="settings__help">{t("Light, dark, or the same as your device.")}</p>
+          </div>
+          <select id="theme" className="settings__select" value={theme} onChange={(event) => setTheme(event.target.value)}>
+            {THEME_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {t(item.label)}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <h2 className="settings__group">{t("Language & region")}</h2>
         <div className="settings__row">
           <div>
@@ -65,41 +78,8 @@ export default function AccountSettingsPage() {
           </select>
         </div>
 
-        <h2 className="settings__group">{t("Notifications")}</h2>
-        <SettingRow
-          label={t("Study reminders")}
-          help={t("Email reminders for planned study sessions.")}
-          checked={settings.studyReminders}
-          onChange={(value) => update("studyReminders", value)}
-        />
-
         <ApiKeysSection />
       </section>
-
-      <div className="page-actions">
-        {saved && (
-          <TransientStatus onDismiss={() => setSaved(false)}>
-            <p className="notice notice--accent" role="status">
-              {t("Demo mode — settings are not saved yet.")}
-            </p>
-          </TransientStatus>
-        )}
-        <Button variant="primary" onClick={() => setSaved(true)}>
-          {t("Save settings")}
-        </Button>
-      </div>
     </PageShell>
-  );
-}
-
-function SettingRow({ label, help, checked, onChange }) {
-  return (
-    <div className="settings__row">
-      <div>
-        <p className="settings__label">{label}</p>
-        <p className="settings__help">{help}</p>
-      </div>
-      <Toggle label={label} checked={checked} onChange={onChange} />
-    </div>
   );
 }

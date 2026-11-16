@@ -93,7 +93,7 @@ function useElementWidth(ref) {
     header on top, then  menu | chat (always centred) | [notebook] | [material viewer]
 
   - The chat is the centre of the page, at most 760 px wide, and cannot be moved or
-    resized. At /workspace it is ChatPage; Exam and Home take its place on their routes.
+    resized. At /workspace it is ChatPage; Exam takes its place on its route.
   - The menu (ChatSidebar) lists the open chat's materials and all chats. Every chat owns
     its materials: switching chats switches them and closes the viewer; a new chat has none.
   - The material viewer is docked at the right edge, beside the chat. It is resized by its
@@ -106,7 +106,7 @@ function useElementWidth(ref) {
       /workspace?chat=<session id>&lecture=<lecture id>   (also /workspace/exam?…&exam=<exam id>)
     so a link can be copied, reloaded or shared, Back goes to the previous chat or closes
     the viewer, and a reload keeps both. An id the student doesn't have shows a notice and
-    is dropped from the URL. Home has neither.
+    is dropped from the URL.
   - Each material in the menu has a ⋯ menu to rename it or delete it from the library
     (EditLectureDialog / DeleteLectureDialog); × only removes it from the chat.
 
@@ -189,12 +189,10 @@ export default function WorkspaceLayout() {
 
   /* ---------- URL: ?chat=<session id>&lecture=<lecture id> ---------- */
   const [searchParams] = useSearchParams();
-  const isHome = location.pathname === "/workspace/home";
-  const urlChatId = isHome ? null : searchParams.get("chat");
-  const urlLectureId = isHome ? null : searchParams.get("lecture");
-  // Home has no chat or viewer: opening one from there goes to the chat.
-  const pagePath = isHome ? "/workspace" : location.pathname;
-  const currentChatId = isHome ? chat.activeId : urlChatId;
+  const urlChatId = searchParams.get("chat");
+  const urlLectureId = searchParams.get("lecture");
+  const pagePath = location.pathname;
+  const currentChatId = urlChatId;
   const urlExamId = searchParams.get("exam");
   const hrefFor = (path, { chatId = currentChatId, lectureId = null } = {}) => {
     const params = new URLSearchParams();
@@ -295,7 +293,7 @@ export default function WorkspaceLayout() {
     // Make room: the full menu does not fit beside the chat and the viewer on small screens.
     if (phone || !sidebarFits(rowWidth, true)) setSidebarOpen(false);
     // Another place in the same lecture doesn't add a history entry.
-    navigate(hrefFor(pagePath, { lectureId }), { replace: !isHome && urlLectureId === lectureId });
+    navigate(hrefFor(pagePath, { lectureId }), { replace: urlLectureId === lectureId });
   }
 
   function closeViewer({ replace = false } = {}) {
@@ -339,7 +337,7 @@ export default function WorkspaceLayout() {
   // or material is written to the URL instead of being taken for a change of the URL.
   const appliedChat = useRef(undefined);
   useEffect(() => {
-    if (isHome || chatAvailable !== true || appliedChat.current === urlChatId) return;
+    if (chatAvailable !== true || appliedChat.current === urlChatId) return;
     if (urlChatId && chat.sessionsLoading) return; // checked once the chats are loaded
     appliedChat.current = urlChatId;
     if (urlChatId === chat.activeId) return;
@@ -361,12 +359,12 @@ export default function WorkspaceLayout() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHome, chatAvailable, urlChatId, chat.sessionsLoading]);
+  }, [chatAvailable, urlChatId, chat.sessionsLoading]);
 
   // The open chat changed without the URL (created by its first question or material, or
   // deleted): put it in the URL.
   useEffect(() => {
-    if (isHome || chatAvailable !== true || appliedChat.current !== urlChatId || chat.activeId === urlChatId) return;
+    if (chatAvailable !== true || appliedChat.current !== urlChatId || chat.activeId === urlChatId) return;
     appliedChat.current = chat.activeId;
     navigate(hrefFor(pagePath, { chatId: chat.activeId, lectureId: urlLectureId }), { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -410,7 +408,7 @@ export default function WorkspaceLayout() {
       // Mark the URL change as ours, so the "open chat changed" effect doesn't write the
       // material back into the URL.
       appliedChat.current = null;
-      if (!isHome) navigate(hrefFor(pagePath, { chatId: null }), { replace: true });
+      navigate(hrefFor(pagePath, { chatId: null }), { replace: true });
     }
     setNotice(t("Chat removed."));
     return true;
@@ -688,15 +686,6 @@ export default function WorkspaceLayout() {
     onGraded: () => library.refresh(),
   };
 
-  const home = {
-    materials: library.lectures.map(toMaterial),
-    uploads: library.uploads,
-    loading: library.loading,
-    onUploadClick: () => setUploadTarget("library"),
-    onDismissUpload: library.dismissUpload,
-    onOpenMaterial: (material) => openViewer(material.id),
-  };
-
   /* ---------- Switching the notebook and the viewer ---------- */
   const canSwitch = !phone && notebookOpen && viewerOpen && layout.canPin;
   function switchPanels() {
@@ -874,7 +863,7 @@ export default function WorkspaceLayout() {
           onNewChat={newChat}
           chatTitle={displayChatTitle(session?.title) ?? t("New chat")}
           materials={chatMaterials}
-          // Only the files being uploaded into this chat (not those from Home or for another chat).
+          // Only the files being uploaded into this chat (not those for another chat).
           uploads={library.uploads.filter((item) => item.chatId !== undefined && item.chatId === (session?.id ?? null))}
           addable={chatAvailable ? addable : []}
           viewerLectureId={viewerOpen ? urlLectureId : null}
@@ -904,7 +893,7 @@ export default function WorkspaceLayout() {
 
         {/* A floating notebook beside the chat: the chat reflows into the room left of it. */}
         <main className="cf__main" style={layout.chatInset && !phone ? { paddingRight: layout.chatInset } : undefined}>
-          <Outlet context={{ chatView, home, examView }} />
+          <Outlet context={{ chatView, examView }} />
         </main>
 
         {notebookOpen && (

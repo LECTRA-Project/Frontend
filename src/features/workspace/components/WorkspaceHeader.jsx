@@ -12,7 +12,7 @@ import { getInitials, useAuth } from "../../auth/authContext.js";
   The top bar shown on the workspace and on the profile pages:
   menu button (workspace, phone width only) and LECTRA logo on the left; the Notebook
   toggle (workspace only), the Exam button and the student avatar on the right. The logo
-  goes to Home; Home has no Exam button.
+  opens a new chat.
 
   Props (workspace only):
     menuOpen, onToggleMenu          the chat menu (the button is only shown on phones,
@@ -35,7 +35,6 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
   const closeMenu = useCallback(() => setProfileOpen(false), []);
 
   const isExamOpen = location.pathname === "/workspace/exam";
-  const isHome = location.pathname === "/workspace/home";
 
   return (
     <header className="ws-header">
@@ -50,7 +49,7 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
             onClick={onToggleMenu}
           />
         )}
-        <Link to="/workspace/home" className="ws-header__home" aria-label={t("LECTRA — go to home")}>
+        <Link to="/workspace" className="ws-header__home" aria-label={t("LECTRA — go to home")}>
           <Brand />
         </Link>
       </div>
@@ -61,19 +60,17 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
             <span className="ws-header__label">{t("Notebook")}</span>
           </Button>
         )}
-        {!isHome && (
-          <Button
-            icon="graduation"
-            className="ws-header__exam"
-            active={isExamOpen}
-            aria-pressed={isExamOpen}
-            // The open chat and material (?chat=…&lecture=…) stay open across the Exam view;
-            // the exam (?exam=…) belongs to the Exam view only, which opens on its setup step.
-            onClick={() => navigate({ pathname: isExamOpen ? "/workspace" : "/workspace/exam", search: withoutExam(location.search) })}
-          >
-            <span className="ws-header__label">{t("Exam")}</span>
-          </Button>
-        )}
+        <Button
+          icon="graduation"
+          className="ws-header__exam"
+          active={isExamOpen}
+          aria-pressed={isExamOpen}
+          // The open chat and material (?chat=…&lecture=…) stay open across the Exam view;
+          // the exam (?exam=…) belongs to the Exam view only, which opens on its setup step.
+          onClick={() => navigate({ pathname: isExamOpen ? "/workspace" : "/workspace/exam", search: withoutExam(location.search) })}
+        >
+          <span className="ws-header__label">{t("Exam")}</span>
+        </Button>
 
         <div className="ws-header__profile">
           <button

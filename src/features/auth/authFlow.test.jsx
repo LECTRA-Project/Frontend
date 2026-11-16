@@ -51,15 +51,16 @@ describe("sign in", () => {
     expect(await screen.findByRole("heading", { name: "Forgot your password?" })).toBeInTheDocument();
   });
 
-  it("signs in and opens the Home screen with the real user", async () => {
+  it("signs in and opens a new chat in the workspace with the real user", async () => {
     backendWithUser();
     const user = userEvent.setup();
     const { router } = renderApp("/");
 
     await fillSignIn(user, TEST_USER.email, "secret123");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace/home"));
-    expect(await screen.findByText(/^Good (morning|afternoon|evening), Ada$/)).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    expect(router.state.location.search).toBe("");
+    expect(await screen.findByRole("heading", { name: "What are we studying today?" })).toBeInTheDocument();
     expect(savedToken()).toBe(token);
     expect(await screen.findByRole("button", { name: "Open profile menu" })).toHaveTextContent("AL");
 
@@ -245,7 +246,7 @@ describe("create account", () => {
     await user.click(screen.getByRole("button", { name: "Create account" }));
   }
 
-  it("registers, signs in automatically and opens the Home / Welcome screen", async () => {
+  it("registers, signs in automatically and opens a new chat in the workspace", async () => {
     backendWithUser({ password: "StrongerPass1!" });
     api.onPost("/auth/register").reply(201, ok(TEST_USER, "User registered successfully"));
     const user = userEvent.setup();
@@ -253,8 +254,8 @@ describe("create account", () => {
 
     await fillRegister(user);
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace/home"));
-    expect(await screen.findByRole("heading", { name: /^Good (morning|afternoon|evening), Ada$/ })).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    expect(await screen.findByRole("heading", { name: "What are we studying today?" })).toBeInTheDocument();
     expect(JSON.parse(api.history.post[0].data)).toEqual({
       email: TEST_USER.email,
       password: "StrongerPass1!",
@@ -447,6 +448,11 @@ describe("profile form validation", () => {
     expect(savedToken()).toBeNull();
     expect(await screen.findByRole("status")).toHaveTextContent("Your password has been changed. Please sign in again.");
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument(), { timeout: 4000 });
+
+    // Signing in again opens a new chat, not My profile.
+    await fillSignIn(user, TEST_USER.email, "secret123");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
+    expect(router.state.location.search).toBe("");
   });
 
   it("shows a password-change API error without claiming success", async () => {
@@ -494,7 +500,7 @@ describe("session", () => {
     saveToken(token);
     const { router } = renderApp("/");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace/home"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
     expect(screen.getByRole("button", { name: "Open profile menu" })).toHaveTextContent("AL");
   });
 
@@ -617,6 +623,21 @@ describe("session", () => {
     // The workspace is closed again.
     await act(() => router.navigate("/workspace"));
     expect(router.state.location.pathname).toBe("/");
+  });
+
+  it("signing in again after signing out from a profile page opens a new chat", async () => {
+    backendWithUser();
+    saveToken(token);
+    const user = userEvent.setup();
+    const { router } = renderApp("/settings");
+    await screen.findByRole("button", { name: "Open profile menu" });
+
+    await openProfileMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
+    await screen.findByRole("heading", { name: "Sign in" });
+
+    await fillSignIn(user, TEST_USER.email, "secret123");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workspace"));
   });
 
   it("profile pages still open for a signed-in user", async () => {

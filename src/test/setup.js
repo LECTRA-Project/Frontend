@@ -2,6 +2,11 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
+import { typingSettings } from "../features/workspace/useTypewriter.js";
+
+// Answers show in full at once in tests; useTypewriter.test.js turns the animation on.
+typingSettings.enabled = false;
+
 /*
   Node 25+ ships its own experimental `localStorage` global, which hides jsdom's and has
   no working methods unless Node is started with --localstorage-file. Put a simple

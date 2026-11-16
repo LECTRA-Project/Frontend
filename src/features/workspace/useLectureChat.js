@@ -306,7 +306,8 @@ export function useLectureChat({ enabled }) {
             ...list.filter((message) => message.id !== pendingId),
             // Show what the student typed, not the notebook block appended to it.
             { ...result.question, content: question, extras },
-            { ...result.answer, extras: [] },
+            // fresh: just arrived, so the chat types it out (see useTypewriter).
+            { ...result.answer, extras: [], fresh: true },
           ]);
         }
         return true;
@@ -318,7 +319,12 @@ export function useLectureChat({ enabled }) {
             if (activeRef.current === sessionId) {
               const asked = saved.at(-2).id;
               setOlderPage(0); // the whole chat was just loaded
-              setMessages(saved.map((item) => (item.id === asked ? { ...item, content: question, extras } : { ...item, extras: [] })));
+              const answered = saved.at(-1).id;
+              setMessages(
+                saved.map((item) =>
+                  item.id === asked ? { ...item, content: question, extras } : { ...item, extras: [], fresh: item.id === answered }
+                )
+              );
             }
             return true;
           }

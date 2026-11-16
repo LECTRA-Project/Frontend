@@ -144,7 +144,7 @@ export default function CourseCompletion() {
       <div className="completion__empty">
         <p className="completion__empty-title">{t("No lectures yet")}</p>
         <p>{t("Upload a lecture and read it to see your progress.")}</p>
-        <Link to="/workspace/home" className="btn btn--primary btn--sm">
+        <Link to="/workspace" className="btn btn--primary btn--sm">
           <Icon name="upload" />
           {t("Upload a lecture")}
         </Link>

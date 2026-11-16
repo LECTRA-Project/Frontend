@@ -40,10 +40,11 @@ export default function ProfileMenu({ onClose }) {
     navigate(path);
   }
 
-  // Clearing the session makes RequireAuth send the user to the sign-in screen.
+  // Clearing the session makes RequireAuth send the user to the sign-in screen
+  // (without remembering this page: signing in again opens a new chat).
   function signOut() {
     onClose();
-    logout();
+    logout("signed-out");
   }
 
   return (
@@ -69,20 +70,16 @@ export default function ProfileMenu({ onClose }) {
   );
 }
 
-function MenuRow({ icon, label, hint, muted = false, disabled = false, onClick }) {
-  const { t } = useI18n();
+function MenuRow({ icon, label, muted = false, onClick }) {
   return (
     <button
       type="button"
       role="menuitem"
       className={`profile-menu__row ${muted ? "profile-menu__row--muted" : ""}`}
-      aria-disabled={disabled || undefined}
-      title={disabled ? t("{feature} will be added in a later phase", { feature: label }) : undefined}
-      onClick={disabled ? undefined : onClick}
+      onClick={onClick}
     >
       <Icon name={icon} />
       <span>{label}</span>
-      {hint && <span className="profile-menu__hint">{hint}</span>}
     </button>
   );
 }

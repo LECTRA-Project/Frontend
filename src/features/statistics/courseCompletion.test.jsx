@@ -154,7 +154,7 @@ describe("course completion on the Statistics page", () => {
 
     const section = await screen.findByRole("region", { name: "Course completion" });
     expect(await within(section).findByText("Upload a lecture and read it to see your progress.")).toBeInTheDocument();
-    expect(within(section).getByRole("link", { name: "Upload a lecture" })).toHaveAttribute("href", "/workspace/home");
+    expect(within(section).getByRole("link", { name: "Upload a lecture" })).toHaveAttribute("href", "/workspace");
     expect(within(section).queryByTestId("completion-overall")).not.toBeInTheDocument();
     expect(within(section).queryByRole("list")).not.toBeInTheDocument();
   });
