@@ -169,6 +169,7 @@ export default function ExamPage() {
       lectureIds: (failed.lectures ?? []).map((item) => item.lecture_id).filter(Boolean),
       questionCount: failed.question_count,
       types: QUESTION_TYPES.map((type) => type.value),
+      difficulty: failed.difficulty ?? "mixed",
     };
     const created = await start(settings);
     if (!created) return;
@@ -248,13 +249,15 @@ export default function ExamPage() {
         lectureIds: (saved?.lectureIds ?? (done.lectures ?? []).map((item) => item.lecture_id)).filter(Boolean),
         questionCount: saved?.questionCount ?? done.question_count,
         types: saved?.types ?? types,
+        difficulty: saved?.difficulty ?? done.difficulty ?? "mixed",
       },
     });
   }
 
   // "Practise my mistakes": a new exam from the submitted one's mistakes, started at once.
   function practiseMistakes(done, questionCount) {
-    return start({ fromExamId: done.id, questionCount });
+    // At the level the exam was taken at.
+    return start({ fromExamId: done.id, questionCount, difficulty: done.difficulty ?? "mixed" });
   }
 
   async function discard(target) {

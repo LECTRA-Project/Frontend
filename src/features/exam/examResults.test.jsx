@@ -386,3 +386,46 @@ describe("practise my mistakes", () => {
     await waitFor(() => expect(search(router)).toEqual({ exam: "e-busy" }));
   });
 });
+
+describe("difficulty", () => {
+  const hardExam = () => {
+    const done = submittedExam();
+    return { ...done, difficulty: "hard", questions: done.questions.map((question) => ({ ...question, difficulty: "hard" })) };
+  };
+
+  it("shows each question's difficulty in the results", async () => {
+    setup({ examList: [hardExam()] });
+    await openAt("/workspace/exam?exam=e-done");
+    const cards = await screen.findAllByRole("article");
+    expect(cards.map((card) => within(card).getByText(/^Difficulty:/).textContent)).toEqual(Array(4).fill("Difficulty: Hard"));
+  });
+
+  it("shows no difficulty for questions without one", async () => {
+    setup({ examList: [submittedExam()] });
+    await openAt("/workspace/exam?exam=e-done");
+    await screen.findAllByRole("article");
+    expect(screen.queryByText(/^Difficulty:/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the difficulty for a new exam on the same materials and for practising mistakes", async () => {
+    setup({ examList: [hardExam()] });
+    const { user } = await openAt("/workspace/exam?exam=e-done");
+    await user.click(await screen.findByRole("button", { name: "Practise my mistakes" }));
+    expect(exams.started).toEqual([{ from_exam_id: "e-done", only: "mistakes", question_count: 3, difficulty: "hard" }]);
+  });
+
+  it("presets the difficulty of the exam for a new one", async () => {
+    setup({ examList: [hardExam()] });
+    const { user } = await openAt("/workspace/exam?chat=s-hunt&exam=e-done");
+    await user.click(await screen.findByRole("button", { name: "New exam on the same materials" }));
+    const group = await screen.findByRole("group", { name: "Difficulty" });
+    expect(within(group).getByRole("radio", { name: "Hard" })).toBeChecked();
+  });
+
+  it("is in German", async () => {
+    localStorage.setItem("lectra:language:v1:user-1", "de");
+    setup({ examList: [hardExam()] });
+    renderApp("/workspace/exam?exam=e-done");
+    expect((await screen.findAllByText("Schwierigkeit: Schwer"))).toHaveLength(4);
+  });
+});

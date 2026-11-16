@@ -15,11 +15,12 @@ import { del, get, post } from "../http.js";
 
   Shapes (data of the { status, message, data } envelope):
     exam      { id, title, status: "generating" | "ready" | "failed" | "submitted",
-                question_count, questions_ready, lectures: [{ lecture_id | null, title }],
+                question_count, difficulty: "easy" | "medium" | "hard" | null (mixed), questions_ready, lectures: [{ lecture_id | null, title }],
                 error, total_points, max_points, score_percent, questions_ungraded,
                 created_at, updated_at, submitted_at }
     question  { id, position, type: "multiple_choice" | "short_answer", question,
-                choices: [{ id, text }] | null, points, lecture_id, source_pages }
+                choices: [{ id, text }] | null, points, lecture_id, source_pages,
+                difficulty: "easy" | "medium" | "hard" }
               No question carries its answer before the exam is submitted.
     result    (every question of a submitted exam)
               { answer_text, selected_choice_ids, answered, graded,
@@ -41,6 +42,52 @@ const BASE = "/exams";
 
 export const QUESTION_COUNTS = [3, 5, 7, 10];
 // `label` is a getter so it is read in the current interface language.
+/* How hard the questions are: "mixed" (the default, nothing sent) lets each question get the
+   level that suits its pages; the others ask every question for that level. */
+export const DIFFICULTIES = [
+  {
+    value: "mixed",
+    get label() {
+      return t("Mixed");
+    },
+    get description() {
+      return t("Each question at the level that suits its pages.");
+    },
+  },
+  {
+    value: "easy",
+    get label() {
+      return t("Easy");
+    },
+    get description() {
+      return t("Recall a definition or a fact from the material.");
+    },
+  },
+  {
+    value: "medium",
+    get label() {
+      return t("Medium");
+    },
+    get description() {
+      return t("Apply a method from the material to an example.");
+    },
+  },
+  {
+    value: "hard",
+    get label() {
+      return t("Hard");
+    },
+    get description() {
+      return t("Compare methods and reason about trade-offs.");
+    },
+  },
+];
+
+/* The label of a question's or an exam's difficulty ("Hard"), or null for mixed / none. */
+export function difficultyLabel(value) {
+  return value && value !== "mixed" ? DIFFICULTIES.find((item) => item.value === value)?.label ?? null : null;
+}
+
 export const QUESTION_TYPES = [
   {
     value: "multiple_choice",
@@ -79,11 +126,13 @@ function unwrap(response, fallback) {
 /* Starts generating an exam; the questions are written afterwards (poll getExam). */
 /* An exam on materials ({ lectureIds, questionCount, types }), or on the mistakes of a
    submitted exam ({ fromExamId, questionCount }): every new question is written from the
-   pages of a wrong, partly correct or unanswered question, of the same type. */
-export async function startExam({ lectureIds, questionCount, types, fromExamId }, { signal } = {}) {
+   pages of a wrong, partly correct or unanswered question, of the same type. `difficulty`
+   (DIFFICULTIES) works for both. */
+export async function startExam({ lectureIds, questionCount, types, fromExamId, difficulty }, { signal } = {}) {
   const body = fromExamId
     ? { from_exam_id: fromExamId, only: "mistakes", question_count: questionCount }
     : { lecture_ids: lectureIds, question_count: questionCount, types };
+  if (difficulty && difficulty !== "mixed") body.difficulty = difficulty;
   return unwrap(await post(BASE, body, { timeout: START_TIMEOUT_MS, signal }), t("Unable to start the exam."));
 }
 

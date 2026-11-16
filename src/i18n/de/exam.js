@@ -180,6 +180,17 @@ export default {
   "Grade again": "Erneut bewerten",
   "New exam on the same materials": "Neue Prüfung mit denselben Materialien",
   "Practise my mistakes": "Meine Fehler üben",
+  // Difficulty (ExamSetup, ExamResults)
+  Difficulty: "Schwierigkeit",
+  Mixed: "Gemischt",
+  Easy: "Leicht",
+  Medium: "Mittel",
+  Hard: "Schwer",
+  "Each question at the level that suits its pages.": "Jede Frage auf dem Niveau, das zu ihren Seiten passt.",
+  "Recall a definition or a fact from the material.": "Eine Definition oder einen Fakt aus dem Material wiedergeben.",
+  "Apply a method from the material to an example.": "Eine Methode aus dem Material auf ein Beispiel anwenden.",
+  "Compare methods and reason about trade-offs.": "Methoden vergleichen und Vor- und Nachteile abwägen.",
+  "Difficulty: {level}": "Schwierigkeit: {level}",
   // Keyboard shortcuts (ExamQuestions)
   "Keyboard shortcuts": "Tastenkürzel",
   "Select or clear choice A to I": "Antwort A bis I auswählen oder abwählen",

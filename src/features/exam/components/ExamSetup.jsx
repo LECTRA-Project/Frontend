@@ -5,7 +5,7 @@ import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
 import { useI18n } from "../../../i18n/i18n.js";
-import { QUESTION_COUNTS, QUESTION_TYPES } from "../../../api/services/exams.js";
+import { DIFFICULTIES, QUESTION_COUNTS, QUESTION_TYPES } from "../../../api/services/exams.js";
 import { countAnswered, loadExamProgress } from "../../../services/exam/examStorage.js";
 import { formatExamDate } from "../examFormat.js";
 
@@ -15,8 +15,9 @@ import { formatExamDate } from "../examFormat.js";
   - Materials: the open chat's materials, all preselected; for a chat without materials the
     student's library, nothing preselected. Materials without readable text yet (still
     processing, failed, images) can't be picked.
-  - Number of questions (3, 5, 7, 10) and question types (at least one).
-  - With `preset` (New exam on the same materials) its lectures, number and types are
+  - Number of questions (3, 5, 7, 10), question types (at least one) and the difficulty
+    (Mixed, the default, or Easy / Medium / Hard for every question).
+  - With `preset` (New exam on the same materials) its lectures, number, types and difficulty are
     chosen at first instead. A preset with a `concept` (Statistics → "Practice this")
     brings only the lectures that concept came from.
   - "Continue an exam" lists the exams being generated or ready to answer, each with
@@ -29,9 +30,9 @@ import { formatExamDate } from "../examFormat.js";
     loading        materials still loading
     unfinished     { exams, loading, error, onReload }  (see useUnfinishedExams)
     userKey        whose answers on this device to count
-    onStart({ lectureIds, questionCount, types }), starting, startError { message, busyId }
+    onStart({ lectureIds, questionCount, types, difficulty }), starting, startError { message, busyId }
     onOpenExam(id), onDiscard(exam) → Promise (rejects with the error to show)
-    preset         { lectureIds, questionCount, types, concept } to start from, or null
+    preset         { lectureIds, questionCount, types, difficulty, concept } to start from, or null
 */
 export default function ExamSetup({
   materials,
@@ -52,6 +53,10 @@ export default function ExamSetup({
   // null until the student changes the selection: then the defaults follow the materials.
   const [picked, setPicked] = useState(() => preset?.lectureIds ?? null);
   const [count, setCount] = useState(() => (QUESTION_COUNTS.includes(preset?.questionCount) ? preset.questionCount : 5));
+  const [difficulty, setDifficulty] = useState(() =>
+    DIFFICULTIES.some((item) => item.value === preset?.difficulty) ? preset.difficulty : "mixed"
+  );
+  const difficultyHintId = useId();
   const [types, setTypes] = useState(() => {
     const allowed = QUESTION_TYPES.map((type) => type.value);
     const chosen = allowed.filter((value) => preset?.types?.includes(value));
@@ -84,7 +89,7 @@ export default function ExamSetup({
     if (!valid || starting) return;
     // In the order the materials are listed.
     const lectureIds = materials.map((item) => item.id).filter((id) => selected.includes(id));
-    onStart({ lectureIds, questionCount: count, types });
+    onStart({ lectureIds, questionCount: count, types, difficulty });
   }
 
   return (
@@ -169,6 +174,26 @@ export default function ExamSetup({
                 );
               })}
             </div>
+          </fieldset>
+          <fieldset className="exam-field" aria-describedby={difficultyHintId}>
+            <legend className="exam-field__legend">{t("Difficulty")}</legend>
+            <div className="exam-pills">
+              {DIFFICULTIES.map((level) => (
+                <label key={level.value} className={`exam-pill ${difficulty === level.value ? "exam-pill--on" : ""}`}>
+                  <input
+                    type="radio"
+                    name="exam-difficulty"
+                    value={level.value}
+                    checked={difficulty === level.value}
+                    onChange={() => setDifficulty(level.value)}
+                  />
+                  {level.label}
+                </label>
+              ))}
+            </div>
+            <p id={difficultyHintId} className="exam-muted exam-small exam-field__hint">
+              {DIFFICULTIES.find((level) => level.value === difficulty)?.description}
+            </p>
           </fieldset>
         </div>
 
