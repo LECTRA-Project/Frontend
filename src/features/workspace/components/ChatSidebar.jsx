@@ -12,6 +12,9 @@ import { displayChatTitle } from "../../../services/notebook/cellContext.js";
 import { useI18n } from "../../../i18n/i18n.js";
 import "../projects.css";
 
+// The chats listed under an unfolded project in the menu (the rest: on the project page).
+const PROJECT_CHATS_SHOWN = 5;
+
 /*
   The collapsible left menu of the chat-first workspace (272 px; a 64 px icon rail when
   collapsed). Top to bottom: collapse, New chat, the open chat's materials, the chats
@@ -52,13 +55,19 @@ import "../projects.css";
     onMoveChat(session)           opens "Move to project" for a chat (none: not offered)
     available                     false when the server has no chat API
 
-  Projects (a course's materials and chats together): a section above the chats with the 3
-  most recently active projects, + (a new project) and, with more than 3, "View all projects". A chat in a
-  project shows the project's name as a small tag; its materials are the project's
-  ("Materials in <project>"), so adding or removing one changes the project.
+  Projects (a course's materials and chats together): "New project" under New chat, and a
+  section above the chats with the 3 most recently active projects, + (a new project) and,
+  with more than 3, "View all projects". Each project is a folder: the arrow shows its chats
+  (the latest few, with "All chats in the project" for the rest) and "New chat" starts
+  another chat in it — a project can have any number of chats. The project of the open chat
+  or page starts unfolded. A chat in a project also shows the project's name as a small tag
+  in the Chats list; its materials are the project's ("Materials in <project>"), so adding
+  or removing one changes the project.
     projects            { recent, total } (see useProjects), or null without projects
+    projectsAvailable   true when the server has projects (shows "New project" up top)
     currentProjectId    the project open on its page, or the open chat's project
     onOpenProject(id), onNewProject(), onViewAllProjects()
+    onNewProjectChat(project)   starts a new chat in the project (none: not offered)
     projectName         the open chat's project name (null for a normal chat)
     showMaterials       false hides the open chat's materials (on the project pages)
 */
@@ -97,11 +106,14 @@ export default function ChatSidebar({
   onOpenProject = () => {},
   onNewProject = () => {},
   onViewAllProjects = () => {},
+  onNewProjectChat = null,
+  projectsAvailable = false,
   projectName = null,
   showMaterials = true,
 }) {
   const { t } = useI18n();
   const [removing, setRemoving] = useState(null); // the chat whose Remove is being confirmed
+  const [unfolded, setUnfolded] = useState({}); // project id → shown or not (else: the current project)
   const [unlinking, setUnlinking] = useState(null); // the material whose × is being confirmed
   const newChatRef = useRef(null);
   const scrollRef = useRef(null);
@@ -125,9 +137,13 @@ export default function ChatSidebar({
       <nav className="cf-rail" aria-label={t("Menu")}>
         <IconButton icon="sidebar" label={t("Open menu")} onClick={onToggle} />
         <IconButton icon="plus" label={t("New chat")} onClick={onNewChat} />
+        {projectsAvailable && <IconButton icon="folder" label={t("New project")} onClick={onNewProject} />}
       </nav>
     );
   }
+
+  const isUnfolded = (id) => unfolded[id] ?? id === currentProjectId;
+  const toggleProject = (id) => setUnfolded((current) => ({ ...current, [id]: !isUnfolded(id) }));
 
   async function confirmRemove() {
     const session = removing;
@@ -150,6 +166,14 @@ export default function ChatSidebar({
           </button>
           <IconButton icon="sidebar" label={overlay ? t("Close menu") : t("Collapse menu")} onClick={onToggle} />
         </div>
+        {projectsAvailable && (
+          <div className="cf-side__new-project">
+            <button type="button" className="cf-new-project" onClick={onNewProject}>
+              <Icon name="folder" size={16} />
+              {t("New project")}
+            </button>
+          </div>
+        )}
 
         <div className="cf-side__scroll" ref={scrollRef}>
           {showMaterials && (
@@ -293,18 +317,86 @@ export default function ChatSidebar({
                 <ul className="cf-projects__list" aria-label={t("Recent projects")}>
                   {projects.recent.map((project) => {
                     const current = project.id === currentProjectId;
+                    const shown = isUnfolded(project.id);
+                    const chatsId = `cf-project-chats-${project.id}`;
+                    // Its chats among those loaded (newest first, as in the Chats list).
+                    const chats = sessions.filter((session) => session.project?.id === project.id);
+                    const total = Math.max(chats.length, project.chat_count ?? 0);
                     return (
-                      <li key={project.id}>
-                        <button
-                          type="button"
-                          className={`cf-project ${current ? "cf-project--current" : ""}`}
-                          aria-current={current ? "page" : undefined}
-                          title={project.name}
-                          onClick={() => onOpenProject(project.id)}
-                        >
-                          <Icon name="folder" size={16} />
-                          <span className="cf-project__name">{project.name}</span>
-                        </button>
+                      <li key={project.id} className="cf-project-item">
+                        <div className={`cf-project-row ${current ? "cf-project-row--current" : ""}`}>
+                          <button
+                            type="button"
+                            className="cf-project__toggle"
+                            aria-expanded={shown}
+                            aria-controls={chatsId}
+                            aria-label={shown ? t("Hide the chats in {name}", { name: project.name }) : t("Show the chats in {name}", { name: project.name })}
+                            onClick={() => toggleProject(project.id)}
+                          >
+                            <Icon name={shown ? "chevronDown" : "chevronRight"} size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className={`cf-project ${current ? "cf-project--current" : ""}`}
+                            aria-current={current ? "page" : undefined}
+                            title={project.name}
+                            onClick={() => onOpenProject(project.id)}
+                          >
+                            <Icon name="folder" size={16} />
+                            <span className="cf-project__name">{project.name}</span>
+                          </button>
+                          {onNewProjectChat && (
+                            <IconButton
+                              icon="plus"
+                              label={t("New chat in {name}", { name: project.name })}
+                              className="cf-project__new"
+                              onClick={() => onNewProjectChat(project)}
+                            />
+                          )}
+                        </div>
+                        {shown && (
+                          <ul className="cf-project__chats" id={chatsId} aria-label={t("Chats in {name}", { name: project.name })}>
+                            {chats.slice(0, PROJECT_CHATS_SHOWN).map((session) => {
+                              const open = session.id === activeId;
+                              return (
+                                <li key={session.id}>
+                                  <button
+                                    type="button"
+                                    className={`cf-project-chat ${open ? "cf-project-chat--current" : ""}`}
+                                    aria-current={open ? "page" : undefined}
+                                    title={displayChatTitle(session.title)}
+                                    onClick={() => onOpenChat(session.id)}
+                                  >
+                                    <Icon name="chat" size={14} />
+                                    <span className="cf-project__name">{displayChatTitle(session.title)}</span>
+                                  </button>
+                                </li>
+                              );
+                            })}
+                            {chats.length === 0 && <li className="cf-project-chat cf-project-chat--note">{t("No chats yet")}</li>}
+                            {onNewProjectChat && (
+                              <li>
+                                <button
+                                  type="button"
+                                  className="cf-project-chat cf-project-chat--new"
+                                  // Named for the project: a new chat is itself titled "New chat".
+                                  aria-label={t("New chat in {name}", { name: project.name })}
+                                  onClick={() => onNewProjectChat(project)}
+                                >
+                                  <Icon name="plus" size={14} />
+                                  <span className="cf-project__name">{t("New chat")}</span>
+                                </button>
+                              </li>
+                            )}
+                            {total > PROJECT_CHATS_SHOWN && (
+                              <li>
+                                <button type="button" className="cf-link-button cf-project-chat__all" onClick={() => onOpenProject(project.id)}>
+                                  {t("All {count} chats in the project", { count: total })}
+                                </button>
+                              </li>
+                            )}
+                          </ul>
+                        )}
                       </li>
                     );
                   })}
@@ -377,6 +469,9 @@ export default function ChatSidebar({
                               label={t("Actions for {title}", { title: displayChatTitle(session.title) })}
                               className="cf-chat__more"
                               items={[
+                                ...(session.project && onNewProjectChat
+                                  ? [{ label: t("New chat in {name}", { name: session.project.name }), icon: "plus", onSelect: () => onNewProjectChat(session.project) }]
+                                  : []),
                                 ...(onMoveChat ? [{ label: t("Move to project…"), icon: "folder", onSelect: () => onMoveChat(session) }] : []),
                                 { label: t("Remove"), icon: "trash", danger: true, onSelect: () => setRemoving(session) },
                               ]}
