@@ -415,6 +415,26 @@
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+.exam-map__item--flagged {
+  position: relative;
+}
+/* A small flag in the corner of a flagged question. */
+.exam-map__flag {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--warning-strong);
+  color: var(--bg-surface);
+}
+.exam-map__flag svg {
+  width: 11px;
+  height: 11px;
+}
 .exam-map__item--current {
   border-color: var(--text-primary);
   box-shadow: inset 0 0 0 1px var(--text-primary);
@@ -552,6 +572,42 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) 10px;
+}
+.exam-flag {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.exam-flag svg {
+  width: 15px;
+  height: 15px;
+}
+.exam-flag:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.exam-flag:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.exam-flag--on {
+  border-color: var(--warning-strong);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+}
+.exam-flag--on svg {
+  fill: currentColor;
 }
 .exam-level {
   padding: 1px 9px;
@@ -771,6 +827,16 @@
 .exam-status--done {
   background: var(--accent-soft);
   color: var(--accent-strong);
+}
+.exam-status--flagged {
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+}
+.exam-status--flagged svg {
+  fill: currentColor;
+}
+.exam-review__item--flagged {
+  border-color: var(--warning-strong);
 }
 .exam-status svg {
   width: 13px;

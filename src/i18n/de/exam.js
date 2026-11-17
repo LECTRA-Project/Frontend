@@ -180,6 +180,16 @@ export default {
   "Grade again": "Erneut bewerten",
   "New exam on the same materials": "Neue Prüfung mit denselben Materialien",
   "Practise my mistakes": "Meine Fehler üben",
+  // Flag for review (ExamQuestions, ExamReview, ExamSubmitDialog)
+  "Flag for review": "Zur Überprüfung markieren",
+  Flagged: "Markiert",
+  "Question {number}, answered, flagged for review": "Frage {number}, beantwortet, zur Überprüfung markiert",
+  "Question {number}, not answered, flagged for review": "Frage {number}, nicht beantwortet, zur Überprüfung markiert",
+  "1 question is flagged for review and listed first.": "1 Frage ist zur Überprüfung markiert und steht oben.",
+  "{count} questions are flagged for review and listed first.": "{count} Fragen sind zur Überprüfung markiert und stehen oben.",
+  "Question {number} is flagged for review.": "Frage {number} ist zur Überprüfung markiert.",
+  "Questions {list} and {last} are flagged for review.": "Fragen {list} und {last} sind zur Überprüfung markiert.",
+  "Go to question {number}": "Zu Frage {number}",
   // Difficulty (ExamSetup, ExamResults)
   Difficulty: "Schwierigkeit",
   Mixed: "Gemischt",
