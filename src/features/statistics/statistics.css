@@ -65,3 +65,43 @@
   font-weight: 500;
   color: var(--text-primary);
 }
+
+/* Statistics → study time per day (StudyTimeChart.jsx) */
+.study-chart {
+  margin-top: var(--space-4);
+  padding: var(--space-4) 18px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.study-chart__title {
+  margin-bottom: var(--space-2);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.study-chart__box {
+  position: relative;
+}
+.study-chart__bar {
+  fill: var(--accent);
+}
+.study-chart__bar--hover {
+  fill: var(--accent-strong);
+}
+.study-chart__hit {
+  fill: transparent;
+}
+.study-chart__tooltip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+  color: var(--text-primary);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}

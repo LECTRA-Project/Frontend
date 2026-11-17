@@ -1,4 +1,5 @@
 import { dateLocale, t } from "../../i18n/i18n.js";
+import { parseDay, weekLabel } from "./examStatsText.js";
 
 /*
   The texts of the overview cards (OverviewCards.jsx), from GET /api/stats/overview.
@@ -83,3 +84,38 @@ export function scoreChangeText(change) {
   }
   return { direction: "down", text: points === 1 ? t("1 point lower in {weeks} weeks", vars) : t("{points} points lower in {weeks} weeks", vars) };
 }
+
+/* 42 → "42 min", 95 → "1 h 35 min", 120 → "2 h" (German "42 Min.", "1 Std. 35 Min."). */
+export function minutesText(minutes) {
+  const total = Math.max(0, Math.round(minutes ?? 0));
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (hours === 0) return t("{minutes} min", { minutes: rest });
+  if (rest === 0) return t("{hours} h", { hours: numberText(hours) });
+  return t("{hours} h {minutes} min", { hours: numberText(hours), minutes: rest });
+}
+
+/* How this week's study time compares with last week's, or null without reading in either. */
+export function studyChangeText(studyTime) {
+  if (!studyTime) return null;
+  const now = studyTime.this_week_minutes ?? 0;
+  const before = studyTime.last_week_minutes ?? 0;
+  if (now === 0 && before === 0) return null;
+  const difference = minutesText(Math.abs(now - before));
+  if (now > before) return { direction: "up", text: t("{time} more than last week", { time: difference }) };
+  if (now < before) return { direction: "down", text: t("{time} less than last week", { time: difference }) };
+  return { direction: "same", text: t("Same as last week") };
+}
+
+/* "2026-11-11" → "11 Nov" on the chart's axis. */
+export function dayLabel(day) {
+  return weekLabel(day);
+}
+
+/* "2026-11-11" → "Wed 11 Nov" (German "Mi., 11. Nov."), for the tooltip and the table. */
+export function weekdayDateLabel(day) {
+  const time = parseDay(day);
+  if (time === null) return day ?? "";
+  return new Date(time).toLocaleDateString(dateLocale("en-GB"), { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+}
+

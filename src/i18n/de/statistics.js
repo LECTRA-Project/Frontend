@@ -23,6 +23,18 @@ export default {
   "Last activity today": "Zuletzt aktiv: heute",
   "Last activity yesterday": "Zuletzt aktiv: gestern",
   "Last activity on {date}": "Zuletzt aktiv am {date}",
+  // Study time (OverviewCards, StudyTimeChart)
+  "Study time": "Lernzeit",
+  "reading this week": "Lesen in dieser Woche",
+  "{minutes} min": "{minutes} Min.",
+  "{hours} h": "{hours} Std.",
+  "{hours} h {minutes} min": "{hours} Std. {minutes} Min.",
+  "{time} more than last week": "{time} mehr als letzte Woche",
+  "{time} less than last week": "{time} weniger als letzte Woche",
+  "Study time per day, last 4 weeks": "Lernzeit pro Tag, letzte 4 Wochen",
+  "Study time per day over the last 4 weeks: {total} in all, the longest day {day} with {time}.":
+    "Lernzeit pro Tag in den letzten 4 Wochen: {total} insgesamt, der längste Tag {day} mit {time}.",
+  Day: "Tag",
   // Project picker (ProjectPicker)
   Project: "Projekt",
   "All projects": "Alle Projekte",

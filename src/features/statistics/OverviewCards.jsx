@@ -4,29 +4,36 @@ import Button from "../../components/ui/Button.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import { useApi } from "../../api/useApi.js";
 import { getOverview } from "../../api/services/statistics.js";
+import StudyTimeChart from "./StudyTimeChart.jsx";
 import { DWELL_MS } from "../lectures/readingTracker.js";
 import { t, useI18n } from "../../i18n/i18n.js";
 import {
   chatsText,
   isNewStudent,
   lastActivityText,
+  minutesText,
   numberText,
   pagesTotalText,
   questionsAnsweredText,
   scoreChangeText,
   streakText,
+  studyChangeText,
   weekChangeText,
 } from "./overviewText.js";
 import "./overviewCards.css";
 
 /*
-  Statistics → "Overall": five cards with the student's own numbers (GET /api/stats/overview).
+  Statistics → "Overall": six cards with the student's own numbers (GET /api/stats/overview).
 
     Exams taken       12      58 questions answered
     Average score     68%     61% of answers correct      ("—" without a graded exam)
     Pages read        214     of 340 pages in your materials
     Study streak      5 days  Last activity today / yesterday / on 12 Nov (UTC days, like the streak)
     Questions asked   87      in 14 chats
+    Study time        1 h 35 min  reading this week (the reading tracker's time, see readingTracker.js)
+
+  Below the cards, StudyTimeChart shows the study time per day of the last 4 weeks, once
+  there is any.
 
   Under exams, the average, pages and questions, a change line says how the number moves
   ("▲ 3 more than last week", "▼ 4 points lower in 4 weeks"): an arrow and words, so it
@@ -46,6 +53,7 @@ const LABELS = [
   () => t("Pages read"),
   () => t("Study streak"),
   () => t("Questions asked"),
+  () => t("Study time"),
 ];
 
 function cards(overview, now) {
@@ -74,6 +82,11 @@ function cards(overview, now) {
     { value: numberText(overview.pages_read), note: pagesTotalText(overview.pages_total), change: weekChangeText(changes.pages_read) },
     { value: streakText(overview.current_streak), note: lastActivityText(overview.last_activity_at, now) },
     { value: numberText(overview.questions_asked), note: chatsText(overview.chats), change: weekChangeText(changes.questions_asked) },
+    {
+      value: minutesText(overview.study_time?.this_week_minutes ?? 0),
+      note: t("reading this week"),
+      change: studyChangeText(overview.study_time),
+    },
   ];
 }
 
@@ -202,6 +215,15 @@ export default function OverviewCards({ projectId = null }) {
         ))}
       </dl>
     );
+    const days = data.study_time?.by_day ?? [];
+    if (days.some((item) => item.minutes > 0)) {
+      body = (
+        <>
+          {body}
+          <StudyTimeChart days={days} />
+        </>
+      );
+    }
   }
 
   return (

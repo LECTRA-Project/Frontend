@@ -100,6 +100,18 @@ describe("lectures service", () => {
     await expect(recordReadingProgress("a", [1, 2, 5])).resolves.toEqual(progress);
   });
 
+  it("sends the study time with the pages, or alone", async () => {
+    const bodies = [];
+    api.onPost("/student_profile/lectures/a/progress").reply((config) => {
+      bodies.push(JSON.parse(config.data));
+      return [200, ok({ viewed_pages: [], viewed: 0, total: 65, percent: 0 })];
+    });
+    await recordReadingProgress("a", [1, 2], 10);
+    await recordReadingProgress("a", [], 45);
+    await recordReadingProgress("a", [3]);
+    expect(bodies).toEqual([{ pages: [1, 2], seconds: 10 }, { pages: [], seconds: 45 }, { pages: [3] }]);
+  });
+
   describe("keepalive progress (tab hidden or page closing)", () => {
     afterEach(() => vi.unstubAllGlobals());
 
@@ -112,6 +124,13 @@ describe("lectures service", () => {
       expect(url).toBe("/api/student_profile/lectures/a/progress");
       expect(init).toMatchObject({ method: "POST", keepalive: true, body: JSON.stringify({ pages: [7] }) });
       expect(init.headers.Authorization).toBe("Bearer test-token");
+    });
+
+    it("sends the study time with keepalive too", async () => {
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify(ok({ viewed_pages: [], viewed: 0, total: 65, percent: 0 })), { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      await recordReadingProgressKeepalive("a", [], 12);
+      expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ pages: [], seconds: 12 }));
     });
 
     it("rejects with the HTTP status when the request fails", async () => {

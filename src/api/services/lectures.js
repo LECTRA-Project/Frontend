@@ -118,15 +118,23 @@ export async function fetchLectureFile(id, { signal } = {}) {
 
 /*
   Reading progress: which pages (slides, cells) of a lecture the student has opened.
-  Both calls answer { viewed_pages, viewed, total, percent }. `pages` holds 1 to 200 page
+  Both calls answer { viewed_pages, viewed, total, percent }. `pages` holds up to 200 page
   numbers; pages the lecture doesn't have are ignored, and sending a page again is harmless.
+  `seconds`: the study time since the last save (the backend caps it); a save may carry
+  pages, seconds or both.
 */
+function progressBody(pages, seconds) {
+  const body = { pages: pages ?? [] };
+  if (seconds > 0) body.seconds = Math.round(seconds);
+  return body;
+}
+
 export async function getReadingProgress(id, { signal } = {}) {
   return unwrap(await get(`${BASE}/lectures/${id}/progress`, { signal }), t("Unable to load the reading progress."));
 }
 
-export async function recordReadingProgress(id, pages) {
-  return unwrap(await post(`${BASE}/lectures/${id}/progress`, { pages }), t("Unable to save the reading progress."));
+export async function recordReadingProgress(id, pages, seconds = 0) {
+  return unwrap(await post(`${BASE}/lectures/${id}/progress`, progressBody(pages, seconds)), t("Unable to save the reading progress."));
 }
 
 /*
@@ -134,7 +142,7 @@ export async function recordReadingProgress(id, pages) {
   page (axios can't ask for that, and sendBeacon can't send the Authorization header).
   No session refresh here: a rejected token just fails, and the caller tries again later.
 */
-export async function recordReadingProgressKeepalive(id, pages) {
+export async function recordReadingProgressKeepalive(id, pages, seconds = 0) {
   const token = getAuthToken();
   const response = await fetch(`${API_BASE_URL}${BASE}/lectures/${id}/progress`, {
     method: "POST",
@@ -144,7 +152,7 @@ export async function recordReadingProgressKeepalive(id, pages) {
       Accept: "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ pages }),
+    body: JSON.stringify(progressBody(pages, seconds)),
   });
   if (!response.ok) throw new ApiError({ message: t("Unable to save the reading progress."), status: response.status });
   return unwrap(await response.json(), t("Unable to save the reading progress."));
