@@ -46,7 +46,8 @@ export default function CreateAccountPage() {
           try {
             await login(credentials);
           } catch {
-            navigate("/");
+            // The account exists; only the automatic sign-in failed. Say so on the sign-in page.
+            navigate("/", { state: { accountCreated: true } });
           }
         }}
       >
@@ -82,7 +83,6 @@ export default function CreateAccountPage() {
           label="Password"
           name="password"
           type="password"
-          maxLength={14}
           placeholder="Create a password"
           autoComplete="new-password"
           required
@@ -92,7 +92,6 @@ export default function CreateAccountPage() {
           label="Confirm password"
           name="confirmPassword"
           type="password"
-          maxLength={14}
           placeholder="Repeat your password"
           autoComplete="new-password"
           required

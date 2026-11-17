@@ -40,7 +40,8 @@ export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
   - While the assistant answers, a bubble with animated dots shows where the answer will
     appear; a new answer is then typed out word by word (useTypewriter.js).
   - Every question has Copy (its text) and Edit, which sends the edited question again as
-    a new message (StudentMessage).
+    a new message (StudentMessage). A question that failed shows the error with "Try again"
+    (onRetry(error message)), which asks the same question again.
   - Every code block in an answer has a Copy button (just that code), and every answer has a
     Copy button under it (the whole answer as Markdown, with its sources). When the
     clipboard can't be used, a dialog shows the text selected for copying by hand.
@@ -86,6 +87,7 @@ export function ChatView({
   onLoadOlder = () => {},
   examLink = null,
   onResend = () => false,
+  onRetry = null,
   model = null,
 }) {
   const { t } = useI18n();
@@ -254,6 +256,7 @@ export function ChatView({
                 onGrow={followAnswer}
                 onSuggest={message.id === suggesting ? onSend : null}
                 onResend={onResend}
+                onRetry={onRetry}
                 canResend={!busy && available === true}
               />
             ))}
@@ -421,12 +424,26 @@ function StudentMessage({ message, onCopy, onResend, canResend }) {
   );
 }
 
-function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow, onSuggest, onResend, canResend }) {
+function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow, onSuggest, onResend, onRetry, canResend }) {
   const { t } = useI18n();
   if (message.role === "system") {
     return (
       <li className="chat-msg chat-msg--system" role="alert">
         {message.content}
+        {/* A failed question: ask it again in one click. */}
+        {message.retry && onRetry && (
+          <div>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm chat-msg__action"
+              disabled={!canResend}
+              onClick={() => onRetry(message)}
+            >
+              <Icon name="refresh" size={14} />
+              {t("Try again")}
+            </button>
+          </div>
+        )}
       </li>
     );
   }

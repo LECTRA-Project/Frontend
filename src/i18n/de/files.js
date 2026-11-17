@@ -31,6 +31,7 @@ export default {
   "Supported: {types}, up to 100 MB each.": "Unterstützt: {types}, jeweils bis zu 100 MB.",
   "Not added (unsupported type, empty or over 100 MB): {files}":
     "Nicht hinzugefügt (nicht unterstützter Typ, leer oder über 100 MB): {files}",
+  "Already in the list, skipped: {files}": "Bereits in der Liste, übersprungen: {files}",
   "Selected files": "Ausgewählte Dateien",
   "Remove {name}": "{name} entfernen",
   "Files are saved to your account.": "Dateien werden in deinem Konto gespeichert.",
@@ -82,6 +83,7 @@ export default {
   "Open this notebook in the runnable notebook": "Dieses Notebook im ausführbaren Notebook öffnen",
   "Run in notebook": "Im Notebook ausführen",
   "Slide {number}": "Folie {number}",
+  "Slide preview not available — showing slide text.": "Folienvorschau nicht verfügbar – der Folientext wird angezeigt.",
   "Cell {number}": "Zelle {number}",
   "Section {number}": "Abschnitt {number}",
   "Previous slide": "Vorherige Folie",

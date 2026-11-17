@@ -8,6 +8,8 @@ import Button from "../../components/ui/Button.jsx";
 import FormikTextField from "../../components/ui/FormikTextField.jsx";
 import PasswordRequirements from "../../components/ui/PasswordRequirements.jsx";
 import TransientStatus from "../../components/ui/TransientStatus.jsx";
+import ConfirmDialog from "../../components/ui/ConfirmDialog.jsx";
+import { useI18n } from "../../i18n/i18n.js";
 import { getInitials, useAuth } from "../auth/authContext.js";
 import { profileSchema } from "../auth/validationSchemas.js";
 import "./profile.css";
@@ -15,7 +17,15 @@ import "./profile.css";
 export default function MyProfilePage() {
   const navigate = useNavigate();
   const { user, updateUser, logout } = useAuth();
+  const { t } = useI18n();
   const [saved, setSaved] = useState("");
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+
+  // Editing a field clears the last save message and any earlier server error.
+  const clearMessages = (setStatus) => () => {
+    setSaved("");
+    setStatus(null);
+  };
 
   async function saveProfile(values, { resetForm, setStatus, setFieldError }) {
     setSaved("");
@@ -28,7 +38,7 @@ export default function MyProfilePage() {
     if (email !== user.email) {
       // The email is where reset links go, so the backend asks for the password to change it.
       if (!values.emailPassword) {
-        setFieldError("emailPassword", "Enter your current password to change your email.");
+        setFieldError("emailPassword", t("Enter your current password to change your email."));
         return;
       }
       profileChanges.email = email;
@@ -37,7 +47,7 @@ export default function MyProfilePage() {
     const changingPassword = Boolean(values.currentPassword || values.newPassword || values.confirmPassword);
 
     if (Object.keys(profileChanges).length === 0 && !changingPassword) {
-      setSaved("No changes to save.");
+      setSaved(t("No changes to save."));
       return;
     }
 
@@ -71,7 +81,7 @@ export default function MyProfilePage() {
         },
       });
       setSaved(
-        "Profile updated successfully."
+        t("Profile updated successfully.")
       );
     } catch (error) {
       if (profileWasUpdated) {
@@ -85,7 +95,7 @@ export default function MyProfilePage() {
             confirmPassword: "",
           },
         });
-        setStatus(`Profile updated, but the password change failed: ${error.message}`);
+        setStatus(t("Profile updated, but the password change failed: {error}", { error: error.message }));
       } else {
         setStatus(error.message);
       }
@@ -93,7 +103,7 @@ export default function MyProfilePage() {
   }
 
   return (
-    <PageShell title="My profile" subtitle="Update your name, email and password.">
+    <PageShell title={t("My profile")} subtitle={t("Update your name, email and password.")}>
       <Formik
         initialValues={{
           fullName: user?.full_name ?? "",
@@ -106,14 +116,14 @@ export default function MyProfilePage() {
         validationSchema={profileSchema}
         onSubmit={saveProfile}
       >
-        {({ dirty, isSubmitting, status, values }) => (
+        {({ dirty, isSubmitting, status, setStatus, values }) => (
           <Form noValidate>
             <div className="profile-grid">
               <section className="card" aria-labelledby="details-title">
                 <h2 id="details-title" className="card__title">
-                  Profile details
+                  {t("Profile details")}
                 </h2>
-                <p className="card__subtitle">How you appear in LECTRA.</p>
+                <p className="card__subtitle">{t("How you appear in LECTRA.")}</p>
 
                 <div className="profile-identity">
                   <span className="avatar avatar--lg">{getInitials(user)}</span>
@@ -125,24 +135,24 @@ export default function MyProfilePage() {
 
                 <div className="card__fields">
                   <FormikTextField
-                    label="Full name"
+                    label={t("Full name")}
                     name="fullName"
-                    onChange={() => setSaved("")}
+                    onChange={clearMessages(setStatus)}
                   />
                   <FormikTextField
-                    label="Email"
+                    label={t("Email")}
                     name="email"
                     type="email"
-                    onChange={() => setSaved("")}
+                    onChange={clearMessages(setStatus)}
                   />
                   {values.email.trim() !== (user?.email ?? "") && (
                     <FormikTextField
-                      label="Password to confirm the new email"
+                      label={t("Password to confirm the new email")}
                       name="emailPassword"
                       type="password"
-                      placeholder="Enter your current password"
+                      placeholder={t("Enter your current password")}
                       autoComplete="current-password"
-                      onChange={() => setSaved("")}
+                      onChange={clearMessages(setStatus)}
                     />
                   )}
                 </div>
@@ -150,37 +160,35 @@ export default function MyProfilePage() {
 
               <section className="card" aria-labelledby="password-title">
                 <h2 id="password-title" className="card__title">
-                  Change password
+                  {t("Change password")}
                 </h2>
-                <p className="card__subtitle">Choose a strong new password.</p>
+                <p className="card__subtitle">{t("Choose a strong new password.")}</p>
 
                 <div className="card__fields card__fields--tight">
                   <FormikTextField
-                    label="Current password"
+                    label={t("Current password")}
                     name="currentPassword"
                     type="password"
-                    placeholder="Enter current password"
+                    placeholder={t("Enter current password")}
                     autoComplete="current-password"
-                    onChange={() => setSaved("")}
+                    onChange={clearMessages(setStatus)}
                   />
                   <PasswordRequirements name="newPassword" />
                   <FormikTextField
-                    label="New password"
+                    label={t("New password")}
                     name="newPassword"
                     type="password"
-                    maxLength={14}
-                    placeholder="Enter new password"
+                    placeholder={t("Enter new password")}
                     autoComplete="new-password"
-                    onChange={() => setSaved("")}
+                    onChange={clearMessages(setStatus)}
                   />
                   <FormikTextField
-                    label="Confirm new password"
+                    label={t("Confirm new password")}
                     name="confirmPassword"
                     type="password"
-                    maxLength={14}
-                    placeholder="Repeat new password"
+                    placeholder={t("Repeat new password")}
                     autoComplete="new-password"
-                    onChange={() => setSaved("")}
+                    onChange={clearMessages(setStatus)}
                   />
                 </div>
               </section>
@@ -195,11 +203,25 @@ export default function MyProfilePage() {
                   </p>
                 </TransientStatus>
               )}
-              <Button onClick={() => navigate("/workspace")}>Cancel</Button>
+              <Button onClick={() => (dirty ? setConfirmingCancel(true) : navigate("/workspace"))}>
+                {t("Cancel")}
+              </Button>
               <Button type="submit" variant="primary" disabled={isSubmitting || !dirty}>
-                Save changes
+                {t("Save changes")}
               </Button>
             </div>
+
+            {confirmingCancel && (
+              <ConfirmDialog
+                title={t("Discard unsaved changes?")}
+                confirmLabel={t("Discard changes")}
+                danger
+                onConfirm={() => navigate("/workspace")}
+                onCancel={() => setConfirmingCancel(false)}
+              >
+                <p>{t("The changes you made to your profile will be lost.")}</p>
+              </ConfirmDialog>
+            )}
           </Form>
         )}
       </Formik>

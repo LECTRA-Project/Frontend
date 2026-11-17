@@ -29,7 +29,7 @@ const ZOOM_MAX = 200;
   PowerPoint can't be drawn by the browser. Slides are shown with Microsoft's Office Online
   viewer, which loads the file's public S3 URL on Microsoft's side — so no CORS rule on the
   bucket is needed. The file must stay publicly readable for this to work; without a public
-  https URL the extracted slide text is shown.
+  https URL the extracted slide text is shown. A cited slide is opened with wdSlideIndex=<slide>.
 */
 export const OFFICE_VIEWER = "https://view.officeapps.live.com/op/embed.aspx?src=";
 const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?? "") || /\.pptx?$/i.test(lecture.original_filename ?? "");
@@ -37,8 +37,8 @@ const isSlides = (lecture) => /powerpoint|presentation/.test(lecture.file_type ?
 /*
   Viewer for slides, notebooks and images beside the chat (PDFs use PdfViewerPanel).
   PowerPoint slides are shown as real slides in the Office Online viewer (see OFFICE_VIEWER),
-  except when opened from a source in an answer: then the slide text is shown with the cited
-  slide highlighted, because the Office viewer can't open at a given slide.
+  also when opened from a source in an answer: then it starts at the cited slide. Only without
+  a public file URL is the slide text shown instead (with a notice).
 
   Shows the text Lectra extracted from the file, one block per slide or notebook cell,
   in the same order as the original. The toolbar steps through the blocks and zooms.
@@ -92,7 +92,10 @@ export default function LectureContentPanel({
   const isImage = basic
     ? !/(pdf|powerpoint|presentation|ipynb|markdown)/.test(lecture.file_type)
     : materialType(lecture.file_type) === "image" || lecture.source_type == null;
-  const officeSlides = isSlides(lecture) && /^https:\/\//.test(lecture.s3_url ?? "") && !(cited && focus);
+  const slides = isSlides(lecture);
+  const officeSlides = slides && /^https:\/\//.test(lecture.s3_url ?? "");
+  // A cited slide: the Office viewer starts at it.
+  const startSlide = officeSlides && focus?.sourceType === "slide" ? focus.sourceNumber : null;
 
   useEffect(() => {
     if (status !== "completed" || officeSlides || isImage) return undefined;
@@ -160,7 +163,10 @@ export default function LectureContentPanel({
   }
 
   // The toolbar follows manual scrolling: the first block still in view is the current one.
+  // While the cited block is shown (scrolled to on opening), it stays the current one: the last
+  // slide can't reach the top, so the first block in view would be the slide before it.
   function handleScroll() {
+    if (citedActive && focusIndex >= 0) return;
     cancelAnimationFrame(scrollFrame.current);
     scrollFrame.current = requestAnimationFrame(() => {
       const body = bodyRef.current;
@@ -251,13 +257,22 @@ export default function LectureContentPanel({
         </div>
       )}
 
-      {citedActive && focusIndex >= 0 && (
+      {citedActive && (focusIndex >= 0 || startSlide !== null) && (
         <ViewerBanner>
           {citedBannerText(citedIn, sourcePlace(focus.sourceType, focus.sourceNumber))}
         </ViewerBanner>
       )}
 
-      <div className="viewer__content lecture-view__body" ref={bodyRef} onScroll={handleScroll} style={{ "--viewer-zoom": zoom / 100 }}>
+      <div
+        className="viewer__content lecture-view__body"
+        ref={bodyRef}
+        onScroll={handleScroll}
+        // The student scrolls on their own: the toolbar follows the scrolling again.
+        onWheel={() => setCitedActive(false)}
+        onTouchMove={() => setCitedActive(false)}
+        onKeyDown={() => setCitedActive(false)}
+        style={{ "--viewer-zoom": zoom / 100 }}
+      >
         <div className="viewer__zoomed">
           {isImage && (basic ? lecture.s3_url : imageUrl) && (
             <img className="lecture-view__image" src={basic ? lecture.s3_url : imageUrl} alt={lecture.title} />
@@ -266,7 +281,7 @@ export default function LectureContentPanel({
             <iframe
               className="lecture-view__slides"
               title={t("Slides: {title}", { title: lecture.title })}
-              src={`${OFFICE_VIEWER}${encodeURIComponent(lecture.s3_url)}`}
+              src={`${OFFICE_VIEWER}${encodeURIComponent(lecture.s3_url)}${startSlide !== null ? `&wdSlideIndex=${startSlide}` : ""}`}
               allowFullScreen
             />
           )}
@@ -275,6 +290,12 @@ export default function LectureContentPanel({
               {t(
                 "This file can’t be previewed in the browser — use Download to open it. Reading slides and notebook text for the study assistant needs the AI-enabled backend, which this server doesn’t run yet."
               )}
+            </p>
+          )}
+
+          {slides && !officeSlides && !basic && status === "completed" && (
+            <p className="lecture-view__notice" role="status">
+              {t("Slide preview not available — showing slide text.")}
             </p>
           )}
 

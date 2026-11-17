@@ -11,6 +11,7 @@ export default {
   "{count} files uploaded.": "{count} Dateien hochgeladen.",
   "1 material added to this chat.": "1 Material zu diesem Chat hinzugefügt.",
   "{count} materials added to this chat.": "{count} Materialien zu diesem Chat hinzugefügt.",
+  "{uploaded} uploaded, {failed} failed.": "{uploaded} hochgeladen, {failed} fehlgeschlagen.",
   "The upload could not be added to this chat.": "Der Upload konnte nicht zu diesem Chat hinzugefügt werden.",
   "{name} added to this chat.": "{name} zu diesem Chat hinzugefügt.",
   "{name} removed from this chat.": "{name} aus diesem Chat entfernt.",

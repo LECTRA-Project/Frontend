@@ -910,3 +910,60 @@ describe("chat-first workspace: switching the notebook and the viewer", () => {
     expect(button).toHaveAttribute("title", "Not enough room to show the notebook and the material viewer side by side");
   });
 });
+
+/* A source chip on a PowerPoint slide opens the real slides (Office viewer) at that slide. */
+describe("cited PowerPoint slides", () => {
+  const DECK = {
+    ...lectureFixture("l-deck", "RQ1 Build vs Buy", {
+      fileType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      count: 14,
+    }),
+    s3_url: "https://bucket.s3.amazonaws.com/rq1.pptx",
+  };
+  const slide = (number) => ({ lecture_id: DECK.id, lecture_title: DECK.title, page_number: number, source_type: "slide", location: `Slide ${number}` });
+
+  beforeEach(() => {
+    installChatBackend(api, {
+      lectures: [KI02, DECK],
+      sessions: [{ id: "s-deck", title: "explain limitations", lectureIds: [KI02.id, DECK.id], updated_at: daysAgo(0) }],
+      messages: {
+        "s-deck": [
+          message("d1", "s-deck", "user", "Explain the limitations"),
+          message("d2", "s-deck", "assistant", "Compute cost never decides the outcome.", [page(KI02, 4), slide(14), slide(5)]),
+        ],
+      },
+    });
+  });
+
+  const officeSrc = (view) => view.querySelector("iframe.lecture-view__slides")?.getAttribute("src") ?? "";
+
+  it("opens the rendered slides at the cited slide, and PDF pages still open in the PDF viewer", async () => {
+    const user = userEvent.setup();
+    renderApp("/workspace?chat=s-deck");
+    expect(await screen.findByText("Compute cost never decides the outcome.")).toBeInTheDocument();
+
+    for (let round = 0; round < 2; round += 1) {
+      await user.click(screen.getByRole("button", { name: /^Slide 14/ }));
+      let deck = await screen.findByRole("region", { name: "Lecture: RQ1 Build vs Buy" });
+      expect(officeSrc(deck)).toMatch(/^https:\/\/view\.officeapps\.live\.com\/op\/embed\.aspx\?src=.+&wdSlideIndex=14$/);
+      expect(within(deck).getByText("Opened from a source in the answer: slide 14")).toBeInTheDocument();
+      expect(within(deck).queryByText(/Slide preview not available/)).not.toBeInTheDocument();
+      expect(deck.querySelector(".source-block")).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: /^Slide 5/ }));
+      deck = await screen.findByRole("region", { name: "Lecture: RQ1 Build vs Buy" });
+      await waitFor(() => expect(officeSrc(deck)).toMatch(/&wdSlideIndex=5$/));
+
+      await user.click(screen.getByRole("button", { name: /^p\. 4/ }));
+      const pdf = await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" });
+      expect(within(pdf).getByLabelText("Page number")).toHaveValue("4");
+      expect(within(pdf).getByText("Opened from a source in the answer: page 4")).toBeInTheDocument();
+    }
+
+    // Opened from the menu: the slides from the start, without the banner.
+    await user.click(within(menu()).getByRole("button", { name: "Open RQ1 Build vs Buy beside the chat" }));
+    const deck = await screen.findByRole("region", { name: "Lecture: RQ1 Build vs Buy" });
+    await waitFor(() => expect(officeSrc(deck)).not.toMatch(/wdSlideIndex/));
+    expect(within(deck).queryByText(/Opened from a source/)).not.toBeInTheDocument();
+  });
+});
