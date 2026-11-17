@@ -269,6 +269,14 @@ npm run lint
 npm run build
 ```
 
+**On every pull request** GitHub Actions runs these three checks (`.github/workflows/frontend-checks.yml`):
+`npm ci`, `npm run lint`, `npx vitest run` and `npm run build`, on Node 22, without a
+backend. They also run on every push to `main`. The result shows in the pull request's
+checks next to the Vercel preview; a red check means one of them failed (open "Details"
+for the log), and the pull request should be fixed before it is merged. The browser tests
+(`npm run e2e`, below) need a local backend and are not part of this check. The backend
+repo has its own check (`pytest`) on its pull requests.
+
 Vitest uses jsdom and mocked HTTP requests for normal tests. Test files are under `src/` and use `src/test/helpers.jsx` for API mocks and route rendering. jsdom has no Web Workers or WebAssembly, so `npm test` covers the notebook's kernel protocol (with a fake worker), reducer, .ipynb conversion, storage and Markdown sanitising; actually running Python must be checked in a real browser. A live auth test is optional:
 
 ```bash
