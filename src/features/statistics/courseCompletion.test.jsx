@@ -151,15 +151,52 @@ describe("course completion on the Statistics page", () => {
     expect(api.history.get.filter((request) => request.url === "/stats/completion")).toHaveLength(3);
   });
 
-  it("tells a new student how to start", async () => {
+  it("tells a new student where their lectures will show, without a second upload button", async () => {
     api.onGet("/stats/completion").reply(200, ok({ lectures: [], overall_percent: 0, weights: { reading: 70, exam: 30 } }));
     renderApp("/statistics");
 
     const section = await screen.findByRole("region", { name: "Course completion" });
-    expect(await within(section).findByText("Upload a lecture and read it to see your progress.")).toBeInTheDocument();
-    expect(within(section).getByRole("link", { name: "Upload a lecture" })).toHaveAttribute("href", "/workspace");
+    expect(await within(section).findByText("Your lectures will show here")).toBeInTheDocument();
+    expect(within(section).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(section).queryByRole("button", { name: /upload/i })).not.toBeInTheDocument();
     expect(within(section).queryByTestId("completion-overall")).not.toBeInTheDocument();
     expect(within(section).queryByRole("list")).not.toBeInTheDocument();
+  });
+
+  it("offers a new student one upload button on the whole page", async () => {
+    api.onGet("/stats/overview").reply(200, ok({
+      lectures: 0, pages_read: 0, pages_total: 0, chats: 0, questions_asked: 0, exams_taken: 0,
+      questions_answered: 0, average_score_percent: null, correct_percent: null, study_days: 0,
+      current_streak: 0, last_activity_at: null,
+    }));
+    api.onGet("/stats/completion").reply(200, ok({ lectures: [], overall_percent: 0, weights: { reading: 70, exam: 30 } }));
+    renderApp("/statistics");
+
+    await screen.findByText("Your lectures will show here");
+    await screen.findByText("Your numbers will show here");
+    const uploads = screen.getAllByRole("link", { name: "Upload a lecture" });
+    expect(uploads).toHaveLength(1);
+    expect(within(screen.getByRole("region", { name: "Overall" })).getByRole("link", { name: "Upload a lecture" })).toBe(uploads[0]);
+  });
+
+  it("says when a project has no materials yet", async () => {
+    api.onGet("/stats/completion").reply((config) => [200, ok({
+      lectures: [], overall_percent: 0, weights: { reading: 70, exam: 30 },
+      project: config.params?.project_id ? { project_id: "p-empty", name: "Empty" } : null,
+      projects: [{ project_id: "p-empty", name: "Empty", lectures: 0, overall_percent: 0 }],
+    })]);
+    renderApp("/statistics?project=p-empty");
+    const section = await screen.findByRole("region", { name: "Course completion" });
+    expect(await within(section).findByText("No materials in this project yet")).toBeInTheDocument();
+    expect(within(section).getByText("Add materials to the project, then read them to see how far you are.")).toBeInTheDocument();
+  });
+
+  it("words the empty state in German", async () => {
+    localStorage.setItem(`lectra:language:v1:${TEST_USER.id}`, "de");
+    api.onGet("/stats/completion").reply(200, ok({ lectures: [], overall_percent: 0, weights: { reading: 70, exam: 30 } }));
+    renderApp("/statistics");
+    const section = await screen.findByRole("region", { name: "Kursfortschritt" });
+    expect(await within(section).findByText("Deine Vorlesungen erscheinen hier")).toBeInTheDocument();
   });
 
   it("is in German when the student chose German", async () => {
