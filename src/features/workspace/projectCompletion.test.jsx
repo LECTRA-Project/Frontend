@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { makeToken, mockApi, ok, renderApp, saveToken } from "../../test/helpers.jsx";
@@ -41,7 +41,7 @@ async function projectButtons() {
 }
 
 describe("project completion in the menu", () => {
-  it("shows each project's completion beside it", async () => {
+  it("shows no completion ring beside the projects", async () => {
     install([200, ok({
       lectures: [], overall_percent: 42, weights: { reading: 70, exam: 30 }, project: null,
       projects: [
@@ -51,9 +51,10 @@ describe("project completion in the menu", () => {
     })]);
     renderApp("/workspace");
     const { ml, fresh } = await projectButtons();
-    await waitFor(() => expect(ml).toHaveAccessibleDescription("42% complete"));
-    expect(within(ml).getByRole("img", { name: "42% complete" })).toBeInTheDocument();
-    // No materials: nothing to complete, so no ring.
+    // The menu's project rows show no completion (the Statistics page has it).
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(ml).not.toHaveAttribute("aria-describedby");
+    expect(within(ml).queryByRole("img")).not.toBeInTheDocument();
     expect(fresh).not.toHaveAttribute("aria-describedby");
     expect(within(fresh).queryByRole("img")).not.toBeInTheDocument();
   });

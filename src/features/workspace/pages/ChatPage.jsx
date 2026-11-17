@@ -2,9 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Link, useOutletContext } from "react-router-dom";
 
 import Icon from "../../../components/ui/Icon.jsx";
-import IconButton from "../../../components/ui/IconButton.jsx";
-import Menu from "../../../components/ui/Menu.jsx";
-import ConfirmDialog from "../../../components/ui/ConfirmDialog.jsx";
 import Modal from "../../../components/ui/Modal.jsx";
 import ChatComposer from "../components/ChatComposer.jsx";
 import { renderAnswerMarkdown, renderMarkdown } from "../../../services/notebook/markdown.js";
@@ -50,8 +47,10 @@ export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
   - The latest answer from the materials ends with the assistant's suggestion of the next
     step ("Shall I explain the next section …?") and a "Yes, please" button that asks for it.
   - A chat in a project shows the project's name in the bar (it opens the project page). Its
-    materials are the project's. ⋯ → "Move to project…" moves a chat into a project (or to
-    another one); "Remove from project" makes it a normal chat with a copy of the materials.
+    materials are the project's. Renaming, moving and deleting a chat are in its ⋯ in the menu
+    (ChatSidebar), so the bar has no ⋯ of its own.
+  - The materials chip in the composer opens the chat's material in the viewer (with several,
+    it lists them to choose from).
 */
 export default function ChatPage() {
   const { chatView } = useOutletContext();
@@ -69,12 +68,8 @@ export function ChatView({
   lectureTitle,
   onOpenSource,
   onUploadClick,
-  onOpenMenu,
-  onRename,
-  onDelete,
+  onOpenMaterial = () => {},
   onSend,
-  onMoveToProject = null,
-  onRemoveFromProject = null,
   onOpenProject = () => {},
   note,
   cellContext,
@@ -92,9 +87,6 @@ export function ChatView({
 }) {
   const { t } = useI18n();
   const [nativeDragOver, setNativeDragOver] = useState(false);
-  const [renaming, setRenaming] = useState(null); // the title being typed
-  const [deleting, setDeleting] = useState(false);
-  const [actionError, setActionError] = useState(null);
   const [copyFallback, setCopyFallback] = useState(null); // text to copy by hand
   const [copyNote, setCopyNote] = useState({ text: "", seq: 0 }); // for screen readers
   const scrollRef = useRef(null);
@@ -160,24 +152,6 @@ export function ChatView({
     if (item) onAddCell(item);
   }
 
-  async function submitRename(event) {
-    event.preventDefault();
-    const value = renaming.trim();
-    if (!value) return;
-    // Unchanged translated default name: keep the backend's "New chat" (it names the chat after the first question).
-    if (session?.title === "New chat" && value === title && value !== session.title) {
-      setRenaming(null);
-      return;
-    }
-    try {
-      await onRename(value);
-      setRenaming(null);
-      setActionError(null);
-    } catch (err) {
-      setActionError(err.message);
-    }
-  }
-
   // Copies text; on failure shows it in a dialog for copying by hand. Resolves to success.
   // `done` is announced to screen readers once copied ("Answer copied.").
   async function copy(text, done) {
@@ -185,25 +159,6 @@ export function ChatView({
     if (copied) setCopyNote((note) => ({ text: done, seq: note.seq + 1 }));
     else setCopyFallback(text);
     return copied;
-  }
-
-  async function removeFromProject() {
-    try {
-      await onRemoveFromProject();
-      setActionError(null);
-    } catch (err) {
-      setActionError(err.message);
-    }
-  }
-
-  async function confirmDelete() {
-    setDeleting(false);
-    try {
-      await onDelete();
-      setActionError(null);
-    } catch (err) {
-      setActionError(err.message);
-    }
   }
 
   const scopeLabel = count === 1 ? materials[0].name : t("{count} materials", { count });
@@ -225,28 +180,10 @@ export function ChatView({
       onDrop={handleDrop}
     >
       <div className="chat__bar">
-        {renaming !== null ? (
-          <form className="chat__rename" onSubmit={submitRename}>
-            <label className="visually-hidden" htmlFor="chat-rename">
-              {t("Chat title")}
-            </label>
-            <input
-              id="chat-rename"
-              value={renaming}
-              maxLength={255}
-              autoFocus
-              onChange={(event) => setRenaming(event.target.value)}
-              onKeyDown={(event) => event.key === "Escape" && setRenaming(null)}
-            />
-            <IconButton icon="check" label={t("Save title")} type="submit" disabled={!renaming.trim()} />
-            <IconButton icon="close" label={t("Cancel renaming")} onClick={() => setRenaming(null)} />
-          </form>
-        ) : (
-          <h1 id="chat-title" className="chat__title" title={title}>
-            {title}
-          </h1>
-        )}
-        {examLink && renaming === null && (
+        <h1 id="chat-title" className="chat__title" title={title}>
+          {title}
+        </h1>
+        {examLink && (
           <Link to={examLink} className="btn btn--secondary btn--sm chat__exam-link" aria-label={t("Back to exam results")}>
             <Icon name="arrowLeft" size={14} />
             <span className="chat__exam-link-long">{t("Back to exam results")}</span>
@@ -255,7 +192,7 @@ export function ChatView({
             </span>
           </Link>
         )}
-        {session?.project && renaming === null && (
+        {session?.project && (
           <button
             type="button"
             className="project-tag project-tag--button chat__project"
@@ -267,25 +204,7 @@ export function ChatView({
             <span className="project-tag__name">{session.project.name}</span>
           </button>
         )}
-        {session && renaming === null && (
-          <Menu
-            label={t("Chat actions")}
-            items={[
-              { label: t("Rename chat"), icon: "edit", onSelect: () => setRenaming(title) },
-              ...(onMoveToProject ? [{ label: t("Move to project…"), icon: "folder", disabled: busy, onSelect: onMoveToProject }] : []),
-              ...(session.project && onRemoveFromProject
-                ? [{ label: t("Remove from project"), icon: "arrowLeft", disabled: busy, onSelect: removeFromProject }]
-                : []),
-              { label: t("Delete chat"), icon: "trash", danger: true, onSelect: () => setDeleting(true) },
-            ]}
-          />
-        )}
       </div>
-      {actionError && (
-        <p className="chat__error" role="alert">
-          {actionError}
-        </p>
-      )}
 
       <div className="chat__scroll" ref={scrollRef} onScroll={handleScroll}>
         {loading ? (
@@ -358,10 +277,9 @@ export function ChatView({
           attachDisabled={available === false}
           onRemoveCell={onRemoveCell}
           disabled={busy || available !== true}
-          scope={count > 0 ? { label: scopeLabel, onClick: onOpenMenu } : null}
+          scope={count > 0 ? { label: scopeLabel, materials, onOpen: onOpenMaterial } : null}
           model={model}
         />
-        <p className="chat__disclaimer">{t("Answers cite this chat’s materials. General answers are marked “Not from your materials”.")}</p>
       </div>
 
       <p className="visually-hidden" role="status">
@@ -373,11 +291,6 @@ export function ChatView({
 
       {copyFallback !== null && <CopyFallbackDialog text={copyFallback} onClose={() => setCopyFallback(null)} />}
 
-      {deleting && (
-        <ConfirmDialog title={t("Delete chat?")} confirmLabel={t("Delete")} danger onConfirm={confirmDelete} onCancel={() => setDeleting(false)}>
-          {t("“{title}” and all its messages will be deleted. Its materials are kept.", { title })}
-        </ConfirmDialog>
-      )}
     </section>
   );
 }

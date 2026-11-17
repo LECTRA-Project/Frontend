@@ -24,7 +24,7 @@ import { usePythonKernel } from "../notebook/usePythonKernel.js";
 import { fetchLectureFile } from "../../api/services/lectures.js";
 import { getChatSession, MAX_MESSAGE_LENGTH } from "../../api/services/chat.js";
 import { addProjectLecture, deleteProject, getProject, renameProject } from "../../api/services/projects.js";
-import { MoveToProjectDialog, ProjectNameDialog } from "./components/ProjectDialogs.jsx";
+import { ChatNameDialog, MoveToProjectDialog, ProjectNameDialog } from "./components/ProjectDialogs.jsx";
 import { useProjects } from "./useProjects.js";
 import { cellContextLabel, displayChatTitle, isSameCellContext, withNotebookContext } from "../../services/notebook/cellContext.js";
 import { useLectureChat } from "./useLectureChat.js";
@@ -201,6 +201,7 @@ export default function WorkspaceLayout() {
   const [tooLong, setTooLong] = useState(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [moving, setMoving] = useState(null); // a chat, in the "Move to project" dialog
+  const [renamingChat, setRenamingChat] = useState(null); // a chat, in the "Rename chat" dialog
   // Bumped when a project's materials or name changed here, so the project pages read it again.
   const [projectsVersion, setProjectsVersion] = useState(0);
   const [examProject, setExamProject] = useState(null); // the project of /workspace/exam?project=
@@ -728,10 +729,22 @@ export default function WorkspaceLayout() {
 
   async function takeOutOfProject(target) {
     const name = target.project?.name ?? "";
-    await chat.removeFromProject(target.id);
+    try {
+      await chat.removeFromProject(target.id);
+    } catch (err) {
+      setNotice(err.message || t("The chat could not be removed from the project."));
+      return;
+    }
     projects.reload();
     setProjectsVersion((value) => value + 1);
     setNotice(t("Chat removed from {name}. It keeps a copy of the materials.", { name }));
+  }
+
+  // A chat's ⋯ → Rename (in the menu or on the project page).
+  async function renameChat(target, title) {
+    await chat.rename(target.id, title);
+    setRenamingChat(null);
+    if (target.project) setProjectsVersion((value) => value + 1); // the project page lists its chats
   }
 
   // The Exam view opened from a project page preselects the project's materials.
@@ -826,23 +839,11 @@ export default function WorkspaceLayout() {
     lectureTitle: (id) => findLecture(id)?.title,
     onOpenSource: (chip) => openSource(chip),
     onUploadClick: () => setUploadTarget("chat"),
-    // The scope chip: show the chat's materials (opening the menu if needed).
-    onOpenMenu: () => {
-      setSidebarOpen(true);
-      requestAnimationFrame(() => document.getElementById("cf-materials")?.focus());
-    },
-    onRename: (title) => chat.rename(session.id, title),
-    // A deleted chat leaves an empty new chat (its materials are kept in the library).
-    onDelete: async () => {
-      await chat.remove(session.id);
-      setViewer(null);
-      navigate("/workspace", { replace: true });
-    },
+    // The materials chip in the composer: opens that material in the viewer.
+    onOpenMaterial: openMaterial,
     onSend: handleSend,
-    // Projects: the tag in the bar opens the project; ⋯ moves the chat in or out.
+    // Projects: the tag in the bar opens the project (moving a chat is in its ⋯ in the menu).
     onOpenProject: openProject,
-    onMoveToProject: chatAvailable === true && session ? () => setMoving(session) : null,
-    onRemoveFromProject: () => takeOutOfProject(session),
     onResend: handleResend,
     model: chatModel,
     olderMessages: chat.olderMessages,
@@ -910,6 +911,11 @@ export default function WorkspaceLayout() {
     onOpenProject: openProject,
     onNewProject: () => setNewProjectOpen(true),
     onOpenChat: openChat,
+    // A chat's ⋯ on the project page (the same actions as in the menu).
+    onRenameChat: chatAvailable === true ? setRenamingChat : null,
+    onMoveChat: chatAvailable === true ? setMoving : null,
+    onRemoveChatFromProject: chatAvailable === true ? takeOutOfProject : null,
+    onRemoveChat: removeChat,
     onStartChat: startProjectChat,
     onRename: renameProjectTo,
     onDelete: removeProject,
@@ -1126,6 +1132,8 @@ export default function WorkspaceLayout() {
           onRemoveChat={removeChat}
           onRemoveProject={chatAvailable === true ? removeProject : null}
           onMoveChat={chatAvailable === true ? setMoving : null}
+          onRenameChat={chatAvailable === true ? setRenamingChat : null}
+          onRemoveChatFromProject={chatAvailable === true ? takeOutOfProject : null}
           available={chatAvailable !== false}
           // A server without projects (an older backend) shows no Projects section.
           projects={chatAvailable === true && !projects.error && !projects.loading ? projects : null}
@@ -1201,6 +1209,9 @@ export default function WorkspaceLayout() {
           onCreate={(name) => projects.create(name)}
           onCancel={() => setMoving(null)}
         />
+      )}
+      {renamingChat && (
+        <ChatNameDialog session={renamingChat} onSave={(title) => renameChat(renamingChat, title)} onCancel={() => setRenamingChat(null)} />
       )}
 
       {uploadTarget && (
