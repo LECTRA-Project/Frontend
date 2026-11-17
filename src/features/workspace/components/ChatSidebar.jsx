@@ -320,6 +320,7 @@ export default function ChatSidebar({
                     // Its chats among those loaded (newest first, as in the Chats list).
                     const chats = sessions.filter((session) => session.project?.id === project.id);
                     const total = Math.max(chats.length, project.chat_count ?? 0);
+                    const ringId = typeof project.completion_percent === "number" ? `cf-project-ring-${project.id}` : undefined;
                     return (
                       <li key={project.id} className="cf-project-item">
                         <div className={`cf-project-row ${current ? "cf-project-row--current" : ""}`}>
@@ -338,10 +339,13 @@ export default function ChatSidebar({
                             className={`cf-project ${current ? "cf-project--current" : ""}`}
                             aria-current={current ? "page" : undefined}
                             title={project.name}
+                            aria-label={project.name}
+                            aria-describedby={ringId}
                             onClick={() => onOpenProject(project.id)}
                           >
                             <Icon name="folder" size={16} />
                             <span className="cf-project__name">{project.name}</span>
+                            {ringId && <CompletionRing id={ringId} percent={project.completion_percent} className="cf-project__ring" />}
                           </button>
                           {onNewProjectChat && (
                             <IconButton

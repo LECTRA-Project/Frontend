@@ -131,4 +131,25 @@ describe("statistics service", () => {
     api.onGet("/stats/exams").replyOnce(200, { status: false, message: "", data: null });
     await expect(getExamStats()).rejects.toMatchObject({ constructor: ApiError, message: "Unable to load your exam performance." });
   });
+
+  it("asks for one project's numbers with project_id, and for everything without", async () => {
+    const seen = [];
+    for (const path of ["/stats/completion", "/stats/overview", "/stats/exams"]) {
+      api.onGet(path).reply((config) => {
+        seen.push([path, config.params ?? {}]);
+        return [200, ok(path === "/stats/completion" ? COMPLETION : path === "/stats/overview" ? OVERVIEW : {})];
+      });
+    }
+    await getCompletion({ projectId: "p-ml" });
+    await getOverview({ projectId: "p-ml" });
+    await getExamStats({ projectId: "p-ml", from: "2026-11-01" });
+    await getOverview();
+    expect(seen).toEqual([
+      ["/stats/completion", { project_id: "p-ml" }],
+      ["/stats/overview", { project_id: "p-ml" }],
+      ["/stats/exams", { project_id: "p-ml", from: "2026-11-01" }],
+      ["/stats/overview", {}],
+    ]);
+  });
 });
+

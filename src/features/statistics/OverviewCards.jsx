@@ -166,9 +166,10 @@ async function loadOverview(options) {
   return { overview, loadedAt: new Date() };
 }
 
-export default function OverviewCards() {
+/* `projectId`: only that project's numbers (render with key={projectId} to load them again). */
+export default function OverviewCards({ projectId = null }) {
   useI18n(); // re-render in a new interface language
-  const { data: loaded, error, loading, refetch } = useApi(loadOverview, { immediate: true });
+  const { data: loaded, error, loading, refetch } = useApi((options) => loadOverview({ ...options, projectId }), { immediate: true });
   const data = loaded?.overview;
 
   let body;

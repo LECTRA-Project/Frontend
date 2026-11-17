@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createProject, listProjects, RECENT_PROJECTS } from "../../api/services/projects.js";
+import { getCompletion } from "../../api/services/statistics.js";
 import { t } from "../../i18n/i18n.js";
 
 /*
@@ -10,7 +11,24 @@ import { t } from "../../i18n/i18n.js";
   - Loaded once `enabled`; reload() reads them again (after a question in a project chat, a
     rename, a delete, …). A server without projects shows none (no error in the menu).
   - create(name) creates a project and resolves it (rejects with the error to show).
+  - Each project gets `completion_percent`: its overall course completion (GET
+    /api/stats/completion), or null without materials or when it can't be read (the menu
+    then shows no ring; the projects still load).
 */
+
+/* The recent projects with their completion, read at the same time as the list. */
+async function loadRecent(signal) {
+  const [first, completion] = await Promise.all([
+    listProjects({ page: 1, pageSize: RECENT_PROJECTS, signal }),
+    getCompletion({ signal }).catch(() => null),
+  ]);
+  const byId = new Map((completion?.projects ?? []).map((item) => [item.project_id, item]));
+  const projects = first.projects.map((project) => {
+    const found = byId.get(project.id);
+    return { ...project, completion_percent: found && found.lectures > 0 ? found.overall_percent : null };
+  });
+  return { ...first, projects };
+}
 export function useProjects({ enabled }) {
   const [recent, setRecent] = useState([]);
   const [total, setTotal] = useState(0);
@@ -23,7 +41,7 @@ export function useProjects({ enabled }) {
     const controller = new AbortController();
     request.current = controller;
     try {
-      const first = await listProjects({ page: 1, pageSize: RECENT_PROJECTS, signal: controller.signal });
+      const first = await loadRecent(controller.signal);
       if (controller.signal.aborted) return;
       setRecent(first.projects);
       setTotal(first.total);
@@ -41,7 +59,7 @@ export function useProjects({ enabled }) {
     if (!enabled) return undefined;
     const controller = new AbortController();
     request.current = controller;
-    listProjects({ page: 1, pageSize: RECENT_PROJECTS, signal: controller.signal }).then(
+    loadRecent(controller.signal).then(
       (first) => {
         setRecent(first.projects);
         setTotal(first.total);

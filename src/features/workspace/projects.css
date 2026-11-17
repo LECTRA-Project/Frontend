@@ -282,6 +282,11 @@ button.project-tag--button:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The project's course completion, at the end of its name. */
+.cf-project__ring {
+  flex: none;
+  margin-left: auto;
+}
 /* A project as a folder: arrow | name (opens the project) | + (new chat in it, on hover). */
 .cf-project-row {
   display: flex;
