@@ -781,7 +781,13 @@ export default function WorkspaceLayout() {
     if (reuse && urlLectureId) params.set("lecture", urlLectureId);
     params.set("exam", exam.id);
     navigate(`/workspace?${params}`);
-    chat.askIn(target.id, { question: content, content, model: chatModel.selected.id });
+    // The ids let the answer use the question, the student's answer and its grading.
+    chat.askIn(target.id, {
+      question: content,
+      content,
+      model: chatModel.selected.id,
+      exam: { examId: exam.id, taskId: question.id },
+    });
   }
 
   /* ---------- Keyboard ---------- */

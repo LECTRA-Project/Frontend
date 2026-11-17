@@ -237,8 +237,11 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
   });
   api.onPost(/\/chat\/sessions\/[^/]+\/messages$/).reply((config) => {
     const session = find(config);
-    const { content, model } = JSON.parse(config.data);
-    state.sent.push(model === undefined ? { id: session.id, content } : { id: session.id, content, model });
+    const { content, model, exam_id, task_id } = JSON.parse(config.data);
+    const entry = model === undefined ? { id: session.id, content } : { id: session.id, content, model };
+    // A question about an exam answer (#124) carries both ids, like the backend expects.
+    if (exam_id !== undefined || task_id !== undefined) Object.assign(entry, { exam_id, task_id });
+    state.sent.push(entry);
     const general = content.includes("1+1") || lectureIdsOf(session).length === 0;
     const sources = general
       ? []
@@ -250,7 +253,16 @@ export function installChatBackend(api, { lectures = [], sessions = [], messages
           location: `${UNIT[item.source_type ?? "page"]} 2`,
         }));
     const now = new Date().toISOString();
-    const question = { id: newId("m"), session_id: session.id, role: "user", content, sources: null, created_at: now };
+    const question = {
+      id: newId("m"),
+      session_id: session.id,
+      role: "user",
+      content,
+      sources: null,
+      exam_id: exam_id ?? null,
+      task_id: task_id ?? null,
+      created_at: now,
+    };
     const answer = {
       id: newId("m"),
       session_id: session.id,

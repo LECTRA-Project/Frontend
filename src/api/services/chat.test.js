@@ -100,6 +100,22 @@ describe("lecture chat service", () => {
     expect(result.session.title).toBe("What is A*?");
   });
 
+  it("sends the exam and question ids only when both are given", async () => {
+    const bodies = [];
+    api.onPost(`${BASE}/s-1/messages`).reply((config) => {
+      bodies.push(JSON.parse(config.data));
+      return [201, ok({ question: { id: "m-1" }, answer: { id: "m-2" }, session: session("s-1", "Why?") })];
+    });
+    await sendChatMessage("s-1", "Why?", { examId: "e-1", taskId: "t-1" });
+    await sendChatMessage("s-1", "Why?", { examId: "e-1" });
+    await sendChatMessage("s-1", "Why?", { taskId: "t-1", model: "openai:gpt-4o-mini" });
+    expect(bodies).toEqual([
+      { content: "Why?", exam_id: "e-1", task_id: "t-1" },
+      { content: "Why?" },
+      { content: "Why?", model: "openai:gpt-4o-mini" },
+    ]);
+  });
+
   it("loads every page of messages", async () => {
     api.onGet(`${BASE}/s-1/messages`).reply((config) => {
       const { page } = config.params;
