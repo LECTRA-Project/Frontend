@@ -15,7 +15,8 @@ import "./files.css";
   after its file name; processing starts automatically and the progress shows where the
   upload started. Only the file types the backend accepts can be picked (see
   services/materials/materialTypes.js); unsupported, empty or oversized files are listed
-  with a warning and left out.
+  with a warning and left out. A file that is already in the list (same name, size and
+  last-modified time) is skipped, and the student is told so.
 
   Props:
     basic      true when the backend has no AI processing (only changes the default note)
@@ -25,19 +26,35 @@ import "./files.css";
 */
 const MAX_BYTES = 100 * 1024 * 1024;
 const isAccepted = (name) => materialTypeOf(name) !== null;
+const fileKey = (file) => `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
 
 export default function UploadDialog({ basic = false, note, onCancel, onUpload }) {
   const { t } = useI18n();
   const inputRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [rejected, setRejected] = useState([]);
+  const [skipped, setSkipped] = useState([]);
   const [dragging, setDragging] = useState(false);
 
   function addFiles(fileList) {
     const picked = Array.from(fileList);
     const ok = picked.filter((file) => isAccepted(file.name) && file.size > 0 && file.size <= MAX_BYTES);
     setRejected(picked.filter((file) => !ok.includes(file)).map((file) => file.name));
-    setFiles((current) => [...current, ...ok]);
+    // Skip files already in the list, or picked twice at once.
+    const seen = new Set(files.map(fileKey));
+    const added = [];
+    const duplicates = [];
+    for (const file of ok) {
+      const key = fileKey(file);
+      if (seen.has(key)) {
+        duplicates.push(file.name);
+      } else {
+        seen.add(key);
+        added.push(file);
+      }
+    }
+    setSkipped(duplicates);
+    setFiles([...files, ...added]);
   }
 
   function handleDrop(event) {
@@ -83,6 +100,12 @@ export default function UploadDialog({ basic = false, note, onCancel, onUpload }
         {rejected.length > 0 && (
           <p className="field__error" role="alert">
             {t("Not added (unsupported type, empty or over 100 MB): {files}", { files: rejected.join(", ") })}
+          </p>
+        )}
+
+        {skipped.length > 0 && (
+          <p className="field__error" role="alert">
+            {t("Already in the list, skipped: {files}", { files: skipped.join(", ") })}
           </p>
         )}
 

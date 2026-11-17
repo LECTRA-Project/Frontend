@@ -58,6 +58,12 @@ export default function SignInPage() {
               Your password has been reset. Please sign in with your new password.
             </p>
           </TransientStatus>
+        ) : location.state?.accountCreated ? (
+          <TransientStatus onDismiss={() => navigate(location.pathname, { replace: true, state: null })}>
+            <p className="auth-card__alert auth-card__alert--info" role="status">
+              Account created, please sign in.
+            </p>
+          </TransientStatus>
         ) : signOutReason === "password-changed" ? (
           <TransientStatus>
             <p className="auth-card__alert auth-card__alert--info" role="status">

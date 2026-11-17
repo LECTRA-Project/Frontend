@@ -89,6 +89,8 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
   const pageCount = drawn ? drawn.doc.numPages : material.pages ?? null;
   const panelRef = useRef(null);
   const [page, setPage] = useState(() => Math.max(1, Math.min(initialPage, pageCount ?? initialPage)));
+  // What the student is typing in the page box (null: not editing — it shows `page`).
+  const [pageDraft, setPageDraft] = useState(null);
   const [scrollRequest, setScrollRequest] = useState(() => ({ page, seq: 0 }));
   const [citedPage, setCitedPage] = useState(() => (cited ? page : null));
   const [panelWidth, setPanelWidth] = useState(0);
@@ -143,6 +145,15 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
     setPage(target);
     setScrollRequest((previous) => ({ page: target, seq: previous.seq + 1 }));
     setCitedPage(null);
+  }
+
+  // The page box applies on Enter or when it loses focus; anything that isn't a page
+  // number (empty, "0", "abc") puts the current page back.
+  function applyPageDraft() {
+    if (pageDraft === null) return;
+    setPageDraft(null);
+    const number = Number(pageDraft.trim());
+    if (pageDraft.trim() !== "" && Number.isInteger(number) && number >= 1) goToPage(number);
   }
 
   // Reading progress: pdf.js reports the pages on screen itself (PdfPagesView); the
@@ -234,9 +245,13 @@ export default function PdfViewerPanel({ material, initialPage = 1, cited = fals
             id="pdf-page"
             className="pdf__page-input"
             inputMode="numeric"
-            value={page}
+            value={pageDraft ?? page}
             aria-describedby={onCitedPage ? "pdf-cited" : undefined}
-            onChange={(event) => goToPage(event.target.value)}
+            onChange={(event) => setPageDraft(event.target.value)}
+            onBlur={applyPageDraft}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") applyPageDraft();
+            }}
           />
           <span className="pdf__page-count">{pageCount ? t("of {total}", { total: pageCount }) : t("page")}</span>
         </span>

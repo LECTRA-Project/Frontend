@@ -93,7 +93,7 @@ export function ProjectView({
       },
       (err) => {
         if (signal.aborted || err?.name === "CanceledError") return;
-        if (err?.status === 404) onNotFound?.();
+        if (err?.status === 404 || err?.status === 422) onNotFound?.();
         else setLoadError(err.message || t("This project could not be loaded."));
       }
     );

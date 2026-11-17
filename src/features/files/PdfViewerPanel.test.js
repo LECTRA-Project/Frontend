@@ -53,6 +53,43 @@ describe("PDF viewer page navigation", () => {
     expect(screen.getByRole("button", { name: "First page" })).toBeDisabled();
   });
 
+  it("lets the page box be cleared and retyped, and applies it on Enter", async () => {
+    const user = userEvent.setup();
+    render(createElement(PdfViewerPanel, { material, initialPage: 1, onCollapse: () => {} }));
+    const input = screen.getByLabelText("Page number");
+    await user.click(input);
+    await user.keyboard("{End}{Backspace}");
+    expect(input).toHaveValue("");
+    await user.keyboard("4");
+    expect(input).toHaveValue("4");
+    expect(frameSrc()).toContain("#page=1&"); // not applied while typing
+    await user.keyboard("{Enter}");
+    expect(input).toHaveValue("4");
+    expect(frameSrc()).toContain("#page=4&");
+  });
+
+  it("applies the page box on blur, limited to the last page", async () => {
+    const user = userEvent.setup();
+    render(createElement(PdfViewerPanel, { material, initialPage: 2, onCollapse: () => {} }));
+    const input = screen.getByLabelText("Page number");
+    await user.clear(input);
+    await user.type(input, "14");
+    await user.tab();
+    expect(input).toHaveValue("5");
+    expect(frameSrc()).toContain("#page=5&");
+  });
+
+  it.each(["0", "abc", "", "-2", "2.5"])("puts the current page back for %j", async (typed) => {
+    const user = userEvent.setup();
+    render(createElement(PdfViewerPanel, { material, initialPage: 3, onCollapse: () => {} }));
+    const input = screen.getByLabelText("Page number");
+    await user.clear(input);
+    if (typed) await user.type(input, typed);
+    await user.keyboard("{Enter}");
+    expect(input).toHaveValue("3");
+    expect(frameSrc()).toContain("#page=3&");
+  });
+
   it("has no pages sidebar when the page count is unknown", () => {
     render(createElement(PdfViewerPanel, { material: { ...material, pages: undefined }, onCollapse: () => {} }));
     expect(screen.queryByRole("button", { name: "Show pages" })).not.toBeInTheDocument();

@@ -46,7 +46,7 @@ export const MESSAGES_PAGE_SIZE = 100;
     updateProject / forgetProject follow a renamed, changed or deleted project.
   - send() shows the question at once, then replaces it with the saved question and the
     answer. The backend saves nothing when answering fails, so a failed question stays
-    visible with the error and can simply be asked again.
+    visible with the error and can simply be asked again (retry(): "Try again" on the error).
 
   Messages in state: { id, role: "user" | "assistant" | "system", content, sources, extras }
   (extras: what the student added — notebook cell labels, shown under the question).
@@ -347,14 +347,23 @@ export function useLectureChat({ enabled }) {
             return true;
           }
         }
-        const message =
-          err?.code === "ECONNABORTED" && sessionId
-            ? t("The assistant is taking longer than usual. Your answer may still arrive — open this chat again from Chats in a minute.")
-            : err.message || t("The assistant could not answer right now.");
-        if (activeRef.current === sessionId || activeRef.current === null) {
+        const timedOut = err?.code === "ECONNABORTED" && sessionId;
+        const message = timedOut
+          ? t("The assistant is taking longer than usual. Your answer may still arrive — open this chat again from Chats in a minute.")
+          : err.message || t("The assistant could not answer right now.");
+        // Only in the chat the question was asked in (sessionId null: the new chat it was asked
+        // in could not be created, so the student is still on that new chat or has left it).
+        if (sessionId ? activeRef.current === sessionId : activeRef.current === null) {
           setMessages((list) => [
             ...list.map((item) => (item.id === pendingId ? { ...item, pending: false } : item)),
-            { id: crypto.randomUUID(), role: "system", content: message },
+            // retry: what retry() asks again ("Try again" in the chat). Not after a time-out:
+            // that answer may still arrive.
+            {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: message,
+              retry: timedOut ? undefined : { questionId: pendingId, payload: { question, content, extras, model, exam } },
+            },
           ]);
         }
         return false;
@@ -363,6 +372,21 @@ export function useLectureChat({ enabled }) {
       }
     },
     [putSession, select]
+  );
+
+  /*
+    "Try again" on a failed question: the failed question and its error (system message
+    `failed`) leave the chat and the same question is asked again (with `model`, when given,
+    instead of the one it was asked with). Resolves like send().
+  */
+  const retry = useCallback(
+    (failed, { model } = {}) => {
+      if (!failed?.retry) return Promise.resolve(false);
+      const { questionId, payload } = failed.retry;
+      setMessages((list) => list.filter((item) => item.id !== failed.id && item.id !== questionId));
+      return send(model === undefined ? payload : { ...payload, model });
+    },
+    [send]
   );
 
   /* A new chat with these lectures (and a title), listed first but not opened. */
@@ -509,6 +533,7 @@ export function useLectureChat({ enabled }) {
     attachLectures,
     detachLecture,
     send,
+    retry,
     createChat,
     createInProject,
     moveToProject,

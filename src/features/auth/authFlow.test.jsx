@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiClient } from "../../api/client.js";
 import { makeToken, mockApi, ok, renderApp, savedToken, saveToken, TEST_USER } from "../../test/helpers.jsx";
@@ -202,6 +202,20 @@ describe("reset password", () => {
     expect(api.history.post).toHaveLength(0);
   });
 
+  it("keeps a password over 14 characters whole and shows the length error", async () => {
+    const user = userEvent.setup();
+    renderApp("/reset-password?token=reset-token");
+
+    await user.type(screen.getByLabelText("New password"), "StrongerPass1!xyzw");
+    await user.type(screen.getByLabelText("Confirm password"), "StrongerPass1!xyzw");
+    expect(screen.getByLabelText("New password")).toHaveValue("StrongerPass1!xyzw");
+    expect(screen.getByLabelText("Confirm password")).toHaveValue("StrongerPass1!xyzw");
+    await user.click(screen.getByRole("button", { name: "Reset password" }));
+
+    expect(screen.getByText("Password must be between 8 and 14 characters.")).toBeInTheDocument();
+    expect(api.history.post).toHaveLength(0);
+  });
+
   it("shows a reset request error for an invalid token", async () => {
     api.onPost("/auth/reset-password").reply(400, { detail: "Invalid or expired reset token" });
     const user = userEvent.setup();
@@ -311,6 +325,18 @@ describe("create account", () => {
     expect(api.history.post).toHaveLength(0);
   });
 
+  it("keeps a password over 14 characters whole and shows the length error", async () => {
+    const user = userEvent.setup();
+    renderApp("/create-account");
+
+    await fillRegister(user, { password: "StrongerPass1!xyzw" });
+
+    expect(screen.getByLabelText("Password")).toHaveValue("StrongerPass1!xyzw");
+    expect(screen.getByLabelText("Confirm password")).toHaveValue("StrongerPass1!xyzw");
+    expect(screen.getByText("Password must be between 8 and 14 characters.")).toBeInTheDocument();
+    expect(api.history.post).toHaveLength(0);
+  });
+
   it("shows password requirements only after typing and updates them live", async () => {
     const user = userEvent.setup();
     renderApp("/create-account");
@@ -353,6 +379,7 @@ describe("create account", () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
     expect(savedToken()).toBeNull();
+    expect(await screen.findByRole("status")).toHaveTextContent("Account created, please sign in.");
   });
 });
 
@@ -646,6 +673,53 @@ describe("session", () => {
     });
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
+
+  describe("when another tab saves a new token", () => {
+    const originalLocation = window.location;
+    let reload;
+    beforeEach(() => {
+      reload = vi.fn();
+      Object.defineProperty(window, "location", { configurable: true, value: { ...originalLocation, reload } });
+    });
+    afterEach(() => {
+      Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+    });
+
+    async function otherTabSavesToken(newToken, otherUser) {
+      api.onGet("/users/me").reply((config) =>
+        config.headers.Authorization === `Bearer ${newToken}` ? [200, ok(otherUser)] : [401, { detail: "expired" }]
+      );
+      act(() => {
+        localStorage.setItem("lectra.authToken", newToken);
+        window.dispatchEvent(new StorageEvent("storage", { key: "lectra.authToken", newValue: newToken }));
+      });
+      await waitFor(() => expect(api.history.get.filter((r) => r.url === "/users/me")).toHaveLength(2));
+    }
+
+    it("reloads the tab when another tab signed in as a different user", async () => {
+      backendWithUser();
+      saveToken(token);
+      renderApp("/profile");
+      await screen.findByRole("button", { name: "Open profile menu" });
+
+      await otherTabSavesToken(makeToken(1800), { ...TEST_USER, id: "user-2", email: "grace@university.edu" });
+
+      await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    });
+
+    it("stays put when the other tab only renewed the same user's token", async () => {
+      backendWithUser();
+      saveToken(token);
+      const { router } = renderApp("/profile");
+      await screen.findByRole("button", { name: "Open profile menu" });
+
+      await otherTabSavesToken(makeToken(1800), TEST_USER);
+
+      await act(() => Promise.resolve());
+      expect(reload).not.toHaveBeenCalled();
+      expect(router.state.location.pathname).toBe("/profile");
+    });
   });
 
   it("sign out from the profile menu ends the session", async () => {

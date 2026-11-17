@@ -478,6 +478,21 @@ describe("a project's page", () => {
     expect(await screen.findByText("That project isn’t in your projects.")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { level: 1, name: "New chat" })).toBeInTheDocument();
   });
+
+  it("treats a project address that isn't an id (422) like an unknown project", async () => {
+    // Registered before the backend so it answers first, as the backend does for a non-UUID id.
+    api.restore();
+    api = mockApi();
+    api.onGet("/student_profile/projects/nonexistent").reply(422, {
+      detail: [{ type: "uuid_parsing", loc: ["path", "project_id"], msg: "Input should be a valid UUID" }],
+    });
+    install();
+    await openWorkspace("/workspace/projects/nonexistent");
+    expect(await screen.findByText("That project isn’t in your projects.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "New chat" })).toBeInTheDocument();
+    expect(screen.queryByText(/valid UUID/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
 });
 
 describe("moving chats in and out of projects", () => {

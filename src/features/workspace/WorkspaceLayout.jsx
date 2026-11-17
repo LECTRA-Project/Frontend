@@ -44,6 +44,9 @@ import {
 import { t, useI18n } from "../../i18n/i18n.js";
 import "./workspace.css";
 
+// Uploads into a new chat (no session yet) are tagged with this prefix and a batch id.
+const NEW_CHAT_BATCH = "new-chat:";
+
 // Opened with their original file (fetched from the backend).
 const FILE_VIEWERS = new Set(["pdf", "notes"]);
 
@@ -191,6 +194,9 @@ export default function WorkspaceLayout() {
   const [panelsSwitched, setPanelsSwitched] = useState(() => loadPanelsSwitched(userKey));
   const [uploadTarget, setUploadTarget] = useState(null); // "chat" | "library" while the dialog is open
   const [notice, setNotice] = useState(null);
+  // Uploads into a new chat are tagged with a batch id ("new-chat:…"); once the chat is
+  // created for them, the batch id maps to it here, so failed files stay listed in that chat.
+  const [uploadChats, setUploadChats] = useState({});
   const [renaming, setRenaming] = useState(null); // a lecture, in the rename dialog
   const [deleting, setDeleting] = useState(null); // a lecture, in the delete-from-library dialog
   const [openedFile, setOpenedFile] = useState(null); // { key, url, file, error }
@@ -237,6 +243,10 @@ export default function WorkspaceLayout() {
 
   /* ---------- Materials ---------- */
   const session = chat.activeSession;
+  // The chat an upload is for: its chat, the chat created for its new-chat batch, or null
+  // (the new chat, not created yet).
+  const uploadChatOf = (item) =>
+    uploadChats[item.chatId] ?? (String(item.chatId).startsWith(NEW_CHAT_BATCH) ? null : item.chatId);
   const libraryById = useMemo(() => new Map(library.lectures.map((item) => [item.id, item])), [library.lectures]);
   // The library is polled while files process, so it has the freshest copy of a lecture.
   const chatLectures = (session?.lectures ?? []).map((item) => libraryById.get(item.id) ?? item);
@@ -461,12 +471,19 @@ export default function WorkspaceLayout() {
     const target = uploadTarget;
     // The chat the files were uploaded for, even if the student switches chats meanwhile.
     const sessionId = session?.id ?? null;
+    // A new chat has no id yet: its files are tagged with a batch id (see uploadChats).
+    const batch = sessionId ?? `${NEW_CHAT_BATCH}${crypto.randomUUID()}`;
     setUploadTarget(null);
     const created = await library.upload(
       files,
-      target === "chat" ? { chatId: sessionId } : target?.project ? { projectId: target.project.id } : {}
+      target === "chat" ? { chatId: batch } : target?.project ? { projectId: target.project.id } : {}
     );
-    if (created.length === 0) return;
+    // The files that could not be uploaded stay listed with their error.
+    const failed = files.length - created.length;
+    if (created.length === 0) {
+      if (target === "chat" && failed > 0) setNotice(t("{uploaded} uploaded, {failed} failed.", { uploaded: 0, failed }));
+      return;
+    }
     if (target?.project) {
       // Uploaded on a project page: the files become the project's materials.
       try {
@@ -488,9 +505,15 @@ export default function WorkspaceLayout() {
       return;
     }
     try {
-      await chat.attachLectures(sessionId, created.map((item) => item.id));
+      const attached = await chat.attachLectures(sessionId, created.map((item) => item.id));
+      // The new chat was created with the files: its failed files are listed in it.
+      if (!sessionId && attached) setUploadChats((map) => ({ ...map, [batch]: attached.id }));
       setNotice(
-        created.length === 1 ? t("1 material added to this chat.") : t("{count} materials added to this chat.", { count: created.length })
+        failed > 0
+          ? t("{uploaded} uploaded, {failed} failed.", { uploaded: created.length, failed })
+          : created.length === 1
+            ? t("1 material added to this chat.")
+            : t("{count} materials added to this chat.", { count: created.length })
       );
     } catch (err) {
       setNotice(err.message || t("The upload could not be added to this chat."));
@@ -782,6 +805,15 @@ export default function WorkspaceLayout() {
     return true;
   }
 
+  /* "Try again" on a failed question: asks it again (with the model chosen now). */
+  function handleRetryQuestion(failed) {
+    setTooLong(null);
+    const inProject = Boolean(session?.project);
+    chat.retry(failed, { model: chatModel.selected.id }).then((ok) => {
+      if (ok && inProject) projects.reload();
+    });
+  }
+
   /* ---------- Asking about an exam answer ---------- */
   /*
     "Ask about this" on a checked exam answer: opens a chat and asks the prepared question.
@@ -846,6 +878,7 @@ export default function WorkspaceLayout() {
     // Projects: the tag in the bar opens the project (moving a chat is in its ⋯ in the menu).
     onOpenProject: openProject,
     onResend: handleResend,
+    onRetry: handleRetryQuestion,
     model: chatModel,
     olderMessages: chat.olderMessages,
     loadingOlder: chat.loadingOlderMessages,
@@ -1107,7 +1140,7 @@ export default function WorkspaceLayout() {
           chatTitle={displayChatTitle(session?.title) ?? t("New chat")}
           materials={chatMaterials}
           // Only the files being uploaded into this chat (not those for another chat).
-          uploads={library.uploads.filter((item) => item.chatId !== undefined && item.chatId === (session?.id ?? null))}
+          uploads={library.uploads.filter((item) => item.chatId !== undefined && uploadChatOf(item) === (session?.id ?? null))}
           addable={chatAvailable ? addable : []}
           viewerLectureId={viewerOpen ? urlLectureId : null}
           onOpenMaterial={openMaterial}

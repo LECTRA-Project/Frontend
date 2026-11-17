@@ -74,7 +74,6 @@ export default function ResetPasswordPage() {
           name="newPassword"
           type="password"
           placeholder="Enter new password"
-          maxLength={14}
           autoComplete="new-password"
           required
         />
@@ -84,7 +83,6 @@ export default function ResetPasswordPage() {
           name="confirmPassword"
           type="password"
           placeholder="Confirm new password"
-          maxLength={14}
           autoComplete="new-password"
           required
         />

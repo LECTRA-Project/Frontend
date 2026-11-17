@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fetchLectureFile, getLectureContent } from "../../api/services/lectures.js";
@@ -120,6 +120,51 @@ describe("reading progress in the content viewer", () => {
     expect(within(view).getByTitle("Slides: Game playing")).toBeInTheDocument();
     expect(screen.queryByTestId("reading-progress")).not.toBeInTheDocument();
     expect(onVisiblePages).not.toHaveBeenCalled();
+  });
+
+  it("opens a cited slide in the Office viewer at that slide, with the banner", async () => {
+    render(
+      <LectureContentPanel
+        lecture={{ ...DECK, s3_url: "https://bucket.s3.amazonaws.com/game.pptx" }}
+        focus={{ sourceType: "slide", sourceNumber: 3 }}
+        cited
+        onClose={() => {}}
+        onRetry={() => {}}
+      />
+    );
+    const view = screen.getByRole("region", { name: "Lecture: Game playing" });
+    expect(within(view).getByTitle("Slides: Game playing")).toHaveAttribute(
+      "src",
+      `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent("https://bucket.s3.amazonaws.com/game.pptx")}&wdSlideIndex=3`
+    );
+    expect(within(view).getByText("Opened from a source in the answer: slide 3")).toBeInTheDocument();
+    expect(getLectureContent).not.toHaveBeenCalled();
+  });
+
+  it("without a slide preview, shows the slide text with a notice and keeps the cited slide in the toolbar", async () => {
+    render(<LectureContentPanel lecture={DECK} focus={{ sourceType: "slide", sourceNumber: 3 }} cited onClose={() => {}} onRetry={() => {}} />);
+    const view = screen.getByRole("region", { name: "Lecture: Game playing" });
+    expect(within(view).getByText("Slide preview not available — showing slide text.")).toBeInTheDocument();
+    await within(view).findByText("Slide 3 text");
+    expect(view.querySelector(".viewer__position")).toHaveTextContent("Slide 3");
+
+    // The last slide can't scroll to the top, so slide 2 is still the first block in view:
+    // the toolbar keeps the cited slide 3 (it used to say "Slide 2").
+    const body = view.querySelector(".lecture-view__body");
+    body.getBoundingClientRect = () => ({ top: 0, bottom: 600 });
+    const tops = { "slide-1": [-900, -400], "slide-2": [-400, 120], "slide-3": [120, 600] };
+    for (const block of view.querySelectorAll("[data-source]")) {
+      const [top, bottom] = tops[block.dataset.source];
+      block.getBoundingClientRect = () => ({ top, bottom });
+    }
+    vi.stubGlobal("requestAnimationFrame", (callback) => (callback(), 1));
+    fireEvent.scroll(body);
+    expect(view.querySelector(".viewer__position")).toHaveTextContent("Slide 3");
+
+    // Scrolling by the student: the toolbar follows again.
+    fireEvent.wheel(body);
+    fireEvent.scroll(body);
+    expect(view.querySelector(".viewer__position")).toHaveTextContent("Slide 2");
   });
 
   it("does nothing without the reading prop (basic mode)", async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   AUTH_EXPIRED_EVENT,
@@ -92,13 +92,31 @@ export default function AuthProvider({ children }) {
     };
   }, [endSession]);
 
+  // The user shown in this tab, read by the storage listener below.
+  const userIdRef = useRef(null);
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null;
+  }, [user]);
+
   // Signing out in another tab removes the token there; follow it here.
-  // A token renewed in another tab is picked up too.
+  // A token renewed in another tab is picked up too. The token is shared by every tab,
+  // so if another tab signed in as someone else, reload: this tab must not keep showing
+  // (and saving as) the previous user.
   useEffect(() => {
     const onStorage = (event) => {
       if (event.key !== AUTH_TOKEN_KEY) return;
-      if (event.newValue) setTokenVersion((version) => version + 1);
-      else endSession(null);
+      if (!event.newValue) {
+        endSession(null);
+        return;
+      }
+      setTokenVersion((version) => version + 1);
+      if (userIdRef.current === null) return;
+      usersApi.getCurrentUser().then(
+        (currentUser) => {
+          if (userIdRef.current !== null && currentUser.id !== userIdRef.current) window.location.reload();
+        },
+        () => {},
+      );
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
