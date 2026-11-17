@@ -23,7 +23,11 @@ import { get } from "../http.js";
     overview    { lectures, pages_read, pages_total, chats, questions_asked,
                   exams_taken, questions_answered,
                   average_score_percent: number | null, correct_percent: number | null,
-                  study_days, current_streak, last_activity_at: ISO string | null }
+                  study_days, current_streak, last_activity_at: ISO string | null,
+                  changes: { exams, pages_read, questions_asked: { this_week, last_week },
+                             average_score: { points, weeks } | null } }
+                this_week is the last 7 UTC days (today included), last_week the 7 before;
+                average_score.points is the average now minus before the last 4 weeks.
                 Exams count once submitted; average_score_percent leaves out exams still
                 waiting for a grade, correct_percent is the share of graded answers that
                 are correct (both null without a graded answer). Activity is uploading,

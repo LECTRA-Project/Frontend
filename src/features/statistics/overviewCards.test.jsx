@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { setCurrentLanguage } from "../../i18n/i18n.js";
 import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
-import { isNewStudent, lastActivityText, pagesTotalText, streakText } from "./overviewText.js";
+import { isNewStudent, lastActivityText, pagesTotalText, scoreChangeText, streakText, weekChangeText } from "./overviewText.js";
 
 /*
   Statistics → Overall, against a mocked GET /api/stats/overview: the five cards with their
@@ -48,6 +48,19 @@ const COMPLETION = { lectures: [], overall_percent: 0, weights: { reading: 70, e
 
 async function overviewSection() {
   return screen.findByRole("region", { name: "Overall" });
+}
+
+const CHANGES = {
+  exams: { this_week: 5, last_week: 2 },
+  pages_read: { this_week: 40, last_week: 40 },
+  questions_asked: { this_week: 3, last_week: 9 },
+  average_score: { points: -4, weeks: 4 },
+};
+
+/* The change line of the card with this label (arrow and words), or null. */
+function changeLine(section, label) {
+  const term = within(section).getByText(label, { selector: "dt" });
+  return term.parentElement.querySelector(".overview__change")?.textContent ?? null;
 }
 
 /* The card with this label: { value, note } as text. */
@@ -194,6 +207,47 @@ describe("overview cards on the Statistics page", () => {
     expect(document.body.textContent).not.toMatch(/sample/i);
   });
 
+  it("says how the numbers move, with an arrow and words", async () => {
+    api.onGet("/stats/overview").reply(200, ok({ ...OVERVIEW, changes: CHANGES }));
+    renderApp("/statistics");
+    const section = await overviewSection();
+    await within(section).findByText("Exams taken");
+    expect(changeLine(section, "Exams taken")).toBe("▲3 more than last week");
+    expect(changeLine(section, "Average score")).toBe("▼4 points lower in 4 weeks");
+    expect(changeLine(section, "Pages read")).toBe("=Same as last week");
+    expect(changeLine(section, "Questions asked")).toBe("▼6 fewer than last week");
+    expect(changeLine(section, "Study streak")).toBeNull();
+    // The arrow is decoration: the words carry the meaning.
+    expect(section.querySelector(".overview__change-arrow")).toHaveAttribute("aria-hidden", "true");
+    // The card's first lines stay as they were.
+    expect(card(section, "Exams taken")).toMatchObject({ value: "12", note: "58 questions answered" });
+  });
+
+  it("shows no change line without anything to compare", async () => {
+    api.onGet("/stats/overview").reply(200, ok({
+      ...OVERVIEW,
+      average_score_percent: null,
+      changes: {
+        exams: { this_week: 0, last_week: 0 },
+        pages_read: { this_week: 0, last_week: 0 },
+        questions_asked: { this_week: 0, last_week: 0 },
+        average_score: { points: 5, weeks: 4 }, // but no average to show it under
+      },
+    }));
+    renderApp("/statistics");
+    const section = await overviewSection();
+    await within(section).findByText("Exams taken");
+    expect(section.querySelectorAll(".overview__change")).toHaveLength(0);
+  });
+
+  it("shows no change line from a backend without changes", async () => {
+    api.onGet("/stats/overview").reply(200, ok(OVERVIEW));
+    renderApp("/statistics");
+    const section = await overviewSection();
+    await within(section).findByText("Exams taken");
+    expect(section.querySelectorAll(".overview__change")).toHaveLength(0);
+  });
+
   it("is in German when the student chose German", async () => {
     localStorage.setItem(`lectra:language:v1:${TEST_USER.id}`, "de");
     api.onGet("/stats/overview").reply(200, ok({ ...OVERVIEW, pages_read: 1214, pages_total: 1340 }));
@@ -206,6 +260,18 @@ describe("overview cards on the Statistics page", () => {
     expect(card(section, "Gelesene Seiten")).toMatchObject({ value: "1.214", note: "von 1.340 Seiten in deinen Materialien" });
     expect(card(section, "Lernserie")).toMatchObject({ value: "5 Tage", note: "Zuletzt aktiv: heute" });
     expect(card(section, "Gestellte Fragen")).toMatchObject({ value: "87", note: "in 14 Chats" });
+  });
+
+  it("says how the numbers move in German", async () => {
+    localStorage.setItem(`lectra:language:v1:${TEST_USER.id}`, "de");
+    api.onGet("/stats/overview").reply(200, ok({ ...OVERVIEW, changes: { ...CHANGES, average_score: { points: 1, weeks: 4 } } }));
+    renderApp("/statistics");
+    const section = await screen.findByRole("region", { name: "Überblick" });
+    await within(section).findByText("Abgelegte Prüfungen");
+    expect(changeLine(section, "Abgelegte Prüfungen")).toBe("▲3 mehr als letzte Woche");
+    expect(changeLine(section, "Durchschnittsergebnis")).toBe("▲1 Punkt höher in 4 Wochen");
+    expect(changeLine(section, "Gelesene Seiten")).toBe("=Gleich wie letzte Woche");
+    expect(changeLine(section, "Gestellte Fragen")).toBe("▼6 weniger als letzte Woche");
   });
 });
 
@@ -249,5 +315,17 @@ describe("overview texts", () => {
     expect(isNewStudent({ ...NEW_STUDENT, study_days: 1, last_activity_at: "2026-11-01T10:00:00+00:00" })).toBe(false);
     expect(isNewStudent({ ...NEW_STUDENT, exams_taken: 1 })).toBe(false);
     expect(isNewStudent(null)).toBe(false);
+  });
+
+  it("words how a weekly count and the average score moved", () => {
+    expect(weekChangeText({ this_week: 1203, last_week: 3 })).toEqual({ direction: "up", text: "1,200 more than last week" });
+    expect(weekChangeText({ this_week: 0, last_week: 2 })).toEqual({ direction: "down", text: "2 fewer than last week" });
+    expect(weekChangeText({ this_week: 4, last_week: 4 })).toEqual({ direction: "same", text: "Same as last week" });
+    expect(weekChangeText({ this_week: 0, last_week: 0 })).toBeNull();
+    expect(weekChangeText(undefined)).toBeNull();
+    expect(scoreChangeText({ points: 9, weeks: 4 })).toEqual({ direction: "up", text: "9 points higher in 4 weeks" });
+    expect(scoreChangeText({ points: -1, weeks: 4 })).toEqual({ direction: "down", text: "1 point lower in 4 weeks" });
+    expect(scoreChangeText({ points: 0, weeks: 4 })).toEqual({ direction: "same", text: "No change in 4 weeks" });
+    expect(scoreChangeText(null)).toBeNull();
   });
 });

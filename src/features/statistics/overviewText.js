@@ -55,3 +55,31 @@ export function isNewStudent(overview) {
   const counts = ["lectures", "pages_read", "chats", "questions_asked", "exams_taken", "study_days"];
   return counts.every((name) => !overview[name]) && !overview.last_activity_at;
 }
+
+/* How a weekly count moved, { direction: "up" | "down" | "same", text }, or null when
+   nothing happened in either week (nothing to compare).
+   { this_week: 5, last_week: 2 } → "3 more than last week". */
+export function weekChangeText(change) {
+  if (!change) return null;
+  const now = change.this_week ?? 0;
+  const before = change.last_week ?? 0;
+  if (now === 0 && before === 0) return null;
+  const difference = Math.abs(now - before);
+  if (now > before) return { direction: "up", text: t("{count} more than last week", { count: numberText(difference) }) };
+  if (now < before) return { direction: "down", text: t("{count} fewer than last week", { count: numberText(difference) }) };
+  return { direction: "same", text: t("Same as last week") };
+}
+
+/* How the average score moved over the last weeks, or null without a score to compare.
+   { points: 9, weeks: 4 } → "9 points higher in 4 weeks". */
+export function scoreChangeText(change) {
+  if (!change || typeof change.points !== "number") return null;
+  const weeks = change.weeks ?? 4;
+  const points = Math.abs(change.points);
+  if (change.points === 0) return { direction: "same", text: t("No change in {weeks} weeks", { weeks }) };
+  const vars = { points: numberText(points), weeks };
+  if (change.points > 0) {
+    return { direction: "up", text: points === 1 ? t("1 point higher in {weeks} weeks", vars) : t("{points} points higher in {weeks} weeks", vars) };
+  }
+  return { direction: "down", text: points === 1 ? t("1 point lower in {weeks} weeks", vars) : t("{points} points lower in {weeks} weeks", vars) };
+}
