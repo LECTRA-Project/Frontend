@@ -27,7 +27,7 @@ const PROJECT_TABS = ["chats", "sources"];
     row each with its title and last activity, highlighted on hover, with ⋯ (Rename, Move to
     project…, Remove from project, Delete) that shows on hover or focus.
   - Sources: "Add sources" (upload new materials, or add one of the student's materials) and,
-    under it, every lecture material in the project (open beside the page, remove), with
+    under it, every lecture material in the project, the latest uploaded first (open beside the page, remove), with
     the uploads in progress.
   Every chat in the project answers from these materials; without any it answers from
   general knowledge. Switching tabs keeps both (and the typed text): nothing is reloaded.
@@ -192,7 +192,9 @@ export function ProjectView({
   const projectUploads = uploads.filter((item) => item.projectId === project.id);
 
   const lectures = project.lectures ?? [];
-  const materials = lectures.map(toMaterial);
+  // Newest upload first (the library's copy has the time when the project's doesn't).
+  const uploadedAt = (lecture) => lecture.uploaded_at ?? library.find((item) => item.id === lecture.id)?.uploaded_at ?? "";
+  const materials = [...lectures].sort((a, b) => String(uploadedAt(b)).localeCompare(String(uploadedAt(a)))).map(toMaterial);
   const owned = new Set(lectures.map((item) => item.id));
   const addable = library.filter((item) => !owned.has(item.id)).map(toMaterial);
   // The project's chats come without their project; the shared actions need it.

@@ -14,7 +14,7 @@ import { DeleteProjectDialog } from "./ProjectDialogs.jsx";
 import "../projects.css";
 
 // The chats listed under an unfolded project in the menu (the rest: on the project page).
-const PROJECT_CHATS_SHOWN = 5;
+const PROJECT_CHATS_SHOWN = 3;
 
 /*
   The collapsible left menu of the chat-first workspace (272 px; a 64 px icon rail when
@@ -60,8 +60,8 @@ const PROJECT_CHATS_SHOWN = 5;
 
   Projects (a course's materials and chats together): a section above the chats with the 3 most recently active projects, + (a new project) and,
   with more than 3, "View all projects". Each project is a folder: the arrow shows its chats
-  (the latest few, with "All chats in the project" for the rest) and "New chat" starts
-  another chat in it — a project can have any number of chats. The project of the open chat
+  (the latest 3; the project page, opened from its name, lists all of them) and "New chat" among them
+  (the only one: the project row has no +) starts another chat in it — a project can have any number of chats. The project of the open chat
   or page starts unfolded. A chat in a project is listed only under its project (not in the
   Chats list); with a mouse its ⋯ (Rename, Move to project…, Remove from project, Remove)
   shows on hover. Its materials are the project's ("Materials in <project>"), so adding or
@@ -72,6 +72,7 @@ const PROJECT_CHATS_SHOWN = 5;
     currentProjectId    the project open on its page, or the open chat's project
     onOpenProject(id), onNewProject(), onViewAllProjects()
     onNewProjectChat(project)   starts a new chat in the project (none: not offered)
+    onRenameProject(project)    opens "Rename project" for a project (none: not offered)
     onRemoveProject(project)    deletes a project after confirmation (DeleteProjectDialog:
                                 its chats are deleted, its materials stay in the library);
                                 rejects with the error to show (none: not offered)
@@ -117,6 +118,7 @@ export default function ChatSidebar({
   onViewAllProjects = () => {},
   onNewProjectChat = null,
   onRemoveProject = null,
+  onRenameProject = null,
   projectsAvailable = false,
   projectName = null,
   showMaterials = true,
@@ -360,26 +362,21 @@ export default function ChatSidebar({
                             <Icon name="folder" size={16} />
                             <span className="cf-project__name">{project.name}</span>
                           </button>
-                          {onNewProjectChat && (
-                            <IconButton
-                              icon="plus"
-                              label={t("New chat in {name}", { name: project.name })}
-                              className="cf-project__new"
-                              onClick={() => onNewProjectChat(project)}
-                            />
-                          )}
-                          {onRemoveProject && (
+                          {(onRemoveProject || onRenameProject) && (
                             <Menu
                               label={t("Actions for {title}", { title: project.name })}
                               className="cf-project__more"
                               items={[
-                                {
+                                ...(onRenameProject
+                                  ? [{ label: t("Rename project"), icon: "edit", onSelect: () => onRenameProject(project) }]
+                                  : []),
+                                ...(onRemoveProject ? [{
                                   label: t("Remove project"),
                                   icon: "trash",
                                   danger: true,
                                   // The dialog names how many chats go; the loaded ones count too.
                                   onSelect: () => setRemovingProject({ ...project, chat_count: total }),
-                                },
+                                }] : []),
                               ]}
                             />
                           )}
@@ -420,13 +417,6 @@ export default function ChatSidebar({
                                 >
                                   <Icon name="plus" size={14} />
                                   <span className="cf-project__name">{t("New chat")}</span>
-                                </button>
-                              </li>
-                            )}
-                            {total > PROJECT_CHATS_SHOWN && (
-                              <li>
-                                <button type="button" className="cf-link-button cf-project-chat__all" onClick={() => onOpenProject(project.id)}>
-                                  {t("All {count} chats in the project", { count: total })}
                                 </button>
                               </li>
                             )}
