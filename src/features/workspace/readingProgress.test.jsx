@@ -63,7 +63,10 @@ describe("reading progress in the workspace", () => {
     await vi.advanceTimersByTimeAsync(BATCH_INTERVAL_MS);
 
     await waitFor(() => expect(progressPosts(api)).toHaveLength(1));
-    expect(JSON.parse(progressPosts(api)[0].data)).toEqual({ pages: [2] });
+    // The page, with the seconds the slides were on screen so far (the study time).
+    const body = JSON.parse(progressPosts(api)[0].data);
+    expect(body).toMatchObject({ pages: [2] });
+    expect(body.seconds).toBeGreaterThan(0);
     await waitFor(() => expect(within(view).getByTestId("reading-progress")).toHaveTextContent("Read 2 of 3"));
   });
 
@@ -79,7 +82,9 @@ describe("reading progress in the workspace", () => {
     expect(progressPosts(api)).toHaveLength(0);
     await user.click(within(view).getByRole("button", { name: "Close the material viewer" }));
     await waitFor(() => expect(progressPosts(api)).toHaveLength(1));
-    expect(JSON.parse(progressPosts(api)[0].data)).toEqual({ pages: [3] });
+    const body = JSON.parse(progressPosts(api)[0].data);
+    expect(body).toMatchObject({ pages: [3] });
+    expect(body.seconds).toBeGreaterThan(0); // the time it was on screen goes too
   });
 });
 

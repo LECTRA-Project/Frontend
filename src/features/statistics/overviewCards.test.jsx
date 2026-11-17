@@ -1,10 +1,20 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { setCurrentLanguage } from "../../i18n/i18n.js";
 import { makeToken, mockApi, ok, renderApp, saveToken, TEST_USER } from "../../test/helpers.jsx";
-import { isNewStudent, lastActivityText, pagesTotalText, scoreChangeText, streakText, weekChangeText } from "./overviewText.js";
+import {
+  isNewStudent,
+  lastActivityText,
+  minutesText,
+  pagesTotalText,
+  scoreChangeText,
+  streakText,
+  studyChangeText,
+  weekChangeText,
+  weekdayDateLabel,
+} from "./overviewText.js";
 
 /*
   Statistics → Overall, against a mocked GET /api/stats/overview: the five cards with their
@@ -82,20 +92,23 @@ describe("overview cards on the Statistics page", () => {
 
   afterEach(() => api.restore());
 
-  it("shows the five numbers with their second lines", async () => {
+  it("shows the six numbers with their second lines", async () => {
     api.onGet("/stats/overview").reply(200, ok(OVERVIEW));
     renderApp("/statistics");
 
     const section = await overviewSection();
     await within(section).findByText("Exams taken");
     const labels = [...section.querySelectorAll("dt")].map((term) => term.textContent);
-    expect(labels).toEqual(["Exams taken", "Average score", "Pages read", "Study streak", "Questions asked"]);
+    expect(labels).toEqual(["Exams taken", "Average score", "Pages read", "Study streak", "Questions asked", "Study time"]);
 
     expect(card(section, "Exams taken")).toMatchObject({ value: "12", note: "58 questions answered" });
     expect(card(section, "Average score")).toMatchObject({ value: "68%", note: "61% of answers correct" });
     expect(card(section, "Pages read")).toMatchObject({ value: "214", note: "of 340 pages in your materials" });
     expect(card(section, "Study streak")).toMatchObject({ value: "5 days", note: "Last activity today" });
     expect(card(section, "Questions asked")).toMatchObject({ value: "87", note: "in 14 chats" });
+    // A backend without study time: 0 min, no chart.
+    expect(card(section, "Study time")).toMatchObject({ value: "0 min", note: "reading this week" });
+    expect(within(section).queryByRole("figure")).not.toBeInTheDocument();
     expect(api.history.get.filter((request) => request.url === "/stats/overview")).toHaveLength(1);
   });
 
@@ -248,6 +261,33 @@ describe("overview cards on the Statistics page", () => {
     expect(section.querySelectorAll(".overview__change")).toHaveLength(0);
   });
 
+  it("shows the study time this week and per day", async () => {
+    const days = Array.from({ length: 28 }, (_, index) => ({ day: new Date(Date.UTC(2026, 9, 21 + index)).toISOString().slice(0, 10), minutes: 0 }));
+    days[27].minutes = 25;
+    days[20].minutes = 48;
+    days[5].minutes = 12;
+    api.onGet("/stats/overview").reply(200, ok({ ...OVERVIEW, study_time: { this_week_minutes: 95, last_week_minutes: 60, by_day: days } }));
+    renderApp("/statistics");
+    const section = await overviewSection();
+    await within(section).findByText("Exams taken");
+    expect(card(section, "Study time")).toMatchObject({ value: "1 h 35 min", note: "reading this week" });
+    expect(changeLine(section, "Study time")).toBe("▲35 min more than last week");
+
+    const chart = within(section).getByRole("figure", { name: "Study time per day, last 4 weeks" });
+    expect(within(chart).getByRole("img")).toHaveAccessibleName(
+      "Study time per day over the last 4 weeks: 1 h 25 min in all, the longest day Tue 10 Nov with 48 min."
+    );
+    expect(chart.querySelectorAll(".study-chart__bar")).toHaveLength(3); // no bar for a day without reading
+    // Only the longest day carries its value on the chart.
+    expect([...chart.querySelectorAll("svg .chart__value")].map((label) => label.textContent)).toEqual(["48 min"]);
+    // The table lists the days with reading.
+    const rows = within(chart).getAllByRole("row").slice(1).map((row) => row.textContent);
+    expect(rows).toEqual(["Mon 26 Oct12 min", "Tue 10 Nov48 min", "Tue 17 Nov25 min"]);
+    // Hovering a day names it.
+    fireEvent.pointerEnter(chart.querySelectorAll(".study-chart__hit")[27]);
+    expect(within(chart).getByText("Tue 17 Nov · 25 min")).toBeInTheDocument();
+  });
+
   it("is in German when the student chose German", async () => {
     localStorage.setItem(`lectra:language:v1:${TEST_USER.id}`, "de");
     api.onGet("/stats/overview").reply(200, ok({ ...OVERVIEW, pages_read: 1214, pages_total: 1340 }));
@@ -328,4 +368,15 @@ describe("overview texts", () => {
     expect(scoreChangeText({ points: 0, weeks: 4 })).toEqual({ direction: "same", text: "No change in 4 weeks" });
     expect(scoreChangeText(null)).toBeNull();
   });
+
+  it("words study time in minutes and hours", () => {
+    expect([0, 1, 59, 60, 95, 120, 1505].map(minutesText)).toEqual(["0 min", "1 min", "59 min", "1 h", "1 h 35 min", "2 h", "25 h 5 min"]);
+    expect(studyChangeText({ this_week_minutes: 30, last_week_minutes: 90 })).toEqual({ direction: "down", text: "1 h less than last week" });
+    expect(studyChangeText({ this_week_minutes: 0, last_week_minutes: 0 })).toBeNull();
+    expect(studyChangeText(undefined)).toBeNull();
+    expect(weekdayDateLabel("2026-11-17")).toBe("Tue 17 Nov");
+    setCurrentLanguage("de");
+    expect(minutesText(95)).toBe("1 Std. 35 Min.");
+  });
 });
+
