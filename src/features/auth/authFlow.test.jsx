@@ -415,15 +415,57 @@ describe("profile form validation", () => {
     await user.type(nameField, "Grace Hopper");
     await user.clear(emailField);
     await user.type(emailField, "grace@example.com");
+    // Changing the email asks for the current password.
+    await user.type(screen.getByLabelText("Password to confirm the new email"), "OldPass#1");
     await user.click(saveButton);
 
     await waitFor(() => expect(api.history.patch).toHaveLength(1));
     expect(JSON.parse(api.history.patch[0].data)).toEqual({
       full_name: "Grace Hopper",
       email: "grace@example.com",
+      current_password: "OldPass#1",
     });
     expect(await screen.findByRole("status")).toHaveTextContent("Profile updated successfully.");
     expect(screen.getByText("grace@example.com")).toBeInTheDocument();
+    // The password field goes away with the saved email.
+    expect(screen.queryByLabelText("Password to confirm the new email")).not.toBeInTheDocument();
+  });
+
+  it("asks for the current password only when the email changes", async () => {
+    backendWithUser();
+    saveToken(token);
+    const user = userEvent.setup();
+    renderApp("/profile");
+
+    await screen.findByRole("heading", { name: "My profile" });
+    expect(screen.queryByLabelText("Password to confirm the new email")).not.toBeInTheDocument();
+    const emailField = screen.getByLabelText("Email");
+    await user.clear(emailField);
+    await user.type(emailField, "grace@example.com");
+    expect(screen.getByLabelText("Password to confirm the new email")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Enter your current password to change your email.")).toBeInTheDocument();
+    expect(api.history.patch).toHaveLength(0);
+  });
+
+  it("shows the backend's message for a wrong password on an email change", async () => {
+    backendWithUser();
+    api.onPatch("/users/me").reply(400, { status: false, message: "Current password is incorrect", data: null });
+    saveToken(token);
+    const user = userEvent.setup();
+    renderApp("/profile");
+
+    await screen.findByRole("heading", { name: "My profile" });
+    const emailField = screen.getByLabelText("Email");
+    await user.clear(emailField);
+    await user.type(emailField, "grace@example.com");
+    await user.type(screen.getByLabelText("Password to confirm the new email"), "Wrong#Pass1");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Current password is incorrect");
+    // Still signed in (a 400, not a 401).
+    expect(screen.getByRole("heading", { name: "My profile" })).toBeInTheDocument();
   });
 
   it("changes the password, logs out, and returns to sign in with a transient message", async () => {

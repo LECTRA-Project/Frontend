@@ -19,11 +19,12 @@ export async function getCurrentUser({ signal } = {}) {
   return requireUser(response, t("Unable to load your profile."));
 }
 
-/* PATCH /users/me → the updated signed-in user */
-export async function updateCurrentUser({ fullName, email }) {
+/* PATCH /users/me → the updated signed-in user. Changing the email needs the current password. */
+export async function updateCurrentUser({ fullName, email, currentPassword }) {
   const body = {};
   if (fullName !== undefined) body.full_name = fullName;
   if (email !== undefined) body.email = email;
+  if (currentPassword !== undefined) body.current_password = currentPassword;
 
   const response = await patch("/users/me", body);
   return requireUser(response, t("Unable to update your profile."));
