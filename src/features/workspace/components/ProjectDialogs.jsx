@@ -81,6 +81,60 @@ export function ProjectNameDialog({ project = null, onSave, onCancel }) {
 }
 
 /*
+  Renames a chat (from a chat's ⋯ in the menu or on the project page).
+  Props:
+    session   the chat to rename
+    onSave    async (title) => void — rejects with the error to show
+    onCancel  closes the dialog
+*/
+export function ChatNameDialog({ session, onSave, onCancel }) {
+  const { t } = useI18n();
+  const current = displayChatTitle(session.title) ?? "";
+  const [title, setTitle] = useState(current);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const trimmed = title.trim();
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!trimmed) return;
+    if (trimmed === current) {
+      onCancel();
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(trimmed);
+    } catch (err) {
+      setError(err.message || t("The chat could not be renamed."));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title={t("Rename chat")} width={440} onClose={onCancel}>
+      <form className="project-form" onSubmit={handleSubmit} noValidate>
+        <TextField label={t("Chat title")} value={title} maxLength={255} autoFocus onChange={(event) => setTitle(event.target.value)} />
+        {error && (
+          <p className="field__error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="project-form__actions">
+          <Button onClick={onCancel} disabled={saving}>
+            {t("Cancel")}
+          </Button>
+          <Button type="submit" variant="primary" disabled={saving || !trimmed}>
+            {saving ? t("Saving…") : t("Rename")}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/*
   Props:
     project    { name, chat_count }
     onConfirm  async () => void — rejects with the error to show

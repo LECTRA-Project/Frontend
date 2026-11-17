@@ -196,17 +196,33 @@ describe("projects in the menu", () => {
     expect(projectNames()).toContain("Linear Algebra");
   });
 
-  it("offers New chat in the project from a project chat's ⋯ menu", async () => {
+  it("lists a project's chats only under the project, each with its own ⋯ menu", async () => {
     const user = await openWorkspace();
-    const before = backend.sessions.filter((item) => item.projectId === "p-ml").length;
-    await user.click(within(menu()).getByRole("button", { name: "Actions for Decision trees" }));
-    await user.click(screen.getByRole("menuitem", { name: "New chat in Machine Learning" }));
-    await waitFor(() => expect(backend.sessions.filter((item) => item.projectId === "p-ml")).toHaveLength(before + 1));
+    // Not in the Chats list: only the normal chat is there.
+    const chatsList = within(menu()).getByRole("heading", { name: "Chats" }).closest("section");
+    expect(within(chatsList).queryByRole("button", { name: /Decision trees/ })).not.toBeInTheDocument();
+    expect(within(chatsList).getByRole("button", { name: "Exercise help" })).toBeInTheDocument();
+    // Under the project, without an icon, with ⋯ (Rename, Move, Remove from project, Remove).
+    await user.click(within(menu()).getByRole("button", { name: "Show the chats in Machine Learning" }));
+    const projectChats = within(menu()).getByRole("list", { name: "Chats in Machine Learning" });
+    await user.click(within(projectChats).getByRole("button", { name: "Actions for Decision trees" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      "Rename",
+      "Move to project…",
+      "Remove from project",
+      "Remove",
+    ]);
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const field = within(screen.getByRole("dialog", { name: "Rename chat" })).getByLabelText("Chat title");
+    await user.clear(field);
+    await user.type(field, "Trees{Enter}");
+    await waitFor(() => expect(within(projectChats).getByRole("button", { name: "Trees" })).toBeInTheDocument());
   });
 
-  it("shows a project chat with its project's tag; the row opens the chat", async () => {
+  it("shows a project chat under its project; the row opens the chat", async () => {
     const user = await openWorkspace();
-    const row = within(menu()).getByRole("button", { name: "Decision trees in Machine Learning" });
+    await user.click(within(menu()).getByRole("button", { name: "Show the chats in Machine Learning" }));
+    const row = within(within(menu()).getByRole("list", { name: "Chats in Machine Learning" })).getByRole("button", { name: "Decision trees" });
     await user.click(row);
     expect(await screen.findByRole("heading", { level: 1, name: "Decision trees" })).toBeInTheDocument();
     // Its materials are the project's.
@@ -229,7 +245,7 @@ describe("a project's page", () => {
     const user = await openWorkspace("/workspace/projects/p-ml");
     expect(await screen.findByRole("heading", { level: 1, name: "Machine Learning" })).toBeInTheDocument();
     const chats = await screen.findByRole("list", { name: "Chats in this project" });
-    expect(within(chats).getAllByRole("button").map((button) => button.textContent)).toEqual([
+    expect(within(chats).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       expect.stringContaining("Decision trees"),
       expect.stringContaining("Support vectors"),
     ]);
@@ -247,7 +263,7 @@ describe("a project's page", () => {
     await user.click(within(recent()).getByRole("button", { name: "Machine Learning" }));
     const listed = await screen.findByRole("list", { name: "Chats in this project" });
     await waitFor(() =>
-      expect(within(listed).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      expect(within(listed).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
         expect.stringContaining("What is pruning?"),
         expect.stringContaining("Decision trees"),
         expect.stringContaining("Support vectors"),
@@ -265,7 +281,7 @@ describe("a project's page", () => {
 
     // Chats: only this project's, most recently active first (not s-free, a normal chat).
     const chats = await screen.findByRole("list", { name: "Chats in this project" });
-    expect(within(chats).getAllByRole("button").map((button) => button.textContent)).toEqual([
+    expect(within(chats).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
       expect.stringContaining("Decision trees"),
       expect.stringContaining("Support vectors"),
     ]);
@@ -285,14 +301,14 @@ describe("a project's page", () => {
     expect(within(sources).getAllByRole("button", { name: /^Open / }).map((button) => button.getAttribute("aria-label"))).toEqual([
       "Open KI 02 Classification Part1 beside the project",
     ]);
-    expect(screen.getByRole("button", { name: "Upload a material to this project" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add sources" })).toBeInTheDocument();
 
     // Back to Chats with the keyboard: same list, the text is still typed, nothing reloaded.
     sourcesTab.focus();
     await user.keyboard("{ArrowLeft}");
     expect(chatsTab).toHaveAttribute("aria-selected", "true");
     expect(chatsTab).toHaveFocus();
-    expect(within(screen.getByRole("list", { name: "Chats in this project" })).getAllByRole("button")).toHaveLength(2);
+    expect(within(screen.getByRole("list", { name: "Chats in this project" })).getAllByRole("listitem")).toHaveLength(2);
     expect(input).toHaveValue("Half a question");
     expect(api.history.get.length).toBe(requests);
     expect(api.history.post).toHaveLength(0); // no chat was created by switching
@@ -339,7 +355,8 @@ describe("a project's page", () => {
     const materials = await screen.findByRole("list", { name: "Materials in this project" });
     expect(within(materials).getByRole("button", { name: "Open KI 02 Classification Part1 beside the project" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Add one of your materials to this project" }));
+    await user.click(screen.getByRole("button", { name: "Add sources" }));
+    expect(screen.getByRole("menuitem", { name: "Upload materials" })).toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Exercise 3-1 Classification" }));
     await waitFor(() => expect(backend.projects.find((item) => item.id === "p-ml").lectureIds).toEqual([KI02.id, EX31.id]));
     expect(within(materials).getByRole("button", { name: "Open Exercise 3-1 Classification beside the project" })).toBeInTheDocument();
@@ -354,7 +371,7 @@ describe("a project's page", () => {
 
     // A chat of the project now has the project's new materials.
     await user.click(screen.getByRole("tab", { name: "Chats" }));
-    await user.click(within(screen.getByRole("list", { name: "Chats in this project" })).getByRole("button", { name: /Decision trees/ }));
+    await user.click(within(screen.getByRole("list", { name: "Chats in this project" })).getByRole("button", { name: /^Decision trees/ }));
     await screen.findByRole("heading", { level: 1, name: "Decision trees" });
     expect(within(menu()).getByRole("button", { name: "Open Exercise 3-1 Classification beside the chat" })).toBeInTheDocument();
     expect(within(menu()).queryByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" })).not.toBeInTheDocument();
@@ -419,7 +436,7 @@ describe("moving chats in and out of projects", () => {
     const user = await openWorkspace();
     await user.click(within(menu()).getByRole("button", { name: "Exercise help" }));
     await screen.findByRole("heading", { level: 1, name: "Exercise help" });
-    await user.click(screen.getByRole("button", { name: "Chat actions" }));
+    await user.click(within(menu()).getByRole("button", { name: "Actions for Exercise help" }));
     await user.click(screen.getByRole("menuitem", { name: "Move to project…" }));
 
     const dialog = screen.getByRole("dialog", { name: "Move to project" });
@@ -435,7 +452,7 @@ describe("moving chats in and out of projects", () => {
     expect(within(menu()).getByRole("heading", { name: "Materials in Linear Algebra" })).toBeInTheDocument();
     expect(within(menu()).getByRole("button", { name: "Open Exercise 3-1 Classification beside the chat" })).toBeInTheDocument();
     expect(within(menu()).getByRole("button", { name: "Open Linear algebra notes beside the chat" })).toBeInTheDocument();
-    expect(within(menu()).getByRole("button", { name: "Exercise help in Linear Algebra" })).toBeInTheDocument();
+    expect(within(within(menu()).getByRole("list", { name: "Chats in Linear Algebra" })).getByRole("button", { name: "Exercise help" })).toBeInTheDocument();
   });
 
   it("can move without the chat's materials, into a new project", async () => {
@@ -457,7 +474,7 @@ describe("moving chats in and out of projects", () => {
   it("removes a chat from its project; it keeps a copy of the materials", async () => {
     const user = await openWorkspace("/workspace?chat=s-trees");
     await screen.findByRole("heading", { level: 1, name: "Decision trees" });
-    await user.click(screen.getByRole("button", { name: "Chat actions" }));
+    await user.click(within(within(menu()).getByRole("list", { name: "Chats in Machine Learning" })).getByRole("button", { name: "Actions for Decision trees" }));
     await user.click(screen.getByRole("menuitem", { name: "Remove from project" }));
 
     expect(await screen.findByText("Chat removed from Machine Learning. It keeps a copy of the materials.")).toBeInTheDocument();

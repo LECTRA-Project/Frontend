@@ -609,29 +609,6 @@ button.cf-material__open:hover {
   font-size: 15px;
   font-weight: 600;
 }
-.chat__rename {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.chat__rename input {
-  flex: 1;
-  min-width: 0;
-  height: 34px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: var(--text-md);
-}
-.chat__error {
-  padding: var(--space-2) var(--space-4) 0;
-  font-size: var(--text-sm);
-  color: var(--danger);
-  text-align: center;
-}
 .chat__scroll {
   flex: 1;
   min-height: 0;
@@ -1363,6 +1340,44 @@ button.cf-material__open:hover {
 }
 .composer__scope:hover {
   background: var(--accent-soft);
+}
+/* With several materials the chip opens a list of them (above it: the composer is at the bottom). */
+.composer__scope-menu {
+  position: relative;
+  min-width: 0;
+  max-width: 60%;
+}
+.composer__scope-menu > button {
+  max-width: 100%;
+  min-height: 36px;
+  gap: 6px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--accent-strong);
+}
+.composer__scope-menu > button:hover {
+  background: var(--accent-soft);
+}
+.composer__scope-menu .menu__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer__scope-menu .menu__list {
+  top: auto;
+  bottom: calc(100% + 4px);
+  max-width: min(360px, 80vw);
+  max-height: 280px;
+  overflow-y: auto;
+}
+.composer__scope-menu .menu__item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* The model the next question is asked with (opens the model dialog). */
 .composer__model {

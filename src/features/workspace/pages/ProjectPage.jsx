@@ -23,9 +23,12 @@ const PROJECT_TABS = ["chats", "sources"];
 /*
   A project (/workspace/projects/<id>): its name with ⋯ (Rename, Delete), two tabs and, at
   the bottom, an input box that starts a new chat in the project and opens it with the answer.
-  - Chats: the project's chats, most recently active first (more load while scrolling).
-  - Sources: the project's materials (open beside the page, remove, add one of the
-    student's materials, upload new ones, with their progress).
+  - Chats: the project's chats, most recently active first (more load while scrolling): a
+    row each with its title and last activity, highlighted on hover, with ⋯ (Rename, Move to
+    project…, Remove from project, Delete) that shows on hover or focus.
+  - Sources: "Add sources" (upload new materials, or add one of the student's materials) and,
+    under it, every lecture material in the project (open beside the page, remove), with
+    the uploads in progress.
   Every chat in the project answers from these materials; without any it answers from
   general knowledge. Switching tabs keeps both (and the typed text): nothing is reloaded.
 
@@ -49,6 +52,10 @@ export function ProjectView({
   uploads = [],
   onDismissUpload = () => {},
   onOpenChat,
+  onRenameChat = null,
+  onMoveChat = null,
+  onRemoveChatFromProject = null,
+  onRemoveChat = null,
   onStartChat,
   onRename,
   onDelete,
@@ -67,6 +74,7 @@ export function ProjectView({
   const [actionError, setActionError] = useState(null);
   const [starting, setStarting] = useState(false);
   const [unlinking, setUnlinking] = useState(null); // the material whose × is being confirmed
+  const [removingChat, setRemovingChat] = useState(null); // the chat whose Delete is being confirmed
   const [attempt, setAttempt] = useState(0); // "Try again" after a failed load
   const [tab, setTab] = useState("chats"); // the tab shown: "chats" or "sources"
   const tabRefs = useRef({});
@@ -187,6 +195,16 @@ export function ProjectView({
   const materials = lectures.map(toMaterial);
   const owned = new Set(lectures.map((item) => item.id));
   const addable = library.filter((item) => !owned.has(item.id)).map(toMaterial);
+  // The project's chats come without their project; the shared actions need it.
+  const inProject = (chat) => ({ ...chat, project: { id: project.id, name: project.name } });
+  const chatActions = (chat) => [
+    ...(onRenameChat ? [{ label: t("Rename"), icon: "edit", onSelect: () => onRenameChat(inProject(chat)) }] : []),
+    ...(onMoveChat ? [{ label: t("Move to project…"), icon: "folder", onSelect: () => onMoveChat(inProject(chat)) }] : []),
+    ...(onRemoveChatFromProject
+      ? [{ label: t("Remove from project"), icon: "arrowLeft", onSelect: () => onRemoveChatFromProject(inProject(chat)) }]
+      : []),
+    ...(onRemoveChat ? [{ label: t("Delete chat"), icon: "trash", danger: true, onSelect: () => setRemovingChat(inProject(chat)) }] : []),
+  ];
 
   return (
     <section className="project" aria-labelledby="project-title">
@@ -261,15 +279,24 @@ export function ProjectView({
             </div>
           ) : (
             <ul className="project__chats" aria-label={t("Chats in this project")}>
-              {chats.map((chat) => (
-                <li key={chat.id}>
-                  <button type="button" className="project__chat" onClick={() => onOpenChat(chat.id)}>
-                    <Icon name="chat" size={16} />
-                    <span className="project__chat-title">{displayChatTitle(chat.title)}</span>
-                    <span className="project__chat-date">{activityDate(chat.updated_at)}</span>
-                  </button>
-                </li>
-              ))}
+              {chats.map((chat) => {
+                const actions = chatActions(chat);
+                return (
+                  <li key={chat.id} className="project__chat-row">
+                    <button type="button" className="project__chat" onClick={() => onOpenChat(chat.id)}>
+                      <span className="project__chat-title">{displayChatTitle(chat.title)}</span>
+                      <span className="project__chat-date">{activityDate(chat.updated_at)}</span>
+                    </button>
+                    {actions.length > 0 && (
+                      <Menu
+                        label={t("Actions for {title}", { title: displayChatTitle(chat.title) })}
+                        className="project__chat-more"
+                        items={actions}
+                      />
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {more && (
@@ -286,28 +313,33 @@ export function ProjectView({
           aria-labelledby="project-tab-sources"
           hidden={tab !== "sources"}
         >
-          {/* Add one of the student's materials, or upload new ones (as before). */}
-          <div className="project__section-head project__section-head--end">
-            <div className="cf-materials__actions">
-              {addable.length > 0 && (
-                <Menu
-                  label={t("Add one of your materials to this project")}
-                  icon="plus"
-                  items={addable.map((material) => ({
-                    key: material.id,
-                    label: material.name,
-                    icon: groupOf(material.type)?.icon ?? "fileText",
-                    onSelect: () => changeMaterials(() => addProjectLecture(project.id, material.id)),
-                  }))}
-                />
-              )}
-              <IconButton
-                icon="upload"
-                label={t("Upload a material to this project")}
-                onClick={() => onUploadClick(project)}
-                disabled={available === false}
-              />
-            </div>
+          {/* Add sources: upload new materials, or add one the student already has. */}
+          <div className="project__section-head project__sources-head">
+            <h2 className="project__sources-title">
+              {t("Lecture materials")}
+              {materials.length > 0 && <span className="project__sources-count">{materials.length}</span>}
+            </h2>
+            <Menu
+              label={t("Add sources")}
+              text={t("Add sources")}
+              icon="plus"
+              className="project__add-sources"
+              items={[
+                {
+                  label: t("Upload materials"),
+                  icon: "upload",
+                  disabled: available === false,
+                  onSelect: () => onUploadClick(project),
+                },
+                ...(addable.length > 0 ? ["separator"] : []),
+                ...addable.map((material) => ({
+                  key: material.id,
+                  label: material.name,
+                  icon: material.type === "notebook" ? "code" : (groupOf(material.type)?.icon ?? "fileText"),
+                  onSelect: () => changeMaterials(() => addProjectLecture(project.id, material.id)),
+                })),
+              ]}
+            />
           </div>
           {projectUploads.length > 0 && (
             <ul className="cf-materials__list project__materials" aria-label={t("Uploads to this project")}>
@@ -401,11 +433,11 @@ export function ProjectView({
           placeholder={t("Start a new chat in {name}…", { name: project.name })}
           model={model}
         />
-        <p className="chat__disclaimer">
-          {materials.length > 0
-            ? t("Every chat in this project answers from its materials.")
-            : t("Add materials and the chats in this project answer from them. Until then they answer from general knowledge.")}
-        </p>
+        {materials.length === 0 && (
+          <p className="chat__disclaimer">
+            {t("Add materials and the chats in this project answer from them. Until then they answer from general knowledge.")}
+          </p>
+        )}
       </div>
 
       {unlinking && (
@@ -424,6 +456,21 @@ export function ProjectView({
             name: unlinking.name,
             project: project.name,
           })}
+        </ConfirmDialog>
+      )}
+      {removingChat && (
+        <ConfirmDialog
+          title={t("Delete chat?")}
+          confirmLabel={t("Delete")}
+          danger
+          onConfirm={() => {
+            const chat = removingChat;
+            setRemovingChat(null);
+            onRemoveChat(chat);
+          }}
+          onCancel={() => setRemovingChat(null)}
+        >
+          {t("“{title}” and all its messages will be deleted. Its materials are kept.", { title: displayChatTitle(removingChat.title) })}
         </ConfirmDialog>
       )}
       {renaming && (

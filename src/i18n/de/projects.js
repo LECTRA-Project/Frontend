@@ -129,4 +129,8 @@ export default {
   "Hide the chats in {name}": "Chats in {name} ausblenden",
   "All {count} chats in the project": "Alle {count} Chats im Projekt",
   "The chat could not be created in {name}.": "Der Chat konnte in {name} nicht erstellt werden.",
+  "Add sources": "Quellen hinzufügen",
+  "Lecture materials": "Vorlesungsmaterialien",
+  "The chat could not be renamed.": "Der Chat konnte nicht umbenannt werden.",
+  "The chat could not be removed from the project.": "Der Chat konnte nicht aus dem Projekt entfernt werden.",
 };

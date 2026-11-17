@@ -2,6 +2,8 @@ import { useLayoutEffect, useRef, useState } from "react";
 
 import Icon from "../../../components/ui/Icon.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
+import Menu from "../../../components/ui/Menu.jsx";
+import { groupOf } from "../../../services/materials/materialTypes.js";
 import ModelPicker from "./ModelPicker.jsx";
 import { cellContextLabel, lineCount } from "../../../services/notebook/cellContext.js";
 import { useI18n } from "../../../i18n/i18n.js";
@@ -11,7 +13,8 @@ const CELL_ICONS = { code: "code", markdown: "text", raw: "fileText" };
 /*
   The message box under the chat, as wide as the conversation.
   The text area is on top; below it + uploads a material into this chat, the scope chip
-  names the chat's materials (it opens the menu that lists them), and Send (or Enter) calls
+  names the chat's materials (a click opens the material in the viewer; with several it lists
+  them to choose from), and Send (or Enter) calls
   onSend(text). Shift+Enter adds a new line; the box grows with its text (up to a few lines).
 
   Notebook cells dropped on the chat (which handles the drop) are listed above the input
@@ -21,7 +24,7 @@ const CELL_ICONS = { code: "code", markdown: "text", raw: "fileText" };
   to keep the typed text.
 
   Props:
-    scope   { label, onClick } for the materials chip, or null
+    scope   { label, materials, onOpen(material) } for the materials chip, or null
     model   what useChatModel() returns: the model button beside the chip (none: no button)
 */
 export default function ChatComposer({
@@ -150,11 +153,31 @@ export default function ChatComposer({
             onClick={onAttachClick}
             disabled={attachDisabled}
           />
-          {scope && (
-            <button type="button" className="composer__scope" onClick={scope.onClick} title={t("Materials in this chat")}>
+          {scope && scope.materials.length === 1 && (
+            <button
+              type="button"
+              className="composer__scope"
+              onClick={() => scope.onOpen(scope.materials[0])}
+              title={t("Open {name} beside the chat", { name: scope.materials[0].name })}
+            >
               <Icon name="fileText" size={15} />
               <span>{scope.label}</span>
             </button>
+          )}
+          {scope && scope.materials.length > 1 && (
+            <Menu
+              label={t("Materials in this chat")}
+              icon="fileText"
+              text={scope.label}
+              align="start"
+              className="composer__scope-menu"
+              items={scope.materials.map((material) => ({
+                key: material.id,
+                label: material.name,
+                icon: material.type === "notebook" ? "code" : (groupOf(material.type)?.icon ?? "fileText"),
+                onSelect: () => scope.onOpen(material),
+              }))}
+            />
           )}
           {model && <ModelPicker model={model} disabled={attachDisabled} />}
           <span className="composer__spacer" />

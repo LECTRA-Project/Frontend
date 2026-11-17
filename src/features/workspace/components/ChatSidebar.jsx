@@ -28,8 +28,8 @@ const PROJECT_CHATS_SHOWN = 5;
   describes itself with it ("58% complete"). Lectures already uploaded can be added
   from "Add one of your materials". Each material's ⋯ menu manages it in the library:
   Rename, and Delete from library (it then leaves every chat). A failed one can be retried.
-  Each chat's ⋯ menu has Remove, which asks first and then deletes the chat and its messages
-  (its materials are kept).
+  Each chat's ⋯ menu has Rename, Move to project… and Remove, which asks first and then deletes
+  the chat and its messages (its materials are kept).
 
   mode:  "docked"  part of the row
          "overlay" floats over the chat with a scrim (not enough room beside the viewer)
@@ -54,15 +54,18 @@ const PROJECT_CHATS_SHOWN = 5;
                                                      comes into view (or with its button)
     onRemoveChat(session)         deletes a chat after confirmation; resolves true when removed
     onMoveChat(session)           opens "Move to project" for a chat (none: not offered)
+    onRenameChat(session)         opens "Rename chat" for a chat (none: not offered)
+    onRemoveChatFromProject(session)  makes a project's chat a normal chat (none: not offered)
     available                     false when the server has no chat API
 
   Projects (a course's materials and chats together): a section above the chats with the 3 most recently active projects, + (a new project) and,
   with more than 3, "View all projects". Each project is a folder: the arrow shows its chats
   (the latest few, with "All chats in the project" for the rest) and "New chat" starts
   another chat in it — a project can have any number of chats. The project of the open chat
-  or page starts unfolded. A chat in a project also shows the project's name as a small tag
-  in the Chats list; its materials are the project's ("Materials in <project>"), so adding
-  or removing one changes the project.
+  or page starts unfolded. A chat in a project is listed only under its project (not in the
+  Chats list); with a mouse its ⋯ (Rename, Move to project…, Remove from project, Remove)
+  shows on hover. Its materials are the project's ("Materials in <project>"), so adding or
+  removing one changes the project.
     projects            { recent, total } (see useProjects), or null without projects
     projectsAvailable   true when the server has projects (the collapsed rail then offers
                         "New project"; open, the + of the Projects section does)
@@ -104,6 +107,8 @@ export default function ChatSidebar({
   onLoadMoreChats = () => {},
   onRemoveChat,
   onMoveChat = null,
+  onRenameChat = null,
+  onRemoveChatFromProject = null,
   available = true,
   projects = null,
   currentProjectId = null,
@@ -158,7 +163,18 @@ export default function ChatSidebar({
     if (await onRemoveChat(session)) newChatRef.current?.focus();
   }
 
-  const groups = groupChats(sessions);
+  // Chats in a project are listed under their project only.
+  const groups = groupChats(sessions.filter((session) => !session.project));
+
+  // The ⋯ of a chat (in the Chats list, or under its project).
+  const chatActions = (session) => [
+    ...(onRenameChat ? [{ label: t("Rename"), icon: "edit", onSelect: () => onRenameChat(session) }] : []),
+    ...(onMoveChat ? [{ label: t("Move to project…"), icon: "folder", onSelect: () => onMoveChat(session) }] : []),
+    ...(session.project && onRemoveChatFromProject
+      ? [{ label: t("Remove from project"), icon: "arrowLeft", onSelect: () => onRemoveChatFromProject(session) }]
+      : []),
+    { label: t("Remove"), icon: "trash", danger: true, onSelect: () => setRemoving(session) },
+  ];
   const overlay = mode !== "docked";
 
   return (
@@ -320,7 +336,6 @@ export default function ChatSidebar({
                     // Its chats among those loaded (newest first, as in the Chats list).
                     const chats = sessions.filter((session) => session.project?.id === project.id);
                     const total = Math.max(chats.length, project.chat_count ?? 0);
-                    const ringId = typeof project.completion_percent === "number" ? `cf-project-ring-${project.id}` : undefined;
                     return (
                       <li key={project.id} className="cf-project-item">
                         <div className={`cf-project-row ${current ? "cf-project-row--current" : ""}`}>
@@ -340,12 +355,10 @@ export default function ChatSidebar({
                             aria-current={current ? "page" : undefined}
                             title={project.name}
                             aria-label={project.name}
-                            aria-describedby={ringId}
                             onClick={() => onOpenProject(project.id)}
                           >
                             <Icon name="folder" size={16} />
                             <span className="cf-project__name">{project.name}</span>
-                            {ringId && <CompletionRing id={ringId} percent={project.completion_percent} className="cf-project__ring" />}
                           </button>
                           {onNewProjectChat && (
                             <IconButton
@@ -376,7 +389,7 @@ export default function ChatSidebar({
                             {chats.slice(0, PROJECT_CHATS_SHOWN).map((session) => {
                               const open = session.id === activeId;
                               return (
-                                <li key={session.id}>
+                                <li key={session.id} className={`cf-project-chat-row ${open ? "cf-project-chat-row--current" : ""}`}>
                                   <button
                                     type="button"
                                     className={`cf-project-chat ${open ? "cf-project-chat--current" : ""}`}
@@ -384,9 +397,14 @@ export default function ChatSidebar({
                                     title={displayChatTitle(session.title)}
                                     onClick={() => onOpenChat(session.id)}
                                   >
-                                    <Icon name="chat" size={14} />
                                     <span className="cf-project__name">{displayChatTitle(session.title)}</span>
                                   </button>
+                                  {/* With a mouse, ⋯ shows on hover or focus (as in the Chats list). */}
+                                  <Menu
+                                    label={t("Actions for {title}", { title: displayChatTitle(session.title) })}
+                                    className="cf-project-chat__more"
+                                    items={chatActions(session)}
+                                  />
                                 </li>
                               );
                             })}
@@ -456,42 +474,19 @@ export default function ChatSidebar({
                         <li key={session.id} className={`cf-chat-row ${current ? "cf-chat-row--current" : ""}`}>
                           <button
                             type="button"
-                            className={`cf-chat ${current ? "cf-chat--current" : ""} ${session.project ? "cf-chat--tagged" : ""}`}
+                            className={`cf-chat ${current ? "cf-chat--current" : ""}`}
                             aria-current={current ? "page" : undefined}
-                            title={
-                              session.project
-                                ? t("{title} (in {project})", { title: displayChatTitle(session.title), project: session.project.name })
-                                : displayChatTitle(session.title)
-                            }
+                            title={displayChatTitle(session.title)}
                             onClick={() => onOpenChat(session.id)}
                           >
-                            {session.project ? (
-                              <>
-                                <span className="cf-chat__title">{displayChatTitle(session.title)}</span>
-                                {" "}
-                                <span className="visually-hidden">{t("in {project}", { project: session.project.name })}</span>
-                                {/* A label only: the whole row opens the chat. */}
-                                <span className="project-tag" aria-hidden="true">
-                                  <Icon name="folder" size={11} />
-                                  <span className="project-tag__name">{session.project.name}</span>
-                                </span>
-                              </>
-                            ) : (
-                              displayChatTitle(session.title)
-                            )}
+                            {displayChatTitle(session.title)}
                           </button>
                           {/* Like the material rows: with a mouse, ⋯ shows on hover or focus. It never opens the chat. */}
                           <span className="cf-chat__actions" onClick={(event) => event.stopPropagation()}>
                             <Menu
                               label={t("Actions for {title}", { title: displayChatTitle(session.title) })}
                               className="cf-chat__more"
-                              items={[
-                                ...(session.project && onNewProjectChat
-                                  ? [{ label: t("New chat in {name}", { name: session.project.name }), icon: "plus", onSelect: () => onNewProjectChat(session.project) }]
-                                  : []),
-                                ...(onMoveChat ? [{ label: t("Move to project…"), icon: "folder", onSelect: () => onMoveChat(session) }] : []),
-                                { label: t("Remove"), icon: "trash", danger: true, onSelect: () => setRemoving(session) },
-                              ]}
+                              items={chatActions(session)}
                             />
                           </span>
                         </li>

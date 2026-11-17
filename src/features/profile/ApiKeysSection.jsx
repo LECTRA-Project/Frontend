@@ -17,7 +17,8 @@ import { PROVIDERS } from "./providers.js";
 
   - API key: a provider dropdown (Claude, Gemini, GPT, each saying whether a key is saved)
     with Add key, or Replace key and Remove key, for the chosen provider. Adding or
-    replacing opens the key form under it, named for its provider. Removing asks first.
+    replacing opens the key form under it, named for its provider. Removing asks first, and
+    so does saving a replacement (the saved key is overwritten).
   - Chat model: Lectra and the models the saved keys unlock — models only, no key actions.
     A provider without a key is not listed; a key that doesn't work says so.
   - The key is typed into a password field (it can be shown while typing), sent once to
@@ -506,6 +507,7 @@ function KeyForm({ provider, saved, onSaved, onCancel }) {
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState(null); // { kind, text }
+  const [confirming, setConfirming] = useState(false); // asking before a saved key is replaced
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -513,7 +515,7 @@ function KeyForm({ provider, saved, onSaved, onCancel }) {
     inputRef.current?.focus({ preventScroll: true });
   }, []);
 
-  async function save(event) {
+  function save(event) {
     event.preventDefault();
     const key = value.trim();
     if (!key) {
@@ -524,6 +526,16 @@ function KeyForm({ provider, saved, onSaved, onCancel }) {
       setStatus({ kind: "error", text: t("An API key has no spaces. Check that you copied the whole key and nothing else.") });
       return;
     }
+    // Replacing overwrites the saved key: ask first.
+    if (saved) {
+      setStatus(null);
+      setConfirming(true);
+      return;
+    }
+    submit(key);
+  }
+
+  async function submit(key) {
     setBusy(true);
     setStatus({ kind: "info", text: t("Checking the key with {provider}…", { provider: provider.name }) });
     try {
@@ -596,6 +608,25 @@ function KeyForm({ provider, saved, onSaved, onCancel }) {
         <p className={`settings__key-status settings__key-status--${status.kind}`} role={status.kind === "error" ? "alert" : "status"}>
           {status.text}
         </p>
+      )}
+      {confirming && (
+        <ConfirmDialog
+          title={t("Replace the {provider} API key?", { provider: provider.name })}
+          confirmLabel={t("Replace key")}
+          danger
+          onConfirm={() => {
+            setConfirming(false);
+            submit(value.trim());
+          }}
+          onCancel={() => {
+            setConfirming(false);
+            inputRef.current?.focus();
+          }}
+        >
+          <p>
+            {t("The saved key ending in {last4} will be replaced by the new one. This can't be undone.", { last4: saved.key_last4 })}
+          </p>
+        </ConfirmDialog>
       )}
     </form>
   );

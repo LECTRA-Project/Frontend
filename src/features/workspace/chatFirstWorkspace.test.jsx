@@ -126,9 +126,9 @@ describe("chat-first workspace: chats and their materials", () => {
     // Only the answer without sources is marked as general knowledge.
     expect(screen.getAllByText("Not from your materials")).toHaveLength(1);
     expect(screen.getByText(/1 \+ 1 equals 2/).closest(".chat-answer")).toHaveTextContent("Not from your materials");
-    // The composer's scope chip names the chat's material and shows it in the menu.
+    // The composer's scope chip names the chat's material and opens it in the PDF viewer.
     await user.click(screen.getByRole("button", { name: "KI 02 Classification Part1" }));
-    await waitFor(() => expect(document.getElementById("cf-materials")).toHaveFocus());
+    expect(await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" })).toBeInTheDocument();
   });
 
   it("switches the materials and closes the viewer when another chat is opened; a new chat has none", async () => {
@@ -261,20 +261,21 @@ describe("chat-first workspace: chats and their materials", () => {
     expect(within(lists.at(-1)).getByRole("button")).toHaveTextContent("Cell 2Regression solution");
   });
 
-  it("renames and deletes the open chat", async () => {
+  it("renames and deletes the open chat from its ⋯ in the menu (the chat bar has no ⋯)", async () => {
     const { user } = await openWorkspace();
     await openChat(user, "Hunt's algorithm");
-    await user.click(screen.getByRole("button", { name: "Chat actions" }));
-    await user.click(screen.getByRole("menuitem", { name: "Rename chat" }));
-    const field = screen.getByLabelText("Chat title");
+    expect(screen.queryByRole("button", { name: "Chat actions" })).not.toBeInTheDocument();
+    await user.click(within(menu()).getByRole("button", { name: "Actions for Hunt's algorithm" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const field = within(screen.getByRole("dialog", { name: "Rename chat" })).getByLabelText("Chat title");
     await user.clear(field);
     await user.type(field, "Decision trees{Enter}");
     expect(await screen.findByRole("heading", { level: 1, name: "Decision trees" })).toBeInTheDocument();
     expect(within(menu()).getByRole("button", { name: "Decision trees" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Chat actions" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete chat" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+    await user.click(within(menu()).getByRole("button", { name: "Actions for Decision trees" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(within(menu()).queryByRole("button", { name: "Decision trees" })).not.toBeInTheDocument());
     expect(screen.getByRole("heading", { name: "What are we studying today?" })).toBeInTheDocument();
   });
@@ -683,10 +684,9 @@ describe("chat-first workspace at phone width", () => {
     expect(screen.queryByRole("navigation", { name: "Chats and this chat's materials" })).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { level: 1, name: "Hunt's algorithm" })).toBeInTheDocument();
 
-    // The scope chip under the message box opens the menu with the chat's materials.
+    // The scope chip under the message box opens the chat's material in the PDF viewer.
     await user.click(await screen.findByRole("button", { name: "KI 02 Classification Part1" }));
-    expect(materialNames()).toEqual(["Open KI 02 Classification Part1 beside the chat"]);
-    await user.keyboard("{Escape}");
+    expect(await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Chats and this chat's materials" })).not.toBeInTheDocument();
   });
 });

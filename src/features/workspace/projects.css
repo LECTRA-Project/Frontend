@@ -79,10 +79,6 @@ button.project-tag--button:hover {
   gap: var(--space-2);
   padding: 0 6px;
 }
-/* Only the actions (the Sources tab names the section). */
-.project__section-head--end {
-  justify-content: flex-end;
-}
 /* Chats | Sources: pill tabs; the selected one is filled. */
 .project-tabs {
   display: flex;
@@ -135,12 +131,42 @@ button.project-tag--button:hover {
   padding: 0;
   list-style: none;
 }
-.project__chat {
-  width: 100%;
-  min-height: 48px;
+/* The project's chats: one row each (title, last activity), with lines between them. */
+.project__chats {
+  gap: 0;
+}
+.project__chat-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  border-radius: 10px;
+}
+.project__chat-row + .project__chat-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--space-3);
+  right: var(--space-3);
+  border-top: 1px solid var(--border-default);
+}
+.project__chat-row:hover,
+.project__chat-row:focus-within {
+  background: var(--accent-soft);
+}
+/* No line next to the highlighted row. */
+.project__chat-row:hover::before,
+.project__chat-row:focus-within::before,
+.project__chat-row:hover + .project__chat-row::before,
+.project__chat-row:focus-within + .project__chat-row::before {
+  border-top-color: transparent;
+}
+.project__chat {
+  flex: 1;
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   padding: 0 var(--space-3);
   border: none;
   border-radius: 10px;
@@ -148,13 +174,7 @@ button.project-tag--button:hover {
   text-align: left;
   font-size: var(--text-md);
   color: var(--text-primary);
-}
-.project__chat:hover {
-  background: var(--accent-soft);
-}
-.project__chat > svg {
-  flex: none;
-  color: var(--text-secondary);
+  cursor: pointer;
 }
 .project__chat-title {
   flex: 1;
@@ -165,8 +185,82 @@ button.project-tag--button:hover {
 }
 .project__chat-date {
   flex: none;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
+}
+.project__chat-more {
+  flex: none;
+  margin-right: 6px;
+}
+.project__chat-more .menu__list {
+  min-width: 190px;
+}
+/* With a mouse, ⋯ takes the date's place on hover or focus (and while its list is open). */
+@media (hover: hover) and (pointer: fine) {
+  .project__chat-more {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+  }
+  .project__chat-more > .icon-btn {
+    opacity: 0;
+  }
+  .project__chat-row:hover .project__chat-more > .icon-btn,
+  .project__chat-row:focus-within .project__chat-more > .icon-btn,
+  .project__chat-more > .icon-btn[aria-expanded="true"] {
+    opacity: 1;
+  }
+  .project__chat-row:hover .project__chat-date,
+  .project__chat-row:focus-within .project__chat-date {
+    visibility: hidden;
+  }
+}
+
+/* Sources: the title with "Add sources", the materials under it. */
+.project__sources-head {
+  padding: 0 4px;
+}
+.project__sources-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.project__sources-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.project__add-sources {
+  position: relative;
+}
+.project__add-sources > button {
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.project__add-sources > button:hover {
+  background: var(--accent-soft);
+}
+.project__add-sources .menu__list {
+  min-width: 240px;
+  max-width: min(360px, 85vw);
+  max-height: 320px;
+  overflow-y: auto;
 }
 
 /* All projects */
@@ -282,11 +376,6 @@ button.project-tag--button:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The project's course completion, at the end of its name. */
-.cf-project__ring {
-  flex: none;
-  margin-left: auto;
-}
 /* A project as a folder: arrow | name (opens the project) | + (new chat in it, on hover). */
 .cf-project-row {
   display: flex;
@@ -401,6 +490,60 @@ button.cf-project-chat:hover {
 .cf-project-chat--new > svg {
   color: var(--accent);
 }
+/* A chat under its project: the row highlights on hover and its ⋯ shows over the end. */
+.cf-project-chat-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+}
+.cf-project-chat-row .cf-project-chat {
+  flex: 1;
+  min-width: 0;
+}
+.cf-project-chat-row:hover,
+.cf-project-chat-row:focus-within {
+  background: var(--accent-soft);
+}
+.cf-project-chat-row--current,
+.cf-project-chat-row--current:hover,
+.cf-project-chat-row--current:focus-within {
+  background: var(--accent-hover);
+}
+.cf-project-chat-row button.cf-project-chat:hover,
+.cf-project-chat-row .cf-project-chat--current {
+  background: transparent;
+}
+.cf-project-chat__more {
+  flex: none;
+  margin-right: 2px;
+}
+.cf-project-chat__more > .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.cf-project-chat__more .menu__list {
+  min-width: 180px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cf-project-chat__more {
+    position: absolute;
+    top: 3px;
+    right: 0;
+  }
+  .cf-project-chat__more > .icon-btn {
+    opacity: 0;
+  }
+  .cf-project-chat-row:hover .cf-project-chat,
+  .cf-project-chat-row:focus-within .cf-project-chat {
+    padding-right: 32px;
+  }
+  .cf-project-chat-row:hover .cf-project-chat__more > .icon-btn,
+  .cf-project-chat-row:focus-within .cf-project-chat__more > .icon-btn,
+  .cf-project-chat__more > .icon-btn[aria-expanded="true"] {
+    opacity: 1;
+  }
+}
 .cf-project-chat__all {
   margin: 2px 8px;
   font-size: var(--text-sm);
@@ -413,19 +556,6 @@ button.cf-project-chat:hover {
 /* A chat row with its project's tag: the tag stays short so the title keeps most of the row. */
 .cf-chat .project-tag {
   max-width: 84px;
-}
-/* A chat row with its project's tag. */
-.cf-chat--tagged {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.cf-chat__title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Dialogs */
