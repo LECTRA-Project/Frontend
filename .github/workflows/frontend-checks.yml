@@ -1,0 +1,40 @@
+# Runs the frontend checks on every pull request (and on main): lint, the Vitest tests and
+# the production build, so a failure shows on the pull request. No backend is needed (the
+# tests mock the API); the browser tests (npm run e2e) need a local backend and stay manual.
+name: Frontend checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npx vitest run
+
+      - name: Build
+        run: npm run build
