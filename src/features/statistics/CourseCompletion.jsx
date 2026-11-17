@@ -1,5 +1,4 @@
 import { useId, useState } from "react";
-import { Link } from "react-router-dom";
 
 import Button from "../../components/ui/Button.jsx";
 import CompletionRing from "../../components/ui/CompletionRing.jsx";
@@ -22,8 +21,10 @@ import "./courseCompletion.css";
   - "How is completion calculated?" opens the formula, with the weights the backend sends
     (e.g. 70% pages read + 30% best exam score). It is a button that shows and hides the
     text below it, so it works with a keyboard, a mouse and touch alike.
-  - Loading, an error with "Try again", and a first-time student without lectures, who is
-    told how to start.
+  - Loading, an error with "Try again", and a first-time student without lectures: "Your
+    lectures will show here", without a button (the overall cards above already show how to
+    start with "Upload a lecture", so the page has one upload button). A project without
+    materials says so.
 */
 
 // "52 of 65 pages"; source_type null is an image (one page: opened or not).
@@ -143,12 +144,14 @@ export default function CourseCompletion({ projectId = null }) {
   } else if (lectures.length === 0) {
     body = (
       <div className="completion__empty">
-        <p className="completion__empty-title">{t("No lectures yet")}</p>
-        <p>{t("Upload a lecture and read it to see your progress.")}</p>
-        <Link to="/workspace" className="btn btn--primary btn--sm">
-          <Icon name="upload" />
-          {t("Upload a lecture")}
-        </Link>
+        <p className="completion__empty-title">
+          {projectId ? t("No materials in this project yet") : t("Your lectures will show here")}
+        </p>
+        <p>
+          {projectId
+            ? t("Add materials to the project, then read them to see how far you are.")
+            : t("Each lecture you upload shows how much of it you have read and your best exam score.")}
+        </p>
       </div>
     );
   } else {

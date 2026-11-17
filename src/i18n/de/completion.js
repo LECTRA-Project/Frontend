@@ -31,8 +31,12 @@ export default {
     "Der Gesamtwert gewichtet jede Vorlesung nach ihren Seiten, eine lange Vorlesung zählt also mehr.",
   "Loading your course completion…": "Dein Kursfortschritt wird geladen …",
   "Unable to load your course completion.": "Dein Kursfortschritt konnte nicht geladen werden.",
-  "No lectures yet": "Noch keine Vorlesungen",
-  "Upload a lecture and read it to see your progress.": "Lade eine Vorlesung hoch und lies sie, um deinen Fortschritt zu sehen.",
   "Upload a lecture": "Vorlesung hochladen",
+  "Your lectures will show here": "Deine Vorlesungen erscheinen hier",
+  "Each lecture you upload shows how much of it you have read and your best exam score.":
+    "Jede hochgeladene Vorlesung zeigt, wie viel du davon gelesen hast, und dein bestes Prüfungsergebnis.",
+  "No materials in this project yet": "Noch keine Materialien in diesem Projekt",
+  "Add materials to the project, then read them to see how far you are.":
+    "Füge dem Projekt Materialien hinzu und lies sie, um zu sehen, wie weit du bist.",
   "Unable to load the lecture.": "Die Vorlesung konnte nicht geladen werden.",
 };
