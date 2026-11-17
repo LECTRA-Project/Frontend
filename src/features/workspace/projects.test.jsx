@@ -139,14 +139,16 @@ describe("projects in the menu", () => {
     const user = await openWorkspace();
     const before = backend.sessions.filter((item) => item.projectId === "p-ml").length;
 
-    // The + beside the project.
-    await user.click(within(menu()).getByRole("button", { name: "New chat in Machine Learning" }));
+    // Only New chat inside the unfolded project (the project row has no +).
+    await user.click(within(menu()).getByRole("button", { name: "Show the chats in Machine Learning" }));
+    const chats = within(menu()).getByRole("list", { name: "Chats in Machine Learning" });
+    expect(within(menu()).getAllByRole("button", { name: "New chat in Machine Learning" })).toHaveLength(1);
+    await user.click(within(chats).getByRole("button", { name: "New chat in Machine Learning" }));
     await waitFor(() => expect(backend.sessions.filter((item) => item.projectId === "p-ml")).toHaveLength(before + 1));
     expect(await within(menu()).findByRole("heading", { name: "Materials in Machine Learning" })).toBeInTheDocument();
-    const chats = within(menu()).getByRole("list", { name: "Chats in Machine Learning" });
 
-    // And New chat inside the unfolded project: another one.
-    await user.click(within(chats).getByRole("button", { name: "New chat in Machine Learning" }));
+    // And again: another one.
+    await user.click(within(within(menu()).getByRole("list", { name: "Chats in Machine Learning" })).getByRole("button", { name: "New chat in Machine Learning" }));
     await waitFor(() => expect(backend.sessions.filter((item) => item.projectId === "p-ml")).toHaveLength(before + 2));
     expect(screen.getByRole("button", { name: "Open the project Machine Learning" })).toBeInTheDocument();
   });
@@ -179,6 +181,35 @@ describe("projects in the menu", () => {
     expect(backend.lectures).toHaveLength(3);
     await waitFor(() => expect(projectNames()).not.toContain("Machine Learning"));
     expect(screen.getByRole("heading", { level: 1, name: "Exercise help" })).toBeInTheDocument();
+  });
+
+  it("shows only the latest 3 chats of a project", async () => {
+    install({
+      sessions: Array.from({ length: 5 }, (_, index) => ({
+        id: `s-${index}`,
+        title: `Chat ${index + 1}`,
+        projectId: "p-ml",
+        updated_at: daysAgo(index),
+      })),
+    });
+    const user = await openWorkspace();
+    await user.click(within(menu()).getByRole("button", { name: "Show the chats in Machine Learning" }));
+    const chats = within(menu()).getByRole("list", { name: "Chats in Machine Learning" });
+    expect(within(chats).getAllByRole("button", { name: /^Chat \d$/ }).map((button) => button.textContent)).toEqual(["Chat 1", "Chat 2", "Chat 3"]);
+    expect(within(chats).queryByRole("button", { name: /chats in the project/ })).not.toBeInTheDocument();
+  });
+
+  it("renames a project from its ⋯ in the menu", async () => {
+    const user = await openWorkspace();
+    await user.click(within(recent()).getByRole("button", { name: "Actions for Linear Algebra" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename project" }));
+    const field = within(screen.getByRole("dialog", { name: "Rename project" })).getByLabelText("Project name");
+    expect(field).toHaveValue("Linear Algebra");
+    await user.clear(field);
+    await user.type(field, "Linear Algebra II{Enter}");
+    await waitFor(() => expect(within(recent()).getByRole("button", { name: "Linear Algebra II" })).toBeInTheDocument());
+    expect(backend.projects.find((item) => item.id === "p-la").name).toBe("Linear Algebra II");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("keeps the project and shows the error when removing it fails", async () => {
@@ -347,6 +378,24 @@ describe("a project's page", () => {
     expect(scroll.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(scroll).toContainElement(screen.getByRole("tablist", { name: "Project content" }));
     expect(scroll).toContainElement(screen.getByRole("list", { name: "Chats in this project" }));
+  });
+
+  it("lists the project's sources with the latest upload first", async () => {
+    const old = lectureFixture("l-old", "Week 1 slides", { uploadedAt: "2026-10-01T10:00:00Z" });
+    const mid = lectureFixture("l-mid", "Week 2 slides", { uploadedAt: "2026-10-08T10:00:00Z" });
+    const recent = lectureFixture("l-new", "Week 3 slides", { uploadedAt: "2026-10-15T10:00:00Z" });
+    install({
+      lectures: [old, mid, recent],
+      projects: [{ id: "p-ml", name: "Machine Learning", lectureIds: [old.id, recent.id, mid.id], updated_at: daysAgo(0) }],
+    });
+    const user = await openWorkspace("/workspace/projects/p-ml");
+    await user.click(await screen.findByRole("tab", { name: "Sources" }));
+    const sources = await screen.findByRole("list", { name: "Materials in this project" });
+    expect(within(sources).getAllByRole("button", { name: /^Open / }).map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Open Week 3 slides beside the project",
+      "Open Week 2 slides beside the project",
+      "Open Week 1 slides beside the project",
+    ]);
   });
 
   it("adds and removes the project's materials; its chats follow", async () => {

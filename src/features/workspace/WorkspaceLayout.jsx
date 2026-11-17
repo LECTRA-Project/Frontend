@@ -202,6 +202,7 @@ export default function WorkspaceLayout() {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [moving, setMoving] = useState(null); // a chat, in the "Move to project" dialog
   const [renamingChat, setRenamingChat] = useState(null); // a chat, in the "Rename chat" dialog
+  const [renamingProject, setRenamingProject] = useState(null); // a project, in the "Rename project" dialog
   // Bumped when a project's materials or name changed here, so the project pages read it again.
   const [projectsVersion, setProjectsVersion] = useState(0);
   const [examProject, setExamProject] = useState(null); // the project of /workspace/exam?project=
@@ -1131,6 +1132,7 @@ export default function WorkspaceLayout() {
           onLoadMoreChats={chat.loadMoreSessions}
           onRemoveChat={removeChat}
           onRemoveProject={chatAvailable === true ? removeProject : null}
+          onRenameProject={chatAvailable === true ? setRenamingProject : null}
           onMoveChat={chatAvailable === true ? setMoving : null}
           onRenameChat={chatAvailable === true ? setRenamingChat : null}
           onRemoveChatFromProject={chatAvailable === true ? takeOutOfProject : null}
@@ -1208,6 +1210,16 @@ export default function WorkspaceLayout() {
           onMove={(projectId, options) => moveChat(moving, projectId, options)}
           onCreate={(name) => projects.create(name)}
           onCancel={() => setMoving(null)}
+        />
+      )}
+      {renamingProject && (
+        <ProjectNameDialog
+          project={renamingProject}
+          onSave={async (name) => {
+            await renameProjectTo(renamingProject, name);
+            setRenamingProject(null);
+          }}
+          onCancel={() => setRenamingProject(null)}
         />
       )}
       {renamingChat && (

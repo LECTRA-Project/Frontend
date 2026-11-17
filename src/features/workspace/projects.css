@@ -192,16 +192,38 @@ button.project-tag--button:hover {
   flex: none;
   margin-right: 6px;
 }
+/* While its ⋯ list is open the row stays highlighted and above the rows under it, which
+   don't react to the pointer passing over the list. */
+.project__chat-row:has(.menu__list) {
+  z-index: 5;
+  background: var(--accent-soft);
+}
+.project__chat-row:has(.menu__list)::before,
+.project__chat-row:has(.menu__list) + .project__chat-row::before {
+  border-top-color: transparent;
+}
+.project__chat-row:has(.menu__list) .project__chat-more > .icon-btn {
+  opacity: 1;
+}
+.project__chat-row:has(.menu__list) .project__chat-date {
+  visibility: hidden;
+}
+.project__chats:has(.menu__list) .project__chat-row:not(:has(.menu__list)) {
+  pointer-events: none;
+}
 .project__chat-more .menu__list {
   min-width: 190px;
 }
 /* With a mouse, ⋯ takes the date's place on hover or focus (and while its list is open). */
 @media (hover: hover) and (pointer: fine) {
+  /* Centred without a transform: a transform would trap the open list under the next rows. */
   .project__chat-more {
     position: absolute;
-    top: 50%;
+    top: 0;
+    bottom: 0;
     right: 0;
-    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
   }
   .project__chat-more > .icon-btn {
     opacity: 0;
@@ -412,15 +434,7 @@ button.project-tag--button:hover {
 .cf-project__toggle:hover {
   color: var(--text-primary);
 }
-.cf-project__new.icon-btn {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  margin-right: 4px;
-  color: var(--accent);
-  opacity: 0;
-}
-/* ⋯ (Remove project) beside +: shown the same way, and kept while its list is open. */
+/* ⋯ (Rename, Remove project): shown on hover or focus, and kept while its list is open. */
 .cf-project__more {
   flex: none;
   margin-right: 4px;
@@ -433,15 +447,12 @@ button.project-tag--button:hover {
 .cf-project__more .menu__list {
   min-width: 170px;
 }
-.cf-project-row:hover .cf-project__new,
-.cf-project-row:focus-within .cf-project__new,
 .cf-project-row:hover .cf-project__more > .icon-btn,
 .cf-project-row:focus-within .cf-project__more > .icon-btn,
 .cf-project__more > .icon-btn[aria-expanded="true"] {
   opacity: 1;
 }
 @media (hover: none) {
-  .cf-project__new.icon-btn,
   .cf-project__more > .icon-btn {
     opacity: 1;
   }
@@ -518,6 +529,19 @@ button.cf-project-chat:hover {
   flex: none;
   margin-right: 2px;
 }
+/* The same in the menu: the row with the open list stays on top and highlighted. */
+.cf-project-chat-row:has(.menu__list) {
+  z-index: 5;
+}
+.cf-project-chat-row:not(.cf-project-chat-row--current):has(.menu__list) {
+  background: var(--accent-soft);
+}
+.cf-project-chat-row:has(.menu__list) .cf-project-chat__more > .icon-btn {
+  opacity: 1;
+}
+.cf-project__chats:has(.menu__list) .cf-project-chat-row:not(:has(.menu__list)) {
+  pointer-events: none;
+}
 .cf-project-chat__more > .icon-btn {
   width: 28px;
   height: 28px;
@@ -543,10 +567,6 @@ button.cf-project-chat:hover {
   .cf-project-chat__more > .icon-btn[aria-expanded="true"] {
     opacity: 1;
   }
-}
-.cf-project-chat__all {
-  margin: 2px 8px;
-  font-size: var(--text-sm);
 }
 /* "New project" under New chat at the top of the menu. */
 .cf-projects__all {
