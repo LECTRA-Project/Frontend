@@ -44,6 +44,22 @@
   font-size: 12.5px;
   color: var(--accent-strong);
 }
+/* How the number moves: an arrow and words, never colour alone. */
+.overview__change {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.overview__change-arrow {
+  flex: none;
+  font-size: 10px;
+}
+.overview__change--up .overview__change-arrow {
+  color: var(--accent-strong);
+}
 
 /* Loading: the cards keep their place, with soft bars for the numbers. */
 .overview__placeholder {

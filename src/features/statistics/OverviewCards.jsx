@@ -13,7 +13,9 @@ import {
   numberText,
   pagesTotalText,
   questionsAnsweredText,
+  scoreChangeText,
   streakText,
+  weekChangeText,
 } from "./overviewText.js";
 import "./overviewCards.css";
 
@@ -25,6 +27,11 @@ import "./overviewCards.css";
     Pages read        214     of 340 pages in your materials
     Study streak      5 days  Last activity today / yesterday / on 12 Nov (UTC days, like the streak)
     Questions asked   87      in 14 chats
+
+  Under exams, the average, pages and questions, a change line says how the number moves
+  ("▲ 3 more than last week", "▼ 4 points lower in 4 weeks"): an arrow and words, so it
+  doesn't depend on colour. It is left out when there is nothing to compare (no activity in
+  either week, no exam before the last 4 weeks).
 
   Zeros are shown as they are once the student has done anything. A new student (no
   lectures, no activity) sees how to start instead of a row of zeros: upload a lecture,
@@ -44,9 +51,11 @@ const LABELS = [
 function cards(overview, now) {
   const average = overview.average_score_percent;
   const correct = overview.correct_percent;
+  const changes = overview.changes ?? {};
   return [
     {
       value: numberText(overview.exams_taken),
+      change: weekChangeText(changes.exams),
       note: overview.exams_taken ? questionsAnsweredText(overview.questions_answered ?? 0) : t("No exam submitted yet"),
     },
     {
@@ -60,19 +69,30 @@ function cards(overview, now) {
           </>
         ),
       note: typeof correct === "number" ? t("{percent}% of answers correct", { percent: correct }) : t("No graded exam yet"),
+      change: typeof average === "number" ? scoreChangeText(changes.average_score) : null,
     },
-    { value: numberText(overview.pages_read), note: pagesTotalText(overview.pages_total) },
+    { value: numberText(overview.pages_read), note: pagesTotalText(overview.pages_total), change: weekChangeText(changes.pages_read) },
     { value: streakText(overview.current_streak), note: lastActivityText(overview.last_activity_at, now) },
-    { value: numberText(overview.questions_asked), note: chatsText(overview.chats) },
+    { value: numberText(overview.questions_asked), note: chatsText(overview.chats), change: weekChangeText(changes.questions_asked) },
   ];
 }
 
-function Card({ label, value, note }) {
+const ARROWS = { up: "▲", down: "▼", same: "=" };
+
+function Card({ label, value, note, change = null }) {
   return (
     <div className="overview__card">
       <dt className="overview__label">{label}</dt>
       <dd className="overview__value">{value}</dd>
       <dd className="overview__note">{note}</dd>
+      {change && (
+        <dd className={`overview__change overview__change--${change.direction}`}>
+          <span className="overview__change-arrow" aria-hidden="true">
+            {ARROWS[change.direction]}
+          </span>
+          {change.text}
+        </dd>
+      )}
     </div>
   );
 }
