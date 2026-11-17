@@ -223,7 +223,17 @@ describe("AI provider API keys and chat model (two separate dropdowns)", () => {
     await user.click(screen.getByRole("button", { name: "Replace key" }));
     expect(screen.getByText("Replaces the saved key ending in x9Qa.")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Anthropic Claude API key"), "sk-ant-NEWKEY-wxyz");
+    // Replacing asks first; Cancel keeps the saved key and the typed one.
     await user.click(screen.getByRole("button", { name: "Save key" }));
+    let ask = screen.getByRole("dialog", { name: "Replace the Anthropic Claude API key?" });
+    expect(ask).toHaveTextContent("The saved key ending in x9Qa will be replaced by the new one.");
+    await user.click(within(ask).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(optionsOf(keySelect())).toContain("Anthropic Claude · key ends in x9Qa");
+    expect(screen.getByLabelText("Anthropic Claude API key")).toHaveValue("sk-ant-NEWKEY-wxyz");
+    await user.click(screen.getByRole("button", { name: "Save key" }));
+    ask = screen.getByRole("dialog", { name: "Replace the Anthropic Claude API key?" });
+    await user.click(within(ask).getByRole("button", { name: "Replace key" }));
     expect(await screen.findByText("Key saved. Anthropic Claude accepted it.")).toBeInTheDocument();
     expect(optionsOf(keySelect())).toContain("Anthropic Claude · key ends in wxyz");
 

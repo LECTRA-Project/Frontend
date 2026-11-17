@@ -72,4 +72,7 @@ export default {
   "Replaces the saved key ending in {last4}.": "Ersetzt den gespeicherten Schlüssel, der auf {last4} endet.",
   "The {provider} key was removed. Its models are no longer offered in the chat.":
     "Der {provider}-Schlüssel wurde entfernt. Seine Modelle werden im Chat nicht mehr angeboten.",
+  "Replace the {provider} API key?": "{provider}-API-Schlüssel ersetzen?",
+  "The saved key ending in {last4} will be replaced by the new one. This can't be undone.":
+    "Der gespeicherte Schlüssel mit der Endung {last4} wird durch den neuen ersetzt. Das kann nicht rückgängig gemacht werden.",
 };
