@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:live": "API_LIVE_URL=http://127.0.0.1:8000/api vitest run auth.live"
+    "test:live": "API_LIVE_URL=http://127.0.0.1:8000/api vitest run auth.live",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",
@@ -35,6 +36,7 @@
     "yup": "^1.7.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
