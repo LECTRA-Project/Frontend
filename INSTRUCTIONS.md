@@ -26,6 +26,7 @@ Frontend files that are useful starting points:
 - `src/features/auth/` contains auth pages, route guards, password validation, and session state.
 - `src/features/workspace/` contains the main study workspace.
 - `src/components/ui/` contains reusable controls, including Formik bindings.
+- `e2e/` contains the browser tests (Playwright, `npm run e2e`, see section 8).
 
 The backend's current router registration is in `Backend/TaskGeneration/backend/main.py`; auth endpoints are in `backend/auth/routes.py`. `task_generator/routes.py` is currently a router scaffold.
 
@@ -283,6 +284,49 @@ pytest
 ```
 
 The default pytest configuration excludes live provider tests. To opt in to provider-dependent tests, configure the required keys and run `pytest -m live`.
+
+### Browser tests (`npm run e2e`)
+
+Playwright tests in `e2e/` run the real app in a real browser against a local backend:
+
+- `exam.spec.js`: an exam from the chat's material: set up, answer (multiple choice and short
+  answer), review, submit, the checked results, and "Ask about this" on a wrong answer.
+- `reading.spec.js`: reading the lecture page by page, "Read N of 6" and the saved progress.
+- `statistics.spec.js`: a new student's empty page (one upload button), then the overall
+  cards, exam performance, course completion, study time and the project picker after
+  some activity.
+
+Every test signs up its own student and uploads its own lecture: a small PDF made by the
+test itself (`e2e/support/pdf.js`), so no course material is in the repo and no data is
+shared between tests.
+
+**Once:** install the browser, `npx playwright install chromium` (or use an installed Chrome
+with `E2E_BROWSER_CHANNEL=chrome`).
+
+**Mocked mode (default, no API keys).** `e2e/fake-llm.mjs` is a fake LLM that answers like
+the real models would (questions, grading, chat answers), on the address of the backend's
+key-less `ollama` provider. Start the backend with it as its only provider:
+
+```bash
+# Backend/TaskGeneration/backend, with Postgres and the file storage of your .env running
+LLM_PROVIDERS=ollama:mock LLM_VISION_PROVIDERS=ollama:mock uvicorn main:app --port 8000
+
+# Frontend/
+npm run e2e
+```
+
+`npm run e2e` starts the fake LLM (port 11434) and the Vite dev server (port 5173, with
+`/api` sent to the backend) itself, and stops them afterwards; running ones are reused. Port
+11434 must be free (stop a local Ollama first). With the fake LLM, choice "b" is always the
+right one and a short answer gets 2 of 3 points, so the tests can check the results exactly.
+
+**Real models.** Start the backend with your normal `.env` and run `E2E_LLM=real npm run e2e`:
+the same flows, with longer timeouts and without the exact result checks. It costs a few
+LLM calls.
+
+Other settings: `E2E_BACKEND_URL` (default `http://127.0.0.1:8000`). A failed test keeps a
+trace in `test-results/` (`npx playwright show-trace <path>`); `npx playwright test --ui`
+shows the tests step by step. The browser tests are not part of `npm test`.
 
 ## 9. Python notebook
 
