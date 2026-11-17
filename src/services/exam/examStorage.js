@@ -7,6 +7,7 @@
   Key:    lectra:exam:v1:<user key>:<exam id>
   Value:  { answers: { <question id>: ["a", "c"] (multiple choice) | "text" (short answer) },
             current: index of the question on screen,
+            flagged: [<question id>, …]  flagged for review, to come back to before submitting,
             settings: { lectureIds, questionCount, types } | null  (how it was started, for Retry),
             started: true once the student started answering while the questions were still
                      written, so a reload lands in the questions instead of the progress,
@@ -17,7 +18,7 @@
 */
 const KEY_PREFIX = "lectra:exam:v1:";
 
-export const EMPTY_PROGRESS = Object.freeze({ answers: {}, current: 0, settings: null, started: false });
+export const EMPTY_PROGRESS = Object.freeze({ answers: {}, current: 0, flagged: [], settings: null, started: false });
 
 function storageKey(userKey, examId) {
   return `${KEY_PREFIX}${userKey}:${examId}`;
@@ -39,6 +40,7 @@ export function loadExamProgress(userKey, examId) {
     return {
       answers: saved && typeof saved.answers === "object" && saved.answers !== null ? saved.answers : {},
       current: Number.isInteger(saved?.current) && saved.current >= 0 ? saved.current : 0,
+      flagged: Array.isArray(saved?.flagged) ? saved.flagged.filter((id) => typeof id === "string") : [],
       settings: saved?.settings ?? null,
       started: saved?.started === true,
     };
@@ -52,8 +54,8 @@ export function saveExamProgress(userKey, examId, progress) {
   try {
     const target = store();
     if (!target) return false;
-    const { answers = {}, current = 0, settings = null, started = false } = progress;
-    target.setItem(storageKey(userKey, examId), JSON.stringify({ answers, current, settings, started, savedAt: new Date().toISOString() }));
+    const { answers = {}, current = 0, flagged = [], settings = null, started = false } = progress;
+    target.setItem(storageKey(userKey, examId), JSON.stringify({ answers, current, flagged, settings, started, savedAt: new Date().toISOString() }));
     return true;
   } catch {
     return false;

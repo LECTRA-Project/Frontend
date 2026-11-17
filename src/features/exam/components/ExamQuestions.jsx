@@ -20,8 +20,10 @@ import ExamSubmitDialog from "./ExamSubmitDialog.jsx";
     are checkboxes under "Select every correct answer".
   - Short answer: a text box of at most MAX_ANSWER_LENGTH characters.
   - Previous / Next, a question map (answered or not, click to jump) and "3 of 5 answered".
+  - "Flag for review" on every question marks it to come back to: flagged questions have a
+    flag in the map, come first in the review and are named in the submit confirmation.
   - Every change is saved on this device (examStorage), per user and exam, with the question
-    on screen; a reload or coming back later restores both.
+    on screen and the flags; a reload or coming back later restores both.
   - Finish (on the last question) opens the review: every question answered or not, and a
     click jumps to it. With `onSubmit`, the review has "Submit and check": a confirmation
     names the questions without an answer (and can go to them), then onSubmit(answers)
@@ -96,6 +98,8 @@ export default function ExamQuestions({
   const question = waiting ? null : questions[index];
   const answers = progress.answers;
   const answered = countAnswered(answers, questions);
+  // Only questions of this exam, in exam order.
+  const flagged = questions.filter((item) => progress.flagged?.includes(item.id)).map((item) => item.id);
 
   // Announced politely as questions arrive (and when the exam is ready), never moving focus.
   const [heard, setHeard] = useState({ written, status: exam.status, text: "" });
@@ -159,6 +163,12 @@ export default function ExamQuestions({
     const next = chosen.includes(id) ? chosen.filter((item) => item !== id) : [...chosen, id];
     // Kept in the order the choices are shown.
     setAnswer(question.choices.map((choice) => choice.id).filter((item) => next.includes(item)));
+  }
+
+  function toggleFlag() {
+    if (!question) return;
+    const on = flagged.includes(question.id);
+    update({ flagged: on ? flagged.filter((id) => id !== question.id) : [...flagged, question.id] });
   }
 
   function finish() {
@@ -256,16 +266,31 @@ export default function ExamQuestions({
           {questions.map((item, position) => {
             const done = isAnswered(answers[item.id]);
             const here = !reviewing && position === index;
+            const marked = flagged.includes(item.id);
+            const number = position + 1;
             return (
               <li key={item.id}>
                 <button
                   type="button"
-                  className={`exam-map__item ${done ? "exam-map__item--done" : ""} ${here ? "exam-map__item--current" : ""}`}
-                  aria-label={done ? t("Question {number}, answered", { number: position + 1 }) : t("Question {number}, not answered", { number: position + 1 })}
+                  className={`exam-map__item ${done ? "exam-map__item--done" : ""} ${here ? "exam-map__item--current" : ""} ${marked ? "exam-map__item--flagged" : ""}`}
+                  aria-label={
+                    marked
+                      ? done
+                        ? t("Question {number}, answered, flagged for review", { number })
+                        : t("Question {number}, not answered, flagged for review", { number })
+                      : done
+                        ? t("Question {number}, answered", { number })
+                        : t("Question {number}, not answered", { number })
+                  }
                   aria-current={here ? "step" : undefined}
                   onClick={() => go(position)}
                 >
-                  {position + 1}
+                  {number}
+                  {marked && (
+                    <span className="exam-map__flag" aria-hidden="true">
+                      <Icon name="flag" />
+                    </span>
+                  )}
                 </button>
               </li>
             );
@@ -311,7 +336,7 @@ export default function ExamQuestions({
 
       {reviewing ? (
         <>
-          <ExamReview questions={questions} answers={answers} onJump={go} onBack={() => go(index)}>
+          <ExamReview questions={questions} answers={answers} flagged={flagged} onJump={go} onBack={() => go(index)}>
             {onSubmit && (
               <Button
                 variant="primary"
@@ -334,6 +359,7 @@ export default function ExamQuestions({
             <ExamSubmitDialog
               questions={questions}
               answers={answers}
+              flagged={flagged}
               onSubmit={submit}
               onAnswer={(position) => {
                 setConfirming(false);
@@ -366,6 +392,17 @@ export default function ExamQuestions({
                   ? t("Question {number} of {total} · {points} · from {source}", { number: index + 1, total, points: pointsLabel(question.points), source })
                   : t("Question {number} of {total} · {points}", { number: index + 1, total, points: pointsLabel(question.points) })}
               </span>
+              {!readOnly && (
+                <button
+                  type="button"
+                  className={`exam-flag ${flagged.includes(question.id) ? "exam-flag--on" : ""}`}
+                  aria-pressed={flagged.includes(question.id)}
+                  onClick={toggleFlag}
+                >
+                  <Icon name="flag" />
+                  {t("Flag for review")}
+                </button>
+              )}
             </div>
             {/* The question is Markdown (paragraphs, code, math), so a heading role on a block. */}
             <div
