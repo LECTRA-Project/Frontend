@@ -91,16 +91,22 @@ describe("projects in the menu", () => {
 
   it("creates a project with a name and opens its page", async () => {
     const user = await openWorkspace();
-    // "New project" is both under New chat (first) and the + of the Projects section.
-    expect(within(menu()).getAllByRole("button", { name: "New project" })).toHaveLength(2);
-    await user.click(within(menu()).getAllByRole("button", { name: "New project" })[0]);
+    // "New project" is the + of the Projects section only (none under New chat).
+    expect(within(menu()).getAllByRole("button", { name: "New project" })).toHaveLength(1);
+    await user.click(within(menu()).getByRole("button", { name: "New project" }));
     const dialog = screen.getByRole("dialog", { name: "New project" });
     await user.type(within(dialog).getByLabelText("Project name"), "  Statistics  ");
     await user.click(within(dialog).getByRole("button", { name: "Create project" }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Statistics" })).toBeInTheDocument();
     expect(backend.projects.at(-1).name).toBe("Statistics");
-    expect(screen.getByText("No chats yet. Ask a question above to start one.")).toBeInTheDocument();
+    // No chats yet: the new-chat welcome, in the Chats tab, with the composer and tabs as usual.
+    const chatsPanel = screen.getByRole("tabpanel", { name: "Chats" });
+    expect(await within(chatsPanel).findByRole("heading", { level: 2, name: "What are we studying today?" })).toBeInTheDocument();
+    expect(chatsPanel).toHaveTextContent("Every chat in it answers from the project’s materials.");
+    expect(chatsPanel).toHaveTextContent("No materials in this project yet.");
+    expect(screen.getByRole("tab", { name: "Sources" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Start a new chat in Statistics…")).toBeInTheDocument();
     await waitFor(() => expect(projectNames()[0]).toBe("Statistics"));
     // Its page is open, so it is unfolded in the menu, ready for its first chat.
     const chats = within(menu()).getByRole("list", { name: "Chats in Statistics" });
@@ -143,6 +149,51 @@ describe("projects in the menu", () => {
     await user.click(within(chats).getByRole("button", { name: "New chat in Machine Learning" }));
     await waitFor(() => expect(backend.sessions.filter((item) => item.projectId === "p-ml")).toHaveLength(before + 2));
     expect(screen.getByRole("button", { name: "Open the project Machine Learning" })).toBeInTheDocument();
+  });
+
+  it("removes a project from its ⋯ in the menu after naming the consequences; Cancel keeps it", async () => {
+    // A chat outside the project is open: it stays open after the project is removed.
+    const user = await openWorkspace("/workspace?chat=s-free");
+    await screen.findByRole("heading", { level: 1, name: "Exercise help" });
+
+    await user.click(within(recent()).getByRole("button", { name: "Actions for Machine Learning" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove project" }));
+    let dialog = screen.getByRole("dialog", { name: "Delete project?" });
+    expect(dialog).toHaveTextContent("“Machine Learning” will be deleted.");
+    expect(dialog).toHaveTextContent("All 2 chats in it and their messages will be deleted permanently.");
+    expect(dialog).toHaveTextContent("Its materials stay in your library.");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(api.history.delete).toHaveLength(0);
+    expect(projectNames()).toContain("Machine Learning");
+
+    await user.click(within(recent()).getByRole("button", { name: "Actions for Machine Learning" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove project" }));
+    dialog = screen.getByRole("dialog", { name: "Delete project?" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete project" }));
+
+    expect(await screen.findByText("Project “Machine Learning” and its 2 chats were deleted.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(backend.projects.map((item) => item.id)).not.toContain("p-ml");
+    expect(backend.sessions.map((item) => item.id)).toEqual(["s-free"]);
+    expect(backend.lectures).toHaveLength(3);
+    await waitFor(() => expect(projectNames()).not.toContain("Machine Learning"));
+    expect(screen.getByRole("heading", { level: 1, name: "Exercise help" })).toBeInTheDocument();
+  });
+
+  it("keeps the project and shows the error when removing it fails", async () => {
+    const user = await openWorkspace();
+    api.onDelete("/student_profile/projects/p-la").replyOnce(500, { status: false, message: "Could not delete the project." });
+    api.handlers.unshift(api.handlers.pop()); // checked before the fake backend's handler
+
+    await user.click(within(recent()).getByRole("button", { name: "Actions for Linear Algebra" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove project" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete project?" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete project" }));
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Could not delete the project.");
+    expect(backend.projects.map((item) => item.id)).toContain("p-la");
+    expect(projectNames()).toContain("Linear Algebra");
   });
 
   it("offers New chat in the project from a project chat's ⋯ menu", async () => {
@@ -191,10 +242,100 @@ describe("a project's page", () => {
     expect(backend.sent).toEqual([{ id: created.id, content: "What is pruning?" }]);
     // The answer cites the project's material.
     expect(within(screen.getByRole("list", { name: "Messages" })).getByRole("button", { name: /KI 02 Classification Part1/ })).toBeInTheDocument();
+
+    // Back on the project, the new chat leads its Chats tab (most recently active first).
+    await user.click(within(recent()).getByRole("button", { name: "Machine Learning" }));
+    const listed = await screen.findByRole("list", { name: "Chats in this project" });
+    await waitFor(() =>
+      expect(within(listed).getAllByRole("button").map((button) => button.textContent)).toEqual([
+        expect.stringContaining("What is pruning?"),
+        expect.stringContaining("Decision trees"),
+        expect.stringContaining("Support vectors"),
+      ])
+    );
+  });
+
+  it("shows the project's chats and sources in two tabs; switching keeps the typed text", async () => {
+    const user = await openWorkspace("/workspace/projects/p-ml");
+    const tabs = await screen.findByRole("tablist", { name: "Project content" });
+    const chatsTab = within(tabs).getByRole("tab", { name: "Chats" });
+    const sourcesTab = within(tabs).getByRole("tab", { name: "Sources" });
+    expect(chatsTab).toHaveAttribute("aria-selected", "true");
+    expect(sourcesTab).toHaveAttribute("aria-selected", "false");
+
+    // Chats: only this project's, most recently active first (not s-free, a normal chat).
+    const chats = await screen.findByRole("list", { name: "Chats in this project" });
+    expect(within(chats).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      expect.stringContaining("Decision trees"),
+      expect.stringContaining("Support vectors"),
+    ]);
+    expect(screen.queryByRole("list", { name: "Materials in this project" })).not.toBeInTheDocument();
+    // With chats, the list shows instead of the new-chat welcome.
+    expect(screen.queryByRole("heading", { name: "What are we studying today?" })).not.toBeInTheDocument();
+
+    const input = screen.getByPlaceholderText("Start a new chat in Machine Learning…");
+    await user.type(input, "Half a question");
+    const requests = api.history.get.length;
+
+    // Sources: only this project's materials (not Linear Algebra's notes, not a chat's own).
+    await user.click(sourcesTab);
+    expect(sourcesTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("list", { name: "Chats in this project" })).not.toBeInTheDocument();
+    const sources = screen.getByRole("list", { name: "Materials in this project" });
+    expect(within(sources).getAllByRole("button", { name: /^Open / }).map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Open KI 02 Classification Part1 beside the project",
+    ]);
+    expect(screen.getByRole("button", { name: "Upload a material to this project" })).toBeInTheDocument();
+
+    // Back to Chats with the keyboard: same list, the text is still typed, nothing reloaded.
+    sourcesTab.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(chatsTab).toHaveAttribute("aria-selected", "true");
+    expect(chatsTab).toHaveFocus();
+    expect(within(screen.getByRole("list", { name: "Chats in this project" })).getAllByRole("button")).toHaveLength(2);
+    expect(input).toHaveValue("Half a question");
+    expect(api.history.get.length).toBe(requests);
+    expect(api.history.post).toHaveLength(0); // no chat was created by switching
+  });
+
+  it("shows an uploaded file in Sources at once, and empty states in both tabs", async () => {
+    // A project without chats or materials.
+    const user = await openWorkspace("/workspace/projects/p-old");
+    await screen.findByRole("heading", { level: 1, name: "Old course" });
+    expect(await screen.findByRole("heading", { level: 2, name: "What are we studying today?" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Sources" }));
+    await user.click(screen.getByRole("button", { name: "Upload a PDF, slides or a notebook for this project" }));
+    const dialog = screen.getByRole("dialog");
+    await user.upload(within(dialog).getByTestId("upload-input"), new File(["%PDF-1.4"], "Week 1.pdf", { type: "application/pdf" }));
+    await user.click(within(dialog).getByRole("button", { name: /Upload/ }));
+
+    const sources = await screen.findByRole("list", { name: "Materials in this project" });
+    expect(await within(sources).findByRole("button", { name: "Open Week 1 beside the project" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Sources" })).toHaveAttribute("aria-selected", "true");
+    expect(backend.projects.find((item) => item.id === "p-old").lectureIds).toHaveLength(1);
+    // The welcome counts the new material.
+    await user.click(screen.getByRole("tab", { name: "Chats" }));
+    expect(screen.getByRole("tabpanel", { name: "Chats" })).toHaveTextContent("1 material in this project.");
+  });
+
+  it("keeps the box that starts a chat at the bottom, outside the scrolling chats and materials", async () => {
+    await openWorkspace("/workspace/projects/p-ml");
+    await screen.findByRole("list", { name: "Chats in this project" });
+    const input = screen.getByPlaceholderText("Start a new chat in Machine Learning…");
+    const dock = input.closest(".chat__dock");
+    const scroll = document.querySelector(".project__scroll");
+    // Docked like in a chat: below the scrolling content, not inside it.
+    expect(dock).not.toBeNull();
+    expect(scroll.contains(dock)).toBe(false);
+    expect(scroll.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(scroll).toContainElement(screen.getByRole("tablist", { name: "Project content" }));
+    expect(scroll).toContainElement(screen.getByRole("list", { name: "Chats in this project" }));
   });
 
   it("adds and removes the project's materials; its chats follow", async () => {
     const user = await openWorkspace("/workspace/projects/p-ml");
+    await user.click(await screen.findByRole("tab", { name: "Sources" }));
     const materials = await screen.findByRole("list", { name: "Materials in this project" });
     expect(within(materials).getByRole("button", { name: "Open KI 02 Classification Part1 beside the project" })).toBeInTheDocument();
 
@@ -212,6 +353,7 @@ describe("a project's page", () => {
     await waitFor(() => expect(backend.projects.find((item) => item.id === "p-ml").lectureIds).toEqual([EX31.id]));
 
     // A chat of the project now has the project's new materials.
+    await user.click(screen.getByRole("tab", { name: "Chats" }));
     await user.click(within(screen.getByRole("list", { name: "Chats in this project" })).getByRole("button", { name: /Decision trees/ }));
     await screen.findByRole("heading", { level: 1, name: "Decision trees" });
     expect(within(menu()).getByRole("button", { name: "Open Exercise 3-1 Classification beside the chat" })).toBeInTheDocument();
