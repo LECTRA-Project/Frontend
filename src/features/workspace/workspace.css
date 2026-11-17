@@ -1197,6 +1197,37 @@ button.cf-material__open:hover {
 .chat-suggestion__accept {
   flex: none;
 }
+/* Two next steps (issue #169): Review and Continue, each a button that sends its text. */
+.chat-suggestion--choice {
+  gap: var(--space-2);
+}
+.chat-suggestion__option {
+  display: flex;
+  flex-basis: 100%;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.chat-suggestion__option svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent-strong);
+}
+.chat-suggestion__option:hover {
+  border-color: var(--accent-strong);
+}
+.chat-suggestion__option:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
 .chat-msg--fresh .chat-suggestion {
   animation: chat-fade-in 300ms ease-out;
 }

@@ -30,10 +30,16 @@ import { del, get, patch, post, put } from "../http.js";
     message  { id, session_id, role: "user" | "assistant", content, created_at,
                sources: [{ lecture_id, lecture_title, page_number,
                            source_type: "page" | "slide" | "cell", location: "Page 3" }] | null,
-               suggestion: string | null }
-             An answer with no sources is general knowledge, not from the materials.
+               suggestion: string | null, review_suggestion: string | null, asks_choice: boolean }
+             An answer with no sources is general knowledge, not from the materials, unless
+             it has asks_choice (it asks which next step the student wants).
              suggestion: on answers from the materials, one short offer of the next step
              ("Shall I explain the next section, … (page 4)?"); a "yes" answers it.
+             review_suggestion: with weak topics (an exam answer went wrong) the answer offers
+             two next steps instead, written as the messages to send: review_suggestion
+             ("Review: Gini index, which went wrong in your exam (page 4)") and suggestion
+             ("Continue with: … (page 18)"). An unclear "yes" gets a question back
+             (asks_choice: true) that keeps both.
 */
 const BASE = "/student_profile/chat/sessions";
 

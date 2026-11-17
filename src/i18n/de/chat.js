@@ -55,6 +55,7 @@ export default {
   "{count} lines": "{count} Zeilen",
   "Next step": "Nächster Schritt",
   "Yes, please": "Ja, bitte",
+  "Choose your next step": "Wähle deinen nächsten Schritt",
 
   // Composer
   "Drop to add this cell to your question": "Loslassen, um diese Zelle zu deiner Frage hinzuzufügen",

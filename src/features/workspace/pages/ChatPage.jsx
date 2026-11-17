@@ -46,6 +46,9 @@ export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
     clipboard can't be used, a dialog shows the text selected for copying by hand.
   - The latest answer from the materials ends with the assistant's suggestion of the next
     step ("Shall I explain the next section …?") and a "Yes, please" button that asks for it.
+    With weak topics (an exam answer went wrong) it offers two next steps instead, "Review: …"
+    and "Continue with: …", as buttons that send their own text. When a typed "yes" doesn't
+    say which, the assistant asks back and both buttons stay.
   - A chat in a project shows the project's name in the bar (it opens the project page). Its
     materials are the project's. Renaming, moving and deleting a chat are in its ⋯ in the menu
     (ChatSidebar), so the bar has no ⋯ of its own.
@@ -98,7 +101,12 @@ export function ChatView({
   // Only the latest answer offers its suggestion, and only while a question can be sent.
   const lastMessage = messages.at(-1);
   const suggesting =
-    !busy && available === true && lastMessage?.role === "assistant" && lastMessage.suggestion ? lastMessage.id : null;
+    !busy &&
+    available === true &&
+    lastMessage?.role === "assistant" &&
+    (lastMessage.suggestion || lastMessage.review_suggestion)
+      ? lastMessage.id
+      : null;
 
   /*
     Keep the newest message in view — except when older messages were just added above
@@ -244,7 +252,7 @@ export function ChatView({
                 onUploadAgain={onUploadClick}
                 onCopy={copy}
                 onGrow={followAnswer}
-                onAcceptSuggestion={message.id === suggesting ? () => onSend(t("Yes, please")) : null}
+                onSuggest={message.id === suggesting ? onSend : null}
                 onResend={onResend}
                 canResend={!busy && available === true}
               />
@@ -413,7 +421,7 @@ function StudentMessage({ message, onCopy, onResend, canResend }) {
   );
 }
 
-function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow, onAcceptSuggestion, onResend, canResend }) {
+function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow, onSuggest, onResend, canResend }) {
   const { t } = useI18n();
   if (message.role === "system") {
     return (
@@ -451,7 +459,7 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
       onOpenSource={onOpenSource}
       onCopy={onCopy}
       onGrow={onGrow}
-      onAcceptSuggestion={onAcceptSuggestion}
+      onSuggest={onSuggest}
     />
   );
 }
@@ -459,9 +467,11 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
 /*
   An answer. One that just arrived (message.fresh) is typed out word by word
   (useTypewriter); its sources, Copy button and suggestion fade in once it is complete.
-  `onAcceptSuggestion` is set on the latest answer only: it then shows its suggestion.
+  `onSuggest` (sends a message) is set on the latest answer only: it then shows its suggestion.
+  An answer that asks which next step the student wants (asks_choice) has no sources but is
+  not general knowledge, so it has no "Not from your materials" label.
 */
-function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, onCopy, onGrow, onAcceptSuggestion }) {
+function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, onCopy, onGrow, onSuggest }) {
   const { t } = useI18n();
   const { text, typing } = useTypewriter(message.id, message.content, message.fresh);
   const chips = sourceChips(message.sources, materialType, lectureTitle);
@@ -492,7 +502,7 @@ function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, on
     // aria-busy: screen readers read the answer once, when it is complete.
     <li className={`chat-msg chat-msg--assistant ${message.fresh ? "chat-msg--fresh" : ""}`} aria-busy={typing || undefined}>
       <article className="chat-answer">
-        {chips.length === 0 && (
+        {chips.length === 0 && !message.asks_choice && (
           <span className="chat-answer__general">
             <Icon name="alert" size={14} />
             {t("Not from your materials")}
@@ -507,8 +517,9 @@ function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, on
           <AnswerFooter
             chips={chips}
             content={message.content}
-            suggestion={onAcceptSuggestion ? message.suggestion : null}
-            onAcceptSuggestion={onAcceptSuggestion}
+            suggestion={onSuggest ? message.suggestion : null}
+            review={onSuggest ? message.review_suggestion : null}
+            onSuggest={onSuggest}
             onOpenSource={onOpenSource}
             onCopy={onCopy}
           />
@@ -518,9 +529,16 @@ function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, on
   );
 }
 
-/* The answer's sources, Copy button and suggestion (shown once the answer is complete). */
-function AnswerFooter({ chips, content, suggestion = null, onAcceptSuggestion = null, onOpenSource, onCopy }) {
+/*
+  The answer's sources, Copy button and suggestion (shown once the answer is complete).
+  One suggestion: its text and "Yes, please", which sends "Yes, please". With weak topics the
+  backend offers two next steps instead (`review` and `suggestion`, issue #169), written as
+  the messages to send: each is a button that sends its own text, like suggestion chips.
+*/
+function AnswerFooter({ chips, content, suggestion = null, review = null, onSuggest = null, onOpenSource, onCopy }) {
   const { t } = useI18n();
+  const options = review && suggestion ? [review, suggestion] : null;
+  const single = options ? null : suggestion || review;
   return (
     <>
       {chips.length > 0 && (
@@ -543,14 +561,32 @@ function AnswerFooter({ chips, content, suggestion = null, onAcceptSuggestion = 
       <div className="chat-answer__actions">
         <CopyAnswerButton text={answerText(content, chips)} onCopy={onCopy} />
       </div>
-      {suggestion && (
+      {options && (
+        <div className="chat-suggestion chat-suggestion--choice" role="group" aria-label={t("Choose your next step")}>
+          <span className="chat-suggestion__label">
+            <Icon name="arrowRight" size={14} />
+            {t("Next step")}
+          </span>
+          {options.map((option, index) => (
+            <button key={option} type="button" className="chat-suggestion__option" onClick={() => onSuggest(option)}>
+              <Icon name={index === 0 ? "refresh" : "arrowRight"} size={14} />
+              <span>{option}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {single && (
         <div className="chat-suggestion">
           <span className="chat-suggestion__label">
             <Icon name="arrowRight" size={14} />
             {t("Next step")}
           </span>
-          <p className="chat-suggestion__text">{suggestion}</p>
-          <button type="button" className="btn btn--secondary btn--sm chat-suggestion__accept" onClick={onAcceptSuggestion}>
+          <p className="chat-suggestion__text">{single}</p>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm chat-suggestion__accept"
+            onClick={() => onSuggest(t("Yes, please"))}
+          >
             {t("Yes, please")}
           </button>
         </div>
