@@ -692,13 +692,25 @@ export default function WorkspaceLayout() {
     return updated;
   }
 
-  // Deletes the project with its chats; the materials stay in the library.
+  /*
+    Deletes the project with its chats; the materials stay in the library. From its page (or
+    the Exam view opened from it) the workspace opens; elsewhere (e.g. ⋯ in the menu) the
+    screen stays, and an open chat of the project gives way to a new chat (forgetProject).
+    Rejects, with nothing changed, when the delete fails.
+  */
   async function removeProject(project) {
     const result = await deleteProject(project.id);
+    const onItsPages = projectPageId === project.id || examProjectId === project.id;
     chat.forgetProject(project.id);
     projects.reload();
-    setViewer(null);
-    navigate("/workspace", { replace: true });
+    if (onItsPages) {
+      setViewer(null);
+      navigate("/workspace", { replace: true });
+    } else {
+      // "All projects", if open, lists it no more. (Not on its own page: read again, the
+      // deleted project would answer 404 and replace the notice below.)
+      setProjectsVersion((value) => value + 1);
+    }
     setNotice(
       result.deleted_chats === 1
         ? t("Project “{name}” and its chat were deleted.", { name: project.name })
@@ -1112,6 +1124,7 @@ export default function WorkspaceLayout() {
           loadingMoreChats={chat.loadingMoreSessions}
           onLoadMoreChats={chat.loadMoreSessions}
           onRemoveChat={removeChat}
+          onRemoveProject={chatAvailable === true ? removeProject : null}
           onMoveChat={chatAvailable === true ? setMoving : null}
           available={chatAvailable !== false}
           // A server without projects (an older backend) shows no Projects section.

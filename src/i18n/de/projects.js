@@ -28,6 +28,12 @@ export default {
   "Its materials stay in your library.": "Seine Materialien bleiben in deiner Bibliothek.",
   "Your exams and statistics are not affected.": "Deine Prüfungen und Statistiken sind nicht betroffen.",
   "Delete project": "Projekt löschen",
+  "Remove project": "Projekt entfernen",
+  "Project content": "Inhalt des Projekts",
+  "No materials in this project yet.": "Noch keine Materialien in diesem Projekt.",
+  "1 material in this project.": "1 Material in diesem Projekt.",
+  "{count} materials in this project.": "{count} Materialien in diesem Projekt.",
+  Sources: "Quellen",
   "Deleting…": "Wird gelöscht …",
   "The chat could not be moved.": "Der Chat konnte nicht verschoben werden.",
   "Move to project": "In Projekt verschieben",
@@ -63,7 +69,6 @@ export default {
   "Remove {name} from this project": "{name} aus diesem Projekt entfernen",
   "Chats in this project": "Chats in diesem Projekt",
   "Loading the chats…": "Die Chats werden geladen …",
-  "No chats yet. Ask a question above to start one.": "Noch keine Chats. Stelle oben eine Frage, um einen zu beginnen.",
 
   // All projects
   "Your projects could not be loaded.": "Deine Projekte konnten nicht geladen werden.",

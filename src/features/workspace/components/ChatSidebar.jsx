@@ -10,6 +10,7 @@ import { STATUS_LABEL } from "../../lectures/materialTypes.js";
 import { groupChats } from "../chatLayout.js";
 import { displayChatTitle } from "../../../services/notebook/cellContext.js";
 import { useI18n } from "../../../i18n/i18n.js";
+import { DeleteProjectDialog } from "./ProjectDialogs.jsx";
 import "../projects.css";
 
 // The chats listed under an unfolded project in the menu (the rest: on the project page).
@@ -55,8 +56,7 @@ const PROJECT_CHATS_SHOWN = 5;
     onMoveChat(session)           opens "Move to project" for a chat (none: not offered)
     available                     false when the server has no chat API
 
-  Projects (a course's materials and chats together): "New project" under New chat, and a
-  section above the chats with the 3 most recently active projects, + (a new project) and,
+  Projects (a course's materials and chats together): a section above the chats with the 3 most recently active projects, + (a new project) and,
   with more than 3, "View all projects". Each project is a folder: the arrow shows its chats
   (the latest few, with "All chats in the project" for the rest) and "New chat" starts
   another chat in it — a project can have any number of chats. The project of the open chat
@@ -64,10 +64,14 @@ const PROJECT_CHATS_SHOWN = 5;
   in the Chats list; its materials are the project's ("Materials in <project>"), so adding
   or removing one changes the project.
     projects            { recent, total } (see useProjects), or null without projects
-    projectsAvailable   true when the server has projects (shows "New project" up top)
+    projectsAvailable   true when the server has projects (the collapsed rail then offers
+                        "New project"; open, the + of the Projects section does)
     currentProjectId    the project open on its page, or the open chat's project
     onOpenProject(id), onNewProject(), onViewAllProjects()
     onNewProjectChat(project)   starts a new chat in the project (none: not offered)
+    onRemoveProject(project)    deletes a project after confirmation (DeleteProjectDialog:
+                                its chats are deleted, its materials stay in the library);
+                                rejects with the error to show (none: not offered)
     projectName         the open chat's project name (null for a normal chat)
     showMaterials       false hides the open chat's materials (on the project pages)
 */
@@ -107,6 +111,7 @@ export default function ChatSidebar({
   onNewProject = () => {},
   onViewAllProjects = () => {},
   onNewProjectChat = null,
+  onRemoveProject = null,
   projectsAvailable = false,
   projectName = null,
   showMaterials = true,
@@ -115,6 +120,7 @@ export default function ChatSidebar({
   const [removing, setRemoving] = useState(null); // the chat whose Remove is being confirmed
   const [unfolded, setUnfolded] = useState({}); // project id → shown or not (else: the current project)
   const [unlinking, setUnlinking] = useState(null); // the material whose × is being confirmed
+  const [removingProject, setRemovingProject] = useState(null); // the project whose Remove is being confirmed
   const newChatRef = useRef(null);
   const scrollRef = useRef(null);
   const moreRef = useRef(null);
@@ -166,14 +172,6 @@ export default function ChatSidebar({
           </button>
           <IconButton icon="sidebar" label={overlay ? t("Close menu") : t("Collapse menu")} onClick={onToggle} />
         </div>
-        {projectsAvailable && (
-          <div className="cf-side__new-project">
-            <button type="button" className="cf-new-project" onClick={onNewProject}>
-              <Icon name="folder" size={16} />
-              {t("New project")}
-            </button>
-          </div>
-        )}
 
         <div className="cf-side__scroll" ref={scrollRef}>
           {showMaterials && (
@@ -353,6 +351,21 @@ export default function ChatSidebar({
                               onClick={() => onNewProjectChat(project)}
                             />
                           )}
+                          {onRemoveProject && (
+                            <Menu
+                              label={t("Actions for {title}", { title: project.name })}
+                              className="cf-project__more"
+                              items={[
+                                {
+                                  label: t("Remove project"),
+                                  icon: "trash",
+                                  danger: true,
+                                  // The dialog names how many chats go; the loaded ones count too.
+                                  onSelect: () => setRemovingProject({ ...project, chat_count: total }),
+                                },
+                              ]}
+                            />
+                          )}
                         </div>
                         {shown && (
                           <ul className="cf-project__chats" id={chatsId} aria-label={t("Chats in {name}", { name: project.name })}>
@@ -516,6 +529,18 @@ export default function ChatSidebar({
           <ConfirmDialog title={t("Remove chat?")} confirmLabel={t("Remove")} danger onConfirm={confirmRemove} onCancel={() => setRemoving(null)}>
             {t("“{title}” and all its messages will be deleted. Its materials are kept.", { title: displayChatTitle(removing.title) })}
           </ConfirmDialog>
+        )}
+        {removingProject && (
+          // Same dialog as on the project page: names its chats (deleted) and materials (kept).
+          // A failed delete keeps it open with the error, and the project stays in the list.
+          <DeleteProjectDialog
+            project={removingProject}
+            onConfirm={async () => {
+              await onRemoveProject(removingProject);
+              setRemovingProject(null);
+            }}
+            onCancel={() => setRemovingProject(null)}
+          />
         )}
       </nav>
     </>

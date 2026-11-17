@@ -17,13 +17,17 @@ import "../projects.css";
 
 // The project's chats are loaded this many at a time (more as the list is scrolled).
 const PROJECT_CHATS_PAGE_SIZE = 20;
+// The tabs of the project's content: its chats, and its sources (materials).
+const PROJECT_TABS = ["chats", "sources"];
 
 /*
-  A project (/workspace/projects/<id>): its name with ⋯ (Rename, Delete), an input box that
-  starts a new chat in the project and opens it with the answer, the project's materials
-  (open beside the page, remove, add one of the student's materials, upload new ones) and
-  the project's chats, most recently active first (more load while scrolling). Every chat in
-  the project answers from these materials; without any it answers from general knowledge.
+  A project (/workspace/projects/<id>): its name with ⋯ (Rename, Delete), two tabs and, at
+  the bottom, an input box that starts a new chat in the project and opens it with the answer.
+  - Chats: the project's chats, most recently active first (more load while scrolling).
+  - Sources: the project's materials (open beside the page, remove, add one of the
+    student's materials, upload new ones, with their progress).
+  Every chat in the project answers from these materials; without any it answers from
+  general knowledge. Switching tabs keeps both (and the typed text): nothing is reloaded.
 
   The shared state lives in WorkspaceLayout (`projectsView` in the Outlet context).
 */
@@ -64,6 +68,8 @@ export function ProjectView({
   const [starting, setStarting] = useState(false);
   const [unlinking, setUnlinking] = useState(null); // the material whose × is being confirmed
   const [attempt, setAttempt] = useState(0); // "Try again" after a failed load
+  const [tab, setTab] = useState("chats"); // the tab shown: "chats" or "sources"
+  const tabRefs = useRef({});
   const scrollRef = useRef(null);
   const moreRef = useRef(null);
   const loadingMore = useRef(false);
@@ -132,6 +138,20 @@ export function ProjectView({
     }
   }
 
+  // Tabs: ←/→ (and Home/End) move between them and show the one reached.
+  function handleTabKeyDown(event) {
+    const index = PROJECT_TABS.indexOf(tab);
+    let next = null;
+    if (event.key === "ArrowRight") next = PROJECT_TABS[(index + 1) % PROJECT_TABS.length];
+    else if (event.key === "ArrowLeft") next = PROJECT_TABS[(index - 1 + PROJECT_TABS.length) % PROJECT_TABS.length];
+    else if (event.key === "Home") next = PROJECT_TABS[0];
+    else if (event.key === "End") next = PROJECT_TABS.at(-1);
+    if (!next) return;
+    event.preventDefault();
+    setTab(next);
+    tabRefs.current[next]?.focus();
+  }
+
   function startChat(text) {
     if (starting) return false;
     setStarting(true);
@@ -190,28 +210,84 @@ export function ProjectView({
       )}
 
       <div className="project__scroll" ref={scrollRef}>
-        <div className="project__start">
-          <ChatComposer
-            onSend={startChat}
-            onAttachClick={() => onUploadClick(project)}
-            attachDisabled={available === false}
-            disabled={starting || available !== true}
-            note={note}
-            placeholder={t("Start a new chat in {name}…", { name: project.name })}
-            model={model}
-          />
-          <p className="chat__disclaimer">
-            {materials.length > 0
-              ? t("Every chat in this project answers from its materials.")
-              : t("Add materials and the chats in this project answer from them. Until then they answer from general knowledge.")}
-          </p>
+        {/*
+          Chats and Sources (the project's materials) as tabs. Both panels stay mounted (the
+          other one hidden), so switching keeps their state and never loads anything again.
+        */}
+        <div className="project-tabs" role="tablist" aria-label={t("Project content")} onKeyDown={handleTabKeyDown}>
+          {PROJECT_TABS.map((id) => (
+            <button
+              key={id}
+              ref={(element) => (tabRefs.current[id] = element)}
+              type="button"
+              role="tab"
+              id={`project-tab-${id}`}
+              className={`project-tabs__tab ${tab === id ? "project-tabs__tab--selected" : ""}`}
+              aria-selected={tab === id}
+              aria-controls={`project-panel-${id}`}
+              tabIndex={tab === id ? 0 : -1}
+              onClick={() => setTab(id)}
+            >
+              {id === "chats" ? t("Chats") : t("Sources")}
+            </button>
+          ))}
         </div>
 
-        <section className="project__section" aria-labelledby="project-materials-title">
-          <div className="project__section-head">
-            <h2 id="project-materials-title" className="cf-section-title">
-              {t("Materials in this project")}
-            </h2>
+        <section
+          className="project__section"
+          id="project-panel-chats"
+          role="tabpanel"
+          aria-labelledby="project-tab-chats"
+          hidden={tab !== "chats"}
+        >
+          {chatsPage.loading && chats.length === 0 ? (
+            <p className="project__note" role="status">
+              {t("Loading the chats…")}
+            </p>
+          ) : chats.length === 0 ? (
+            // No chats yet: the same welcome as a new chat (until the first chat exists).
+            <div className="chat__empty">
+              <h2 className="chat__empty-title">{t("What are we studying today?")}</h2>
+              <p className="chat__empty-text">
+                {t("A project keeps a course’s materials and chats together. Every chat in it answers from the project’s materials.")}
+              </p>
+              <span className="chat__empty-status">
+                {materials.length === 0
+                  ? t("No materials in this project yet.")
+                  : materials.length === 1
+                    ? t("1 material in this project.")
+                    : t("{count} materials in this project.", { count: materials.length })}
+              </span>
+            </div>
+          ) : (
+            <ul className="project__chats" aria-label={t("Chats in this project")}>
+              {chats.map((chat) => (
+                <li key={chat.id}>
+                  <button type="button" className="project__chat" onClick={() => onOpenChat(chat.id)}>
+                    <Icon name="chat" size={16} />
+                    <span className="project__chat-title">{displayChatTitle(chat.title)}</span>
+                    <span className="project__chat-date">{activityDate(chat.updated_at)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {more && (
+            <button ref={moreRef} type="button" className="cf-chats__more" onClick={loadMore}>
+              {t("Show more chats")}
+            </button>
+          )}
+        </section>
+
+        <section
+          className="project__section"
+          id="project-panel-sources"
+          role="tabpanel"
+          aria-labelledby="project-tab-sources"
+          hidden={tab !== "sources"}
+        >
+          {/* Add one of the student's materials, or upload new ones (as before). */}
+          <div className="project__section-head project__section-head--end">
             <div className="cf-materials__actions">
               {addable.length > 0 && (
                 <Menu
@@ -309,36 +385,27 @@ export function ProjectView({
             </ul>
           )}
         </section>
+      </div>
 
-        <section className="project__section" aria-labelledby="project-chats-title">
-          <h2 id="project-chats-title" className="cf-section-title project__section-head">
-            {t("Chats in this project")}
-          </h2>
-          {chatsPage.loading && chats.length === 0 ? (
-            <p className="project__note" role="status">
-              {t("Loading the chats…")}
-            </p>
-          ) : chats.length === 0 ? (
-            <p className="project__note">{t("No chats yet. Ask a question above to start one.")}</p>
-          ) : (
-            <ul className="project__chats" aria-label={t("Chats in this project")}>
-              {chats.map((chat) => (
-                <li key={chat.id}>
-                  <button type="button" className="project__chat" onClick={() => onOpenChat(chat.id)}>
-                    <Icon name="chat" size={16} />
-                    <span className="project__chat-title">{displayChatTitle(chat.title)}</span>
-                    <span className="project__chat-date">{activityDate(chat.updated_at)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {more && (
-            <button ref={moreRef} type="button" className="cf-chats__more" onClick={loadMore}>
-              {t("Show more chats")}
-            </button>
-          )}
-        </section>
+      {/*
+        The box that starts a chat in the project, at the bottom like in a chat (.chat__dock):
+        it stays in view, and the chats and materials scroll above it.
+      */}
+      <div className="chat__dock">
+        <ChatComposer
+          onSend={startChat}
+          onAttachClick={() => onUploadClick(project)}
+          attachDisabled={available === false}
+          disabled={starting || available !== true}
+          note={note}
+          placeholder={t("Start a new chat in {name}…", { name: project.name })}
+          model={model}
+        />
+        <p className="chat__disclaimer">
+          {materials.length > 0
+            ? t("Every chat in this project answers from its materials.")
+            : t("Add materials and the chats in this project answer from them. Until then they answer from general knowledge.")}
+        </p>
       </div>
 
       {unlinking && (
