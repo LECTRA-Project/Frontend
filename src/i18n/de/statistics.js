@@ -23,6 +23,11 @@ export default {
   "Last activity today": "Zuletzt aktiv: heute",
   "Last activity yesterday": "Zuletzt aktiv: gestern",
   "Last activity on {date}": "Zuletzt aktiv am {date}",
+  // Project picker (ProjectPicker)
+  Project: "Projekt",
+  "All projects": "Alle Projekte",
+  "{name} · {percent}% complete": "{name} · {percent} % abgeschlossen",
+  "That project isn’t in your projects any more. Showing all projects.": "Dieses Projekt ist nicht mehr in deinen Projekten. Alle Projekte werden angezeigt.",
   // How the numbers move (OverviewCards)
   "{count} more than last week": "{count} mehr als letzte Woche",
   "{count} fewer than last week": "{count} weniger als letzte Woche",

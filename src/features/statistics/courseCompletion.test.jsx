@@ -147,7 +147,8 @@ describe("course completion on the Statistics page", () => {
     await within(section).findByRole("list", { name: "Lectures, least complete first" });
     expect(rows()).toHaveLength(5);
     expect(within(section).queryByRole("alert")).not.toBeInTheDocument();
-    expect(api.history.get.filter((request) => request.url === "/stats/completion")).toHaveLength(2);
+    // The section's two requests, and the project picker's one (its list of projects).
+    expect(api.history.get.filter((request) => request.url === "/stats/completion")).toHaveLength(3);
   });
 
   it("tells a new student how to start", async () => {

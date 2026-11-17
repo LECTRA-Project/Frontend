@@ -44,7 +44,7 @@ const RANGES = [
 ];
 
 /* The stats for the period; a newer period or a retry cancels the request before it. */
-function useExamStats(range) {
+function useExamStats(range, projectId) {
   const [attempt, setAttempt] = useState(0);
   // The answer to the request `key`; while it doesn't belong to the current key, it is loading.
   const key = `${range}:${attempt}`;
@@ -53,7 +53,7 @@ function useExamStats(range) {
   const [hasExams, setHasExams] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    getExamStats({ from: range === "4w" ? lastWeeksFrom(4) : undefined, signal: controller.signal }).then(
+    getExamStats({ from: range === "4w" ? lastWeeksFrom(4) : undefined, projectId, signal: controller.signal }).then(
       (data) => {
         setResult({ key, data, error: null });
         if (data?.exams_submitted > 0) setHasExams(true);
@@ -63,7 +63,7 @@ function useExamStats(range) {
       }
     );
     return () => controller.abort();
-  }, [key, range]);
+  }, [key, range, projectId]);
   const loading = result.key !== key;
   return {
     data: loading ? null : result.data,
@@ -317,10 +317,11 @@ function Empty({ range, onAllTime }) {
   );
 }
 
-export default function ExamPerformance() {
+/* `projectId`: only the exams on that project's lectures. */
+export default function ExamPerformance({ projectId = null }) {
   useI18n(); // re-render in a new interface language
   const [range, setRange] = useState("all");
-  const { data, error, loading, hasExams, retry } = useExamStats(range);
+  const { data, error, loading, hasExams, retry } = useExamStats(range, projectId);
   const empty = !loading && !error && data && !data.exams_submitted;
 
   let body;

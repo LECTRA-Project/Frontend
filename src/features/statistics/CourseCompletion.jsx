@@ -115,9 +115,10 @@ function CompletionHelp({ weights }) {
   );
 }
 
-export default function CourseCompletion() {
+/* `projectId`: only that project's lectures (render with key={projectId} to load them again). */
+export default function CourseCompletion({ projectId = null }) {
   useI18n(); // re-render in a new interface language
-  const { data, error, loading, refetch } = useApi(getCompletion, { immediate: true });
+  const { data, error, loading, refetch } = useApi((options) => getCompletion({ ...options, projectId }), { immediate: true });
   const lectures = data?.lectures ?? [];
   const weights = data?.weights;
   const hasWeights = typeof weights?.reading === "number" && typeof weights?.exam === "number";

@@ -60,17 +60,21 @@ function unwrap(response, fallback) {
   return response.data;
 }
 
-export async function getCompletion({ signal } = {}) {
-  return unwrap(await get(`${BASE}/completion`, { signal }), t("Unable to load your course completion."));
+/* `projectId` (every call): only that project's lectures, the exams on them and its chats;
+   missing: everything. Another student's or a deleted project is 404 "Project not found". */
+const scoped = (projectId) => (projectId ? { project_id: projectId } : {});
+
+export async function getCompletion({ projectId, signal } = {}) {
+  return unwrap(await get(`${BASE}/completion`, { params: scoped(projectId), signal }), t("Unable to load your course completion."));
 }
 
-export async function getOverview({ signal } = {}) {
-  return unwrap(await get(`${BASE}/overview`, { signal }), t("Unable to load your overall numbers."));
+export async function getOverview({ projectId, signal } = {}) {
+  return unwrap(await get(`${BASE}/overview`, { params: scoped(projectId), signal }), t("Unable to load your overall numbers."));
 }
 
 /* `from` / `to`: "YYYY-MM-DD" (inclusive UTC days), both optional. */
-export async function getExamStats({ from, to, signal } = {}) {
-  const params = {};
+export async function getExamStats({ from, to, projectId, signal } = {}) {
+  const params = scoped(projectId);
   if (from) params.from = from;
   if (to) params.to = to;
   return unwrap(await get(`${BASE}/exams`, { params, signal }), t("Unable to load your exam performance."));
