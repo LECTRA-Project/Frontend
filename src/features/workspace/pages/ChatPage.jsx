@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 
 import Icon from "../../../components/ui/Icon.jsx";
@@ -19,6 +19,7 @@ import { sourceChips } from "../chatLayout.js";
 import { copyText } from "../../../services/clipboard.js";
 import { t, useI18n } from "../../../i18n/i18n.js";
 import useTypewriter from "../useTypewriter.js";
+import useStickToBottom from "../useStickToBottom.js";
 import { MAX_MESSAGE_LENGTH } from "../../../api/services/chat.js";
 
 // The backend's fixed answer when a chat's lectures have no extracted text saved.
@@ -95,6 +96,9 @@ export function ChatView({
   const [copyFallback, setCopyFallback] = useState(null); // text to copy by hand
   const [copyNote, setCopyNote] = useState({ text: "", seq: 0 }); // for screen readers
   const scrollRef = useRef(null);
+  const threadRef = useRef(null);
+  const { handlers: stickHandlers, contentGrew, keepAtBottom, reset: resetScroll, isFollowing, showJump, jumpToLatest } =
+    useStickToBottom(scrollRef);
   const slow = useSlow(busy, 15000);
   const dropOver = nativeDragOver || cellDragOver;
   const title = displayChatTitle(session?.title) ?? t("New chat");
@@ -111,9 +115,11 @@ export function ChatView({
       : null;
 
   /*
-    Keep the newest message in view — except when older messages were just added above
-    (scrolling up loads them page by page): then the view stays on what the student was
-    reading.
+    Keep the newest message in view while the student is at the bottom (useStickToBottom):
+    a chat that opens, or a question they send, goes to the bottom and follows again; other
+    new messages are followed only if they hadn't scrolled up to read. When older messages
+    were just added above (scrolling up loads them page by page), the view stays on what the
+    student was reading.
   */
   const shown = useRef({ first: null, last: null, height: 0 });
   useLayoutEffect(() => {
@@ -124,21 +130,32 @@ export function ChatView({
     const previous = shown.current;
     if (previous.last !== null && last === previous.last && first !== previous.first) {
       body.scrollTop += body.scrollHeight - previous.height;
-    } else {
+    } else if (previous.last === null || (last !== previous.last && messages.at(-1)?.role === "user")) {
+      resetScroll();
+    } else if (isFollowing()) {
       body.scrollTop = body.scrollHeight;
     }
     shown.current = { first, last, height: body.scrollHeight };
-  }, [messages, busy]);
+  }, [messages, busy, resetScroll, isFollowing]);
 
-  // While an answer is typed out: follow it, unless the student scrolled up to read.
-  const followAnswer = useCallback(() => {
-    const body = scrollRef.current;
-    if (!body) return;
-    if (body.scrollHeight - body.scrollTop - body.clientHeight < FOLLOW_PX) body.scrollTop = body.scrollHeight;
-  }, []);
+  // Another chat: start at its bottom, following, without the jump button.
+  const sessionId = session?.id ?? null;
+  useLayoutEffect(() => {
+    resetScroll();
+  }, [sessionId, resetScroll]);
+
+  // Content that changes size after it is shown (a diagram drawn, an image loaded): stay at the bottom if following.
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (!thread || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() => keepAtBottom());
+    observer.observe(thread);
+    return () => observer.disconnect();
+  }, [loading, empty, keepAtBottom]);
 
   // Near the top: load the messages before those shown.
   function handleScroll(event) {
+    stickHandlers.onScroll(event);
     shown.current.height = event.currentTarget.scrollHeight;
     if (olderMessages && !loadingOlder && event.currentTarget.scrollTop < 160) onLoadOlder();
   }
@@ -216,7 +233,7 @@ export function ChatView({
         )}
       </div>
 
-      <div className="chat__scroll" ref={scrollRef} onScroll={handleScroll}>
+      <div className="chat__scroll" ref={scrollRef} {...stickHandlers} onScroll={handleScroll}>
         {loading ? (
           <p className="chat__loading" role="status">
             {t("Loading the chat…")}
@@ -236,7 +253,7 @@ export function ChatView({
             <span className="chat__empty-status">{status}</span>
           </div>
         ) : (
-          <ol className="chat__thread" aria-label={t("Messages")} aria-live="polite">
+          <ol className="chat__thread" ref={threadRef} aria-label={t("Messages")} aria-live="polite">
             {olderMessages && (
               <li className="chat__older">
                 <button type="button" className="cf-link-button" onClick={onLoadOlder} disabled={loadingOlder}>
@@ -253,7 +270,7 @@ export function ChatView({
                 onOpenSource={onOpenSource}
                 onUploadAgain={onUploadClick}
                 onCopy={copy}
-                onGrow={followAnswer}
+                onGrow={contentGrew}
                 onSuggest={message.id === suggesting ? onSend : null}
                 onResend={onResend}
                 onRetry={onRetry}
@@ -275,9 +292,17 @@ export function ChatView({
             )}
           </ol>
         )}
+        {/* Never the scroll anchor, so content added at the bottom can't pull a reader who scrolled up. */}
+        <div className="chat__end" aria-hidden="true" />
       </div>
 
       <div className="chat__dock">
+        {showJump && (
+          <button type="button" className="chat__jump" onClick={jumpToLatest}>
+            <Icon name="arrowDown" size={14} />
+            {t("Jump to latest")}
+          </button>
+        )}
         <ChatComposer
           cellContext={cellContext}
           cellDragActive={cellDragActive}
@@ -493,9 +518,11 @@ function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, on
   const { text, typing } = useTypewriter(message.id, message.content, message.fresh);
   const chips = sourceChips(message.sources, materialType, lectureTitle);
 
-  // Keep the growing answer in view while it is typed.
+  // Keep the growing answer in view while it is typed, and when its footer appears at the end.
+  const wasTyping = useRef(typing);
   useLayoutEffect(() => {
-    if (typing) onGrow?.();
+    if (typing || wasTyping.current) onGrow?.();
+    wasTyping.current = typing;
   }, [text, typing, onGrow]);
 
   // A code block's Copy button (in the answer's HTML): copies only that block's code.
@@ -668,26 +695,42 @@ function choiceItems(quote) {
 }
 
 const COPIED_MS = 2000;
-// How close to the bottom (px) the chat must be to follow an answer being typed.
-const FOLLOW_PX = 160;
 
 /*
-  The answer's HTML; ```mermaid blocks in it are turned into diagrams once it is shown in
-  full (not while it is being typed, when a diagram is still incomplete).
+  The answer's HTML (already sanitised). While an answer is typed out, its HTML grows every
+  few words: only the blocks that changed (in practice the last, unfinished one) are
+  replaced, and the blocks already complete keep their elements, so the page doesn't jump
+  under a student reading them (the browser's scroll anchoring holds on to them).
+  ```mermaid blocks show a "Rendering diagram…" placeholder (withCodeCopyButtons) and are
+  turned into diagrams once, when the answer is shown in full; one that can't be drawn shows
+  its code.
 */
 function AnswerBody({ html, typing = false, onClick }) {
   const ref = useRef(null);
+  const shownBlocks = useRef([]); // the HTML of each top-level node shown, as last rendered
+  useLayoutEffect(() => {
+    const box = ref.current;
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    const next = [...template.content.childNodes];
+    const nextBlocks = next.map((node) => (node.nodeType === Node.ELEMENT_NODE ? node.outerHTML : node.textContent));
+    const previous = shownBlocks.current;
+    let same = 0;
+    while (same < next.length && same < previous.length && same < box.childNodes.length && previous[same] === nextBlocks[same]) same += 1;
+    while (box.childNodes.length > same) box.lastChild.remove();
+    box.append(...next.slice(same));
+    shownBlocks.current = nextBlocks;
+  }, [html]);
   useEffect(() => {
-    if (!typing && hasDiagrams(ref.current)) renderDiagrams(ref.current);
+    const box = ref.current;
+    if (typing || !hasDiagrams(box)) return;
+    renderDiagrams(box).finally(() => {
+      for (const block of box.querySelectorAll(".chat-code--diagram")) block.classList.remove("chat-code--diagram");
+    });
   }, [html, typing]);
   return (
     // The click handler only serves the code blocks' Copy buttons (native buttons, so keyboard works).
-    <div
-      ref={ref}
-      className={`chat-msg__md markdown-body ${typing ? "chat-msg__md--typing" : ""}`}
-      onClick={onClick}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <div ref={ref} className={`chat-msg__md markdown-body ${typing ? "chat-msg__md--typing" : ""}`} onClick={onClick} />
   );
 }
 
@@ -708,6 +751,14 @@ function withCodeCopyButtons(html) {
     button.textContent = t("Copy");
     pre.replaceWith(wrapper);
     wrapper.append(button, pre);
+    // A Mermaid diagram: a placeholder of fixed height until it is drawn (no raw code flashing by).
+    if (pre.querySelector("code.language-mermaid")) {
+      wrapper.classList.add("chat-code--diagram");
+      const wait = document.createElement("p");
+      wait.className = "chat-code__diagram-wait";
+      wait.textContent = t("Rendering diagram…");
+      wrapper.append(wait);
+    }
   }
   return template.innerHTML;
 }
