@@ -44,6 +44,8 @@ export default {
   "Open this page beside the chat": "Diese Seite neben dem Chat öffnen",
   "From your exam results": "Aus deinen Prüfungsergebnissen",
   "Copy code": "Code kopieren",
+  "Jump to latest": "Zum Neuesten springen",
+  "Rendering diagram…": "Diagramm wird gezeichnet …",
   "Answer copied": "Antwort kopiert",
   "Copy answer": "Antwort kopieren",
   "Copy manually": "Manuell kopieren",
