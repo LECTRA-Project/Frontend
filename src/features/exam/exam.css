@@ -971,6 +971,50 @@
   color: var(--text-secondary);
 }
 
+/* ---------- Results: weak, improving and strong topics ---------- */
+.exam-topics {
+  gap: var(--space-4);
+}
+.exam-topics .exam-card__title {
+  margin: 0;
+}
+.exam-topics__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+.exam-topics__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.exam-topics__heading {
+  margin: 0;
+}
+.exam-topics__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exam-topic {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-subtle);
+}
+.exam-topic__label {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- Results: one card per question ---------- */
 .exam-results {
   display: flex;

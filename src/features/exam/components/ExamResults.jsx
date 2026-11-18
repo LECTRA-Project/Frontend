@@ -15,6 +15,9 @@ import { canAskAbout } from "../askAboutAnswer.js";
   - The score: a ring with the percentage, "6 of 9 points" and how many answers are correct,
     partly correct and wrong. While answers wait to be graded (questions_ungraded > 0) the
     total and the percentage are unknown (null): it says so and offers "Grade again".
+  - "Your topics in these materials": the student's weak, improving and strong topics of the
+    exam's lectures, from all their graded exams on them (the backend saves them as soon as an
+    exam is graded). Hidden until there are any (also while answers wait to be graded).
   - One card per question: the verdict, the points out of the maximum, the student's answer
     next to the correct one (the choices picked and the correct choices, or the text and the
     reference solution), the feedback, the points per criterion, a lecturer's correction and
@@ -64,6 +67,7 @@ export default function ExamResults({
         onNewExam={onNewExam}
         practise={{ onPractise, practising, practiseError, onOpenExam }}
       />
+      <TopicSummary topics={exam.topics ?? []} />
       <ol className="exam-results" aria-label={t("Your answers")}>
         {questions.map((question, index) => (
           <li key={question.id}>
@@ -177,6 +181,69 @@ function ScoreSummary({ exam, counts, ungraded, onRegrade, onNewExam, practise }
             {regradeError}
           </p>
         )}
+      </div>
+    </section>
+  );
+}
+
+/*
+  The student's topics of the exam's lectures by status, weak first: weak (the latest answer
+  was wrong), improving (right once since the last mistake) and strong (right twice in a row,
+  or never wrong). A topic is its concept, or its pages for questions without concept tags;
+  with several lectures each topic names its lecture.
+*/
+function TopicSummary({ topics }) {
+  const { t } = useI18n();
+  if (topics.length === 0) return null;
+  const several = new Set(topics.map((topic) => topic.lecture_id)).size > 1;
+  const pagesText = (pages) =>
+    pages.length === 1 ? t("Page {number}", { number: pages[0] }) : t("Pages {list}", { list: pages.join(", ") });
+  const groups = [
+    { status: "weak", tone: "bad", title: (count) => t("Weak ({count})", { count }), hint: t("Your latest answer was wrong."), name: t("Weak topics") },
+    { status: "improving", tone: "part", title: (count) => t("Improving ({count})", { count }), hint: t("Right once since your last mistake."), name: t("Improving topics") },
+    { status: "strong", tone: "ok", title: (count) => t("Strong ({count})", { count }), hint: t("Right twice in a row, or never wrong."), name: t("Strong topics") },
+  ]
+    .map((group) => ({ ...group, items: topics.filter((topic) => topic.status === group.status) }))
+    .filter((group) => group.items.length > 0);
+
+  return (
+    <section className="exam-card exam-topics" aria-labelledby="exam-topics-title">
+      <div>
+        <h3 id="exam-topics-title" className="exam-card__title">
+          {t("Your topics in these materials")}
+        </h3>
+        <p className="exam-muted exam-small">{t("From all your exams on these materials.")}</p>
+      </div>
+      <div className="exam-topics__groups">
+        {groups.map((group) => (
+          <div key={group.status} className="exam-topics__group">
+            <h4 className="exam-topics__heading">
+              <span className={`exam-verdict exam-verdict--${group.tone}`}>{group.title(group.items.length)}</span>
+            </h4>
+            <p className="exam-muted exam-small">{group.hint}</p>
+            <ul className="exam-topics__list" aria-label={group.name}>
+              {group.items.map((topic) => {
+                const pages = topic.pages ?? [];
+                // Without a concept the topic is its pages (the backend's label is English).
+                const label = topic.concept || (pages.length > 0 ? pagesText(pages) : topic.label);
+                const where = topic.concept && pages.length > 0 ? pagesText(pages) : null;
+                const detail = several
+                  ? where
+                    ? t("{pages} in {title}", { pages: where, title: topic.lecture_title })
+                    : t("In {title}", { title: topic.lecture_title })
+                  : where;
+                return (
+                  <li key={`${topic.lecture_id}-${label}`} className="exam-topic">
+                    <span className="exam-topic__label">{label}</span>
+                    {/* A space, so screen readers don't run the two together (flex hides it). */}
+                    {detail && " "}
+                    {detail && <span className="exam-muted exam-small">{detail}</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </div>
     </section>
   );

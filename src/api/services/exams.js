@@ -31,6 +31,11 @@ import { del, get, post } from "../http.js";
                             source_type: "page" | "slide" | "cell", location: "Page 44" }] }
               graded false (verdict and points null): waiting to be graded again (regrade).
               lecture_id null: the lecture was deleted since.
+    topics    (a submitted exam once every answer is graded; [] before)
+              [{ lecture_id, lecture_title, concept | null, label, pages,
+                 status: "weak" | "improving" | "strong" }]
+              The student's topics of the exam's lectures, from all their graded exams on
+              them, weak first. label is the concept, or "pages 3, 4" without concept tags.
 
   Errors when starting: 404 a lecture isn't the student's, 409 another exam is still being
   generated (data { exam_id } names it, see busyExamId), 422 an invalid body or a lecture without readable text (the message names it).

@@ -429,3 +429,65 @@ describe("difficulty", () => {
     expect((await screen.findAllByText("Schwierigkeit: Schwer"))).toHaveLength(4);
   });
 });
+
+describe("weak, improving and strong topics", () => {
+  const topic = (concept, pages, status, lecture = KI02) => ({
+    lecture_id: lecture.id, lecture_title: lecture.title, concept, label: concept ?? `pages ${pages.join(", ")}`, pages, status,
+  });
+  const TOPICS = [
+    topic("Gini index", [22, 23], "weak"),
+    topic(null, [44], "weak"),
+    topic("Pruning", [42], "improving"),
+    topic("Entropy", [], "strong"),
+  ];
+
+  async function openTopics(topics, language) {
+    if (language) localStorage.setItem("lectra:language:v1:user-1", language);
+    setup({ examList: [{ ...submittedExam(), topics }] });
+    renderApp("/workspace/exam?exam=e-done");
+  }
+
+  it("lists the topics of the exam's materials by status, weak first", async () => {
+    await openTopics(TOPICS);
+    const section = await screen.findByRole("region", { name: "Your topics in these materials" });
+    expect(within(section).getAllByRole("heading", { level: 4 }).map((heading) => heading.textContent)).toEqual([
+      "Weak (2)", "Improving (1)", "Strong (1)",
+    ]);
+    // A topic without a concept is its pages, in the interface language.
+    expect(items(within(section).getByRole("list", { name: "Weak topics" }))).toEqual(["Gini index Pages 22, 23", "Page 44"]);
+    expect(items(within(section).getByRole("list", { name: "Improving topics" }))).toEqual(["Pruning Page 42"]);
+    expect(items(within(section).getByRole("list", { name: "Strong topics" }))).toEqual(["Entropy"]);
+    expect(within(section).getByText("Right twice in a row, or never wrong.")).toBeInTheDocument();
+    // It sits between the score and the answers.
+    const score = screen.getByRole("region", { name: "Your answers are checked" });
+    expect(score.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section.compareDocumentPosition(card(1)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("leaves out a status without topics", async () => {
+    await openTopics([topic("Entropy", [3], "strong")]);
+    const section = await screen.findByRole("region", { name: "Your topics in these materials" });
+    expect(within(section).getAllByRole("heading", { level: 4 }).map((heading) => heading.textContent)).toEqual(["Strong (1)"]);
+    expect(within(section).queryByRole("list", { name: "Weak topics" })).not.toBeInTheDocument();
+  });
+
+  it("names each topic's lecture when the exam has several", async () => {
+    await openTopics([topic("Gini index", [22], "weak"), topic(null, [5], "weak", KI03)]);
+    const weak = within(await screen.findByRole("region", { name: "Your topics in these materials" }))
+      .getByRole("list", { name: "Weak topics" });
+    expect(items(weak)).toEqual([`Gini index Page 22 in ${KI02.title}`, `Page 5 In ${KI03.title}`]);
+  });
+
+  it("isn't shown without topics, e.g. while answers wait to be graded or from an older backend", async () => {
+    await openTopics([]);
+    expect(await screen.findByRole("region", { name: "Your answers are checked" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Your topics in these materials" })).not.toBeInTheDocument();
+  });
+
+  it("is in German", async () => {
+    await openTopics(TOPICS, "de");
+    const section = await screen.findByRole("region", { name: "Deine Themen in diesen Materialien" });
+    expect(within(section).getByText("Schwach (2)")).toBeInTheDocument();
+    expect(items(within(section).getByRole("list", { name: "Schwache Themen" }))).toEqual(["Gini index Seiten 22, 23", "Seite 44"]);
+  });
+});
