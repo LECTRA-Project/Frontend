@@ -1150,7 +1150,7 @@ button.cf-material__open:hover {
 .chat-answer .chat-msg__md .katex-display {
   max-width: 100%;
 }
-/* Copy: a code block's button sits in its top-right corner, above the code (not over it). */
+/* Copy (and Open in notebook): a code block's buttons sit in its top-right corner, above the code (not over it). */
 .chat-answer .chat-code {
   position: relative;
   margin: 0 0 var(--space-3);
@@ -1178,7 +1178,7 @@ button.cf-material__open:hover {
   display: none;
 }
 .chat-answer .chat-code--diagram > pre,
-.chat-answer .chat-code--diagram > .chat-code__copy {
+.chat-answer .chat-code--diagram > .chat-code__tools {
   display: none;
 }
 .chat-answer .chat-code--diagram > .chat-code__diagram-wait {
@@ -1193,10 +1193,16 @@ button.cf-material__open:hover {
   font-size: var(--text-sm);
   color: var(--text-secondary);
 }
-.chat-code__copy {
+/* The code block's buttons, [Open in notebook] [Copy], top-right above the code. */
+.chat-code__tools {
   position: absolute;
   top: 7px;
   right: 7px;
+  display: flex;
+  gap: 6px;
+}
+.chat-code__copy,
+.chat-code__notebook {
   min-height: 26px;
   padding: 0 10px;
   border: 1px solid var(--border-default);
@@ -1208,14 +1214,38 @@ button.cf-material__open:hover {
   color: var(--text-secondary);
   cursor: pointer;
 }
-.chat-code__copy:hover {
+.chat-code__notebook {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.chat-code__notebook svg {
+  flex: none;
+}
+.chat-code__copy:hover,
+.chat-code__notebook:hover {
   border-color: var(--border-strong);
   color: var(--text-primary);
 }
-.chat-code__copy[data-copied] {
+.chat-code__copy[data-copied],
+.chat-code__notebook[data-added] {
   color: var(--accent-strong);
 }
+/* A narrow code block (phones, a narrow chat): "Open in notebook" shows its icon only (its tooltip names it). */
+.chat-answer .chat-code {
+  container: chat-code / inline-size;
+}
+@container chat-code (max-width: 420px) {
+  .chat-code__notebook {
+    padding: 0 7px;
+  }
+  .chat-code__notebook .chat-code__label {
+    display: none;
+  }
+}
 .chat-code__copy:focus-visible,
+.chat-code__notebook:focus-visible,
 .chat-answer__copy:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
