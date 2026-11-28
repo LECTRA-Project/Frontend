@@ -89,6 +89,7 @@ const PATHS = {
   ),
   close: <path d="M5 5l10 10M15 5 5 15" />,
   check: <path d="m4 10 4 4 8-8" />,
+  star: <path d="m10 2.8 2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z" />,
   flag: <path d="M5 17V3.5M5 4h9.5l-2.5 3.5 2.5 3.5H5" />,
   chevronLeft: <path d="m12 5-5 5 5 5" />,
   chevronRight: <path d="m8 5 5 5-5 5" />,

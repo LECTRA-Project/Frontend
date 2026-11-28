@@ -2,6 +2,7 @@ import chat from "./chat.js";
 import common from "./common.js";
 import completion from "./completion.js";
 import exam from "./exam.js";
+import feedback from "./feedback.js";
 import files from "./files.js";
 import models from "./models.js";
 import notebook from "./notebook.js";
@@ -27,4 +28,5 @@ export default {
   ...files,
   ...statistics,
   ...completion,
+  ...feedback,
 };

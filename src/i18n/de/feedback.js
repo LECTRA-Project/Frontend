@@ -1,0 +1,26 @@
+/* German texts of "Send feedback" (src/features/feedback/). */
+export default {
+  "Send feedback": "Feedback senden",
+  "Tell us what works, what doesn’t, or what you’d like to see in Lectra.":
+    "Sag uns, was funktioniert, was nicht, oder was du dir in Lectra wünschst.",
+  "What is it about?": "Worum geht es?",
+  Bug: "Fehler",
+  "Something doesn’t work": "Etwas funktioniert nicht",
+  Idea: "Idee",
+  "Something we could add or improve": "Etwas, das wir ergänzen oder verbessern könnten",
+  "How Lectra works for you": "Wie Lectra für dich funktioniert",
+  Other: "Sonstiges",
+  "Anything else": "Alles andere",
+  "How would you rate Lectra?": "Wie bewertest du Lectra?",
+  "(optional)": "(optional)",
+  "1 star": "1 Stern",
+  "{count} stars": "{count} Sterne",
+  "Clear rating": "Bewertung entfernen",
+  "Your feedback": "Dein Feedback",
+  "What happened, or what would you like?": "Was ist passiert, oder was wünschst du dir?",
+  "{count} of {max} characters": "{count} von {max} Zeichen",
+  "Sending…": "Wird gesendet …",
+  "Your feedback could not be sent.": "Dein Feedback konnte nicht gesendet werden.",
+  "Thanks for your feedback": "Danke für dein Feedback",
+  "It helps us make Lectra better.": "Es hilft uns, Lectra besser zu machen.",
+};

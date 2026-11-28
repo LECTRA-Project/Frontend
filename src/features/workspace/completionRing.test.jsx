@@ -67,7 +67,7 @@ describe("completion rings in the menu", () => {
 
     expect(within(list).getByRole("button", { name: "Open Game playing beside the chat" })).toHaveAccessibleDescription("23% complete");
 
-    const notebook = within(list).getByRole("button", { name: "Open Pandas basics beside the chat" });
+    const notebook = within(list).getByRole("button", { name: "Open Pandas basics in the notebook" });
     expect(notebook).not.toHaveAttribute("aria-describedby");
     expect(notebook.querySelector(".completion-ring")).toBeNull();
   });

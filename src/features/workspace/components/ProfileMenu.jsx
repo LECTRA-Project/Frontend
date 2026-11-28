@@ -8,8 +8,12 @@ import { getInitials, useAuth } from "../../auth/authContext.js";
 /*
   The small menu that opens under the avatar.
   Closes when the user clicks outside it, presses Escape, or chooses a row.
+
+  Props:
+    onClose      closes the menu
+    onFeedback   opens "Send feedback" (none: the row isn't shown)
 */
-export default function ProfileMenu({ onClose }) {
+export default function ProfileMenu({ onClose, onFeedback = null }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -61,6 +65,16 @@ export default function ProfileMenu({ onClose }) {
         <MenuRow icon="user" label={t("My profile")} onClick={() => goTo("/profile")} />
         <MenuRow icon="sliders" label={t("Account settings")} onClick={() => goTo("/settings")} />
         <MenuRow icon="chart" label={t("Statistics")} onClick={() => goTo("/statistics")} />
+        {onFeedback && (
+          <MenuRow
+            icon="message"
+            label={t("Send feedback")}
+            onClick={() => {
+              onClose();
+              onFeedback();
+            }}
+          />
+        )}
       </div>
 
       <div className="profile-menu__group">

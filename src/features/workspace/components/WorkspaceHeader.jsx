@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import Brand from "../../../components/Brand.jsx";
 import Button from "../../../components/ui/Button.jsx";
 import IconButton from "../../../components/ui/IconButton.jsx";
 import ProfileMenu from "./ProfileMenu.jsx";
+import FeedbackDialog from "../../feedback/FeedbackDialog.jsx";
 import { useI18n } from "../../../i18n/i18n.js";
 import { getInitials, useAuth } from "../../auth/authContext.js";
 
@@ -32,7 +33,14 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
   const location = useLocation();
   const { user } = useAuth();
   const [menuOpenProfile, setProfileOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const avatarRef = useRef(null);
   const closeMenu = useCallback(() => setProfileOpen(false), []);
+  // The menu row is gone once the menu closes: the avatar is what the dialog gives the focus back to.
+  function openFeedback() {
+    avatarRef.current?.focus();
+    setFeedbackOpen(true);
+  }
 
   const isExamOpen = location.pathname === "/workspace/exam";
   // From a project page the Exam view preselects the project's materials (?project=), and
@@ -91,6 +99,7 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
 
         <div className="ws-header__profile">
           <button
+            ref={avatarRef}
             type="button"
             className="avatar ws-header__avatar"
             aria-label={t("Open profile menu")}
@@ -100,8 +109,9 @@ export default function WorkspaceHeader({ menuOpen = false, onToggleMenu = null,
           >
             {getInitials(user)}
           </button>
-          {menuOpenProfile && <ProfileMenu onClose={closeMenu} />}
+          {menuOpenProfile && <ProfileMenu onClose={closeMenu} onFeedback={openFeedback} />}
         </div>
+        {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
       </div>
     </header>
   );

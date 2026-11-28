@@ -82,6 +82,8 @@ export default {
   "Chats are not available on this server.": "Chats sind auf diesem Server nicht verfügbar.",
   "Open {name} beside the chat": "{name} neben dem Chat öffnen",
   "Open beside the chat": "Neben dem Chat öffnen",
+  "Open {name} in the notebook": "{name} im Notebook öffnen",
+  "Open in the notebook": "Im Notebook öffnen",
   "Retry processing {name}": "Verarbeitung von {name} erneut versuchen",
   "More actions for {name}": "Weitere Aktionen für {name}",
   Rename: "Umbenennen",
