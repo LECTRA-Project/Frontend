@@ -46,6 +46,8 @@ export const NO_TEXT_ANSWER = "The selected lectures have no readable text yet";
   - Every code block in an answer has a Copy button (just that code), and every answer has a
     Copy button under it (the whole answer as Markdown, with its sources). When the
     clipboard can't be used, a dialog shows the text selected for copying by hand.
+  - Python code blocks (and those without a language) also have "Open in notebook": the
+    code, unchanged, becomes a notebook cell (onOpenInNotebook); it is not run.
   - The latest answer from the materials ends with the assistant's suggestion of the next
     step ("Shall I explain the next section …?") and a "Yes, please" button that asks for it.
     With weak topics (an exam answer went wrong) it offers two next steps instead, "Review: …"
@@ -89,6 +91,7 @@ export function ChatView({
   examLink = null,
   onResend = () => false,
   onRetry = null,
+  onOpenInNotebook = null,
   model = null,
 }) {
   const { t } = useI18n();
@@ -274,6 +277,7 @@ export function ChatView({
                 onSuggest={message.id === suggesting ? onSend : null}
                 onResend={onResend}
                 onRetry={onRetry}
+                onOpenInNotebook={onOpenInNotebook}
                 canResend={!busy && available === true}
               />
             ))}
@@ -449,7 +453,20 @@ function StudentMessage({ message, onCopy, onResend, canResend }) {
   );
 }
 
-function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUploadAgain, onCopy, onGrow, onSuggest, onResend, onRetry, canResend }) {
+function ChatMessage({
+  message,
+  materialType,
+  lectureTitle,
+  onOpenSource,
+  onUploadAgain,
+  onCopy,
+  onGrow,
+  onSuggest,
+  onResend,
+  onRetry,
+  onOpenInNotebook,
+  canResend,
+}) {
   const { t } = useI18n();
   if (message.role === "system") {
     return (
@@ -502,6 +519,7 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
       onCopy={onCopy}
       onGrow={onGrow}
       onSuggest={onSuggest}
+      onOpenInNotebook={onOpenInNotebook}
     />
   );
 }
@@ -513,7 +531,7 @@ function ChatMessage({ message, materialType, lectureTitle, onOpenSource, onUplo
   An answer that asks which next step the student wants (asks_choice) has no sources but is
   not general knowledge, so it has no "Not from your materials" label.
 */
-function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, onCopy, onGrow, onSuggest }) {
+function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, onCopy, onGrow, onSuggest, onOpenInNotebook }) {
   const { t } = useI18n();
   const { text, typing } = useTypewriter(message.id, message.content, message.fresh);
   const chips = sourceChips(message.sources, materialType, lectureTitle);
@@ -525,12 +543,17 @@ function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, on
     wasTyping.current = typing;
   }, [text, typing, onGrow]);
 
-  // A code block's Copy button (in the answer's HTML): copies only that block's code.
+  // A code block's buttons (in the answer's HTML). Copy: copies only that block's code.
+  // Open in notebook: adds that code, unchanged, as a notebook cell (never runs it).
   async function handleAnswerClick(event) {
+    const notebookButton = event.target.closest?.("[data-notebook-code]");
+    if (notebookButton && onOpenInNotebook) {
+      if (onOpenInNotebook(blockCode(notebookButton))) showAdded(notebookButton);
+      return;
+    }
     const button = event.target.closest?.("[data-copy-code]");
     if (!button) return;
-    // Without the line break Markdown adds after the last line.
-    const code = (button.parentElement.querySelector("pre")?.textContent ?? "").replace(/\n$/, "");
+    const code = blockCode(button);
     const copied = await onCopy(code, t("Code copied."));
     if (!copied) return;
     button.textContent = t("Copied");
@@ -553,7 +576,7 @@ function AssistantAnswer({ message, materialType, lectureTitle, onOpenSource, on
           </span>
         )}
         <AnswerBody
-          html={withCodeCopyButtons(renderAnswerMarkdown(text))}
+          html={withCodeCopyButtons(renderAnswerMarkdown(text), { notebook: Boolean(onOpenInNotebook) })}
           typing={typing}
           onClick={handleAnswerClick}
         />
@@ -734,14 +757,22 @@ function AnswerBody({ html, typing = false, onClick }) {
   );
 }
 
-/* Wraps each code block so it gets a Copy button in its top-right corner. */
-function withCodeCopyButtons(html) {
+/*
+  Wraps each code block so it gets its buttons in its top-right corner: Copy, and before it
+  "Open in notebook" on Python code (```python / ```py, or no language) when `notebook` is set.
+  The buttons are built with DOM calls on the already sanitised HTML; the code is never
+  turned into markup (both buttons read it back from the <pre> when clicked).
+*/
+function withCodeCopyButtons(html, { notebook = false } = {}) {
   if (!html.includes("<pre")) return html;
   const template = document.createElement("template");
   template.innerHTML = html;
   for (const pre of template.content.querySelectorAll("pre")) {
     const wrapper = document.createElement("div");
     wrapper.className = "chat-code";
+    const tools = document.createElement("div");
+    tools.className = "chat-code__tools";
+    if (notebook && isNotebookCode(pre)) tools.append(notebookButton());
     const button = document.createElement("button");
     button.type = "button";
     button.className = "chat-code__copy";
@@ -749,8 +780,9 @@ function withCodeCopyButtons(html) {
     button.setAttribute("aria-label", t("Copy code"));
     button.title = t("Copy code");
     button.textContent = t("Copy");
+    tools.append(button);
     pre.replaceWith(wrapper);
-    wrapper.append(button, pre);
+    wrapper.append(tools, pre);
     // A Mermaid diagram: a placeholder of fixed height until it is drawn (no raw code flashing by).
     if (pre.querySelector("code.language-mermaid")) {
       wrapper.classList.add("chat-code--diagram");
@@ -761,6 +793,68 @@ function withCodeCopyButtons(html) {
     }
   }
   return template.innerHTML;
+}
+
+/* A code block's code, as the Copy button copies it: without the line break Markdown adds after the last line. */
+function blockCode(button) {
+  return (button.closest(".chat-code")?.querySelector("pre")?.textContent ?? "").replace(/\n$/, "");
+}
+
+// The notebook runs Python: only Python blocks and blocks without a language get "Open in notebook".
+const NOTEBOOK_LANGUAGES = new Set(["python", "py"]);
+function isNotebookCode(pre) {
+  const language = /(?:^|\s)language-(\S+)/.exec(pre.querySelector("code")?.className ?? "")?.[1];
+  return !language || NOTEBOOK_LANGUAGES.has(language.toLowerCase());
+}
+
+function notebookButton() {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "chat-code__notebook";
+  button.setAttribute("data-notebook-code", "");
+  button.setAttribute("aria-label", t("Open code in notebook"));
+  button.title = t("Open code in notebook");
+  const label = document.createElement("span");
+  label.className = "chat-code__label";
+  label.textContent = t("Open in notebook");
+  button.append(codeIcon("notebook"), label);
+  return button;
+}
+
+/* "Added ✓" (with a check icon) for a moment after the code went into the notebook. */
+function showAdded(button) {
+  const setLook = (icon, text) => {
+    button.querySelector("svg")?.replaceWith(codeIcon(icon));
+    button.querySelector(".chat-code__label").textContent = text;
+  };
+  setLook("check", t("Added ✓"));
+  button.dataset.added = "";
+  clearTimeout(button.addedTimer);
+  button.addedTimer = setTimeout(() => {
+    setLook("notebook", t("Open in notebook"));
+    delete button.dataset.added;
+  }, COPIED_MS);
+}
+
+// Icon.jsx's "notebook" and "check" icons, built with DOM calls (the answer's HTML is not rendered by React).
+const SVG_NS = "http://www.w3.org/2000/svg";
+const CODE_ICONS = {
+  notebook: [
+    ["rect", { x: "4.5", y: "2.5", width: "11", height: "15", rx: "1" }],
+    ["path", { d: "M7.5 2.5v15M2.5 6h3M2.5 10h3M2.5 14h3" }],
+  ],
+  check: [["path", { d: "m4 10 4 4 8-8" }]],
+};
+function codeIcon(name) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  const attributes = { width: "14", height: "14", viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", "stroke-width": "1.6", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", focusable: "false" };
+  for (const [key, value] of Object.entries(attributes)) svg.setAttribute(key, value);
+  for (const [tag, attrs] of CODE_ICONS[name]) {
+    const part = document.createElementNS(SVG_NS, tag);
+    for (const [key, value] of Object.entries(attrs)) part.setAttribute(key, value);
+    svg.append(part);
+  }
+  return svg;
 }
 
 /* The whole answer for the clipboard: its Markdown, then its sources (if any). */

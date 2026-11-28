@@ -20,6 +20,7 @@ import { useReadingProgress } from "../lectures/useReadingProgress.js";
 import { useCompletionRefresh } from "../lectures/useCompletionRefresh.js";
 import { useAuth } from "../auth/authContext.js";
 import { useNotebook } from "../notebook/useNotebook.js";
+import { createCell } from "../../services/notebook/ipynb.js";
 import { usePythonKernel } from "../notebook/usePythonKernel.js";
 import { fetchLectureFile } from "../../api/services/lectures.js";
 import { getChatSession, MAX_MESSAGE_LENGTH } from "../../api/services/chat.js";
@@ -632,6 +633,38 @@ export default function WorkspaceLayout() {
     [addCellToDraft]
   );
 
+  /* ---------- Code from an answer → the notebook ---------- */
+  // The cell the notebook should scroll to and focus once it is shown: { id, seq }.
+  const [notebookReveal, setNotebookReveal] = useState(null);
+  const notebookStore = notebookState.actions;
+
+  /*
+    "Open in notebook" on a code block in an answer: the code, exactly as shown, becomes a new
+    code cell after the last one (or fills the notebook's only cell when that is an empty code
+    cell). Nothing else changes and nothing runs; the panel opens and the cell gets the focus.
+  */
+  const addCodeToNotebook = useCallback(
+    (code) => {
+      const cells = notebookStore.getCells();
+      const only = cells.length === 1 ? cells[0] : null;
+      let id;
+      if (only?.cell_type === "code" && only.source.trim() === "" && only.outputs.length === 0) {
+        notebookStore.dispatch({ type: "edit", id: only.id, source: code });
+        id = only.id;
+      } else {
+        const cell = createCell("code", code);
+        notebookStore.dispatch({ type: "insert", cell, index: cells.length });
+        id = cell.id;
+      }
+      setNotebookOpen(true);
+      setNotebookReveal((previous) => ({ id, seq: (previous?.seq ?? 0) + 1 }));
+      announce(t("Code added to notebook"));
+      return true;
+    },
+    [notebookStore, announce]
+  );
+  const clearNotebookReveal = useCallback(() => setNotebookReveal(null), []);
+
   // Returns false (the composer then keeps the text) when the question can't be sent as is.
   function handleSend(text) {
     const cells = cellContext;
@@ -897,6 +930,7 @@ export default function WorkspaceLayout() {
     cellDragOver,
     onAddCell: addCellToDraft,
     onRemoveCell: removeCellFromDraft,
+    onOpenInNotebook: addCodeToNotebook,
     announcement: draftAnnouncement,
     // Opened from the exam results ("Ask about this"): the way back to them.
     examLink: isChatRoute && urlExamId ? hrefFor("/workspace/exam", { lectureId: urlLectureId }) : null,
@@ -1213,6 +1247,8 @@ export default function WorkspaceLayout() {
               kernel={kernel}
               kernelState={kernelState}
               assistantDraft={assistantDraft}
+              revealCell={notebookReveal}
+              onCellRevealed={clearNotebookReveal}
               panelActions={notebookActions}
             />
           </aside>

@@ -21,7 +21,15 @@ import "../../notebook/notebook.css";
   saved in this browser only. `panelActions` are the panel's own buttons (pin, widen,
   close), shown in the toolbar.
 */
-export default function NotebookPage({ notebookState, kernel, kernelState, assistantDraft, panelActions = null }) {
+export default function NotebookPage({
+  notebookState,
+  kernel,
+  kernelState,
+  assistantDraft,
+  revealCell = null,
+  onCellRevealed = () => {},
+  panelActions = null,
+}) {
   const { t } = useI18n();
   const { notebook, runState, saveInfo, notice, lastRunFailed, pendingOpen, actions } = notebookState;
   const { cells } = notebook;
@@ -41,6 +49,18 @@ export default function NotebookPage({ notebookState, kernel, kernelState, assis
     setSelectedId(id);
     setFocusRequest((previous) => ({ id, target, seq: (previous?.seq ?? 0) + 1 }));
   }, []);
+
+  // A cell added from a chat answer ("Open in notebook"): select it, scroll to it and focus its
+  // editor, once (the request is then cleared, so reopening the panel doesn't repeat it).
+  const [revealed, setRevealed] = useState(null);
+  if (revealCell && revealCell !== revealed) {
+    setRevealed(revealCell);
+    setSelectedId(revealCell.id);
+    setFocusRequest((previous) => ({ id: revealCell.id, target: "editor", seq: (previous?.seq ?? 0) + 1 }));
+  }
+  useEffect(() => {
+    if (revealCell) onCellRevealed();
+  }, [revealCell, onCellRevealed]);
 
   const setEditing = useCallback((id, editing) => {
     setEditingIds((current) => {
