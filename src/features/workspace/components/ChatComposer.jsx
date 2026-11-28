@@ -158,7 +158,11 @@ export default function ChatComposer({
               type="button"
               className="composer__scope"
               onClick={() => scope.onOpen(scope.materials[0])}
-              title={t("Open {name} beside the chat", { name: scope.materials[0].name })}
+              title={
+                scope.materials[0].type === "notebook"
+                  ? t("Open {name} in the notebook", { name: scope.materials[0].name })
+                  : t("Open {name} beside the chat", { name: scope.materials[0].name })
+              }
             >
               <Icon name="fileText" size={15} />
               <span>{scope.label}</span>

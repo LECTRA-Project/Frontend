@@ -241,10 +241,14 @@ export default function ChatSidebar({
                     <button
                       type="button"
                       className="cf-material__open"
-                      aria-label={t("Open {name} beside the chat", { name: material.name })}
+                      aria-label={
+                        material.type === "notebook"
+                          ? t("Open {name} in the notebook", { name: material.name })
+                          : t("Open {name} beside the chat", { name: material.name })
+                      }
                       aria-describedby={ringId}
                       aria-pressed={opened}
-                      title={t("Open beside the chat")}
+                      title={material.type === "notebook" ? t("Open in the notebook") : t("Open beside the chat")}
                       onClick={() => onOpenMaterial(material)}
                     >
                       <span className="cf-material__icon">

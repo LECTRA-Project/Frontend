@@ -68,7 +68,7 @@ afterEach(() => {
 
 const menu = () => screen.getByRole("navigation", { name: "Chats and this chat's materials" });
 const materialsList = () => within(menu()).getByRole("list", { name: "Materials in this chat" });
-const materialNames = () => within(materialsList()).queryAllByRole("button", { name: /beside the chat$/ }).map((button) => button.getAttribute("aria-label"));
+const materialNames = () => within(materialsList()).queryAllByRole("button", { name: /(beside the chat|in the notebook)$/ }).map((button) => button.getAttribute("aria-label"));
 const viewer = () => document.querySelector(".cf-viewer");
 const notebookPanel = () => screen.queryByRole("complementary", { name: "Notebook panel" });
 const input = () => screen.getByLabelText("Message to the study assistant");
@@ -139,7 +139,7 @@ describe("chat-first workspace: chats and their materials", () => {
     expect(within(menu()).getByRole("button", { name: "Open KI 02 Classification Part1 beside the chat" })).toHaveAttribute("aria-pressed", "true");
 
     await openChat(user, "Regression metrics");
-    expect(materialNames()).toEqual(["Open Regression solution beside the chat"]);
+    expect(materialNames()).toEqual(["Open Regression solution in the notebook"]);
     expect(viewer()).toBeNull();
     expect(await screen.findByText("MSE, RMSE and R².")).toBeInTheDocument();
 
@@ -186,6 +186,32 @@ describe("chat-first workspace: chats and their materials", () => {
     await user.click(within(view).getByRole("button", { name: "Zoom in" }));
     expect(within(view).getByText("110%")).toBeInTheDocument();
     expect(within(view).getByRole("button", { name: "Run in notebook" })).toBeInTheDocument();
+  });
+
+  it("opens a notebook from the materials list straight in the runnable notebook, not in the viewer", async () => {
+    const ipynb = {
+      nbformat: 4,
+      nbformat_minor: 5,
+      metadata: {},
+      cells: [{ cell_type: "code", source: ["print('regression')"], metadata: {}, outputs: [], execution_count: null }],
+    };
+    api.onGet(/\/student_profile\/lectures\/[^/]+\/file$/).reply(200, new Blob([JSON.stringify(ipynb)], { type: "application/x-ipynb+json" }));
+    const { user } = await openWorkspace();
+    await openChat(user, "Regression metrics");
+    const open = within(materialsList()).getByRole("button", { name: "Open Regression solution in the notebook" });
+    expect(open).toHaveAttribute("title", "Open in the notebook");
+    await user.click(open);
+
+    const panel = await waitFor(() => {
+      expect(notebookPanel()).toBeInTheDocument();
+      return notebookPanel();
+    });
+    // The file is loaded into the notebook: its title and its code.
+    await waitFor(() => expect([...panel.querySelectorAll("input")].map((field) => field.value)).toContain("Regression solution"));
+    expect(panel).toHaveTextContent("print('regression')");
+    expect(api.history.get.some((request) => request.url === `/student_profile/lectures/${REG.id}/file`)).toBe(true);
+    expect(viewer()).toBeNull();
+    expect(screen.queryByRole("region", { name: "Lecture: Regression solution" })).not.toBeInTheDocument();
   });
 
   it("uploads into a new chat: the chat is created with the new lecture", async () => {
@@ -738,7 +764,7 @@ describe("chat-first workspace: the open chat and material in the URL", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Regression metrics" })).toBeInTheDocument();
     expect(await screen.findByText("MSE, RMSE and R².")).toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "PDF viewer: KI 02 Classification Part1" })).toBeInTheDocument();
-    expect(materialNames()).toEqual(["Open Regression solution beside the chat"]);
+    expect(materialNames()).toEqual(["Open Regression solution in the notebook"]);
   });
 
   it("goes back to the previous chat, and closes a material, with the browser's Back", async () => {

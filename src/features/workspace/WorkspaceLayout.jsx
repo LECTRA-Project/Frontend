@@ -121,7 +121,8 @@ function useElementWidth(ref) {
     PDF       the real file (PdfViewerPanel), at the cited page
     notes     the rendered Markdown (MaterialViewerPanel)
     slides, notebooks, images, cited notes sections   the extracted content (LectureContentPanel)
-  A notebook can also be opened in the runnable notebook from the viewer.
+  A notebook opened from a materials list goes straight into the runnable notebook; only a
+  cited cell opens it in the viewer (which can then open it in the runnable notebook too).
 
   Reading progress: the viewers report the pages on screen to the reading tracker
   (useReadingProgress / readingTracker.js), which sends the pages read to the backend for
@@ -541,9 +542,12 @@ export default function WorkspaceLayout() {
     }
   }
 
+  // From a materials list: a notebook opens straight in the runnable notebook, anything else
+  // in the viewer. (A cited notebook cell still opens in the viewer, at that cell.)
   function openMaterial(material) {
     closeOverlayMenu();
-    openViewer(material.id);
+    if (material.type === "notebook") openInNotebook(material);
+    else openViewer(material.id);
   }
 
   // `citedIn` names where the source was cited, for the viewer's "Opened from a source in …".

@@ -392,7 +392,11 @@ export function ProjectView({
                     <button
                       type="button"
                       className="cf-material__open"
-                      aria-label={t("Open {name} beside the project", { name: material.name })}
+                      aria-label={
+                        material.type === "notebook"
+                          ? t("Open {name} in the notebook", { name: material.name })
+                          : t("Open {name} beside the project", { name: material.name })
+                      }
                       aria-pressed={opened}
                       onClick={() => onOpenMaterial(material)}
                     >
